@@ -8,8 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from config.settings import settings
 
 # Import routes
-from app.api.routes import songs, sections, vocabulary
-# TODO: Add remaining routes - measures, chords, imports, quiz, progress
+from app.api.routes import songs, sections, vocabulary, measures, chords, progress, quiz, imports
 
 
 app = FastAPI(
@@ -52,16 +51,14 @@ async def health_check():
 
 
 # Include routers
-app.include_router(songs.router, prefix="/api/v1/songs", tags=["songs"])
-app.include_router(sections.router, prefix="/api/v1/sections", tags=["sections"])
-app.include_router(vocabulary.router, prefix="/api/v1/vocabulary", tags=["vocabulary"])
-
-# TODO: Add remaining routers
-# app.include_router(imports.router, prefix="/api/v1/import", tags=["import"])
-# app.include_router(measures.router, prefix="/api/v1/measures", tags=["measures"])
-# app.include_router(chords.router, prefix="/api/v1/chords", tags=["chords"])
-# app.include_router(quiz.router, prefix="/api/v1/quiz", tags=["quiz"])
-# app.include_router(progress.router, prefix="/api/v1/progress", tags=["progress"])
+app.include_router(songs.router, tags=["songs"])
+app.include_router(sections.router, tags=["sections"])
+app.include_router(vocabulary.router, tags=["vocabulary"])
+app.include_router(measures.router, tags=["measures"])
+app.include_router(chords.router, tags=["chords"])
+app.include_router(progress.router, tags=["progress"])
+app.include_router(quiz.router, tags=["quiz"])
+app.include_router(imports.router, tags=["imports"])
 
 
 if __name__ == "__main__":
