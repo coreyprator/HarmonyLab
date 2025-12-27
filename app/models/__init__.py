@@ -190,9 +190,8 @@ class MelodyNote(MelodyNoteBase):
 # Progress Models
 # =============================================
 
-class UserSongProgress(BaseModel):
-    """User progress tracking per song."""
-    id: int
+class UserSongProgressBase(BaseModel):
+    """Base model for user progress."""
     user_id: int
     song_id: int
     last_practiced: Optional[datetime] = None
@@ -200,6 +199,82 @@ class UserSongProgress(BaseModel):
     accuracy_rate: Optional[Decimal] = None
     mastery_level: int = 0
     notes: Optional[str] = Field(None, max_length=500)
+
+
+class UserSongProgressCreate(BaseModel):
+    """Model for creating/updating progress."""
+    user_id: int
+    song_id: int
+
+
+class UserSongProgress(UserSongProgressBase):
+    """User progress tracking per song."""
+    id: int
+    
+    class Config:
+        from_attributes = True
+
+
+class ProgressResponse(BaseModel):
+    """Response model with song title."""
+    song_id: int
+    song_title: str
+    last_practiced: Optional[datetime]
+    times_practiced: int
+    accuracy_rate: Optional[float]
+    mastery_level: int
+
+
+# =============================================
+# Quiz Models
+# =============================================
+
+class QuizQuestion(BaseModel):
+    """Single quiz question."""
+    measure_number: int
+    beat_position: float
+    is_blank: bool
+    displayed_chord: Optional[str] = None
+
+
+class QuizGenerate(BaseModel):
+    """Request to generate a quiz."""
+    song_id: int
+    section_id: Optional[int] = None
+    blank_percentage: float = 0.3
+    
+
+class QuizSubmission(BaseModel):
+    """User's quiz answers."""
+    attempt_id: int
+    answers: List[str]
+
+
+class QuizResult(BaseModel):
+    """Quiz results."""
+    attempt_id: int
+    total_questions: int
+    correct_answers: int
+    accuracy: float
+    details: List[dict]
+
+
+class QuizAttemptBase(BaseModel):
+    """Base model for quiz attempts."""
+    user_id: int
+    song_id: int
+    quiz_type: Optional[str] = Field(None, max_length=30)
+    section_id: Optional[int] = None
+
+
+class QuizAttempt(QuizAttemptBase):
+    """Complete quiz attempt model."""
+    id: int
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+    total_questions: Optional[int] = None
+    correct_answers: Optional[int] = None
+    details: Optional[str] = None
     
     class Config:
         from_attributes = True
