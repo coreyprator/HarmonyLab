@@ -1,76 +1,94 @@
-from pydantic_settings import BaseSettings
-from typing import List
-from google.cloud import secretmanager
+"""
+HarmonyLab Settings - Cloud-First Configuration
+Loads secrets from Google Secret Manager (production)
+Falls back to environment variables (CI/CD)
+"""
+import os
+from functools import lru_cache
+from typing import Optional
+
+# Only import secretmanager if available (not required in CI/CD)
+try:
+    from google.cloud import secretmanager
+    HAS_SECRET_MANAGER = True
+except ImportError:
+    HAS_SECRET_MANAGER = False
 
 
 def get_secret(secret_id: str, project_id: str = "super-flashcards-475210") -> str:
-    """Retrieve a secret from Google Cloud Secret Manager."""
-    try:
-        client = secretmanager.SecretManagerServiceClient()
-        name = f"projects/{project_id}/secrets/{secret_id}/versions/latest"
-        response = client.access_secret_version(request={"name": name})
-        return response.payload.data.decode("UTF-8").strip()
-    except Exception as e:
-        print(f"Warning: Could not retrieve secret '{secret_id}': {e}")
-        return ""
+    """
+    Fetch secret from Google Secret Manager.
+    Falls back to environment variable if Secret Manager unavailable.
+    """
+    # Environment variable takes precedence (for Cloud Run injection)
+    env_key = secret_id.upper().replace("-", "_")
+    env_value = os.getenv(env_key)
+    if env_value:
+        return env_value
+    
+    # Try Secret Manager
+    if HAS_SECRET_MANAGER:
+        try:
+            client = secretmanager.SecretManagerServiceClient()
+            name = f"projects/{project_id}/secrets/{secret_id}/versions/latest"
+            response = client.access_secret_version(request={"name": name})
+            return response.payload.data.decode("UTF-8")
+        except Exception as e:
+            print(f"Warning: Could not fetch secret {secret_id}: {e}")
+    
+    # Final fallback for local development
+    raise ValueError(f"Secret {secret_id} not found in environment or Secret Manager")
 
 
-class Settings(BaseSettings):
-    """Application settings loaded from Google Cloud Secret Manager."""
+class Settings:
+    """Application settings loaded from Secret Manager."""
     
-    # GCP Configuration
-    gcp_project: str = "super-flashcards-475210"
+    def __init__(self):
+        self._project_id = "super-flashcards-475210"
+        self._prefix = "harmonylab"
     
-    # Database Configuration
-    db_server: str = "35.224.242.223"
-    db_name: str = "HarmonyLab"
-    db_driver: str = "ODBC Driver 17 for SQL Server"
+    @property
+    def db_server(self) -> str:
+        return get_secret(f"{self._prefix}-db-server", self._project_id)
+    
+    @property
+    def db_name(self) -> str:
+        return get_secret(f"{self._prefix}-db-name", self._project_id)
     
     @property
     def db_user(self) -> str:
-        return get_secret("harmonylab-db-user", self.gcp_project)
+        return get_secret(f"{self._prefix}-db-user", self._project_id)
     
     @property
     def db_password(self) -> str:
-        return get_secret("harmonylab-db-password", self.gcp_project)
-    
-    # API Configuration
-    api_host: str = "0.0.0.0"
-    api_port: int = 8000
-    debug: bool = True
-    
-    # Cloud Storage
-    gcs_bucket_name: str = ""
-    
-    # CORS
-    cors_origins: str = "http://localhost:3000"
-    
-    # Environment
-    environment: str = "development"
+        return get_secret(f"{self._prefix}-db-password", self._project_id)
     
     @property
-    def database_url(self) -> str:
-        """Construct MS SQL connection string."""
-        return (
-            f"DRIVER={{{self.db_driver}}};"
-            f"SERVER={self.db_server};"
-            f"DATABASE={self.db_name};"
-            f"UID={self.db_user};"
-            f"PWD={self.db_password};"
-            f"Encrypt=yes;"
-            f"TrustServerCertificate=yes;"
-        )
+    def db_driver(self) -> str:
+        # Cloud Run uses Linux driver name
+        if os.getenv("K_SERVICE"):  # Cloud Run sets this
+            return "ODBC Driver 17 for SQL Server"
+        # Local Windows development
+        return os.getenv("DB_DRIVER", "ODBC Driver 17 for SQL Server")
     
     @property
-    def cors_origins_list(self) -> List[str]:
-        """Parse CORS origins from comma-separated string."""
-        return [origin.strip() for origin in self.cors_origins.split(",")]
+    def debug(self) -> bool:
+        return os.getenv("DEBUG", "false").lower() == "true"
     
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
-        extra = "allow"  # Allow extra fields for compatibility
+    @property
+    def host(self) -> str:
+        return os.getenv("HOST", "0.0.0.0")
+    
+    @property
+    def port(self) -> int:
+        return int(os.getenv("PORT", "8080"))
 
 
-# Global settings instance
-settings = Settings()
+@lru_cache()
+def get_settings() -> Settings:
+    return Settings()
+
+
+# Convenience export
+settings = get_settings()
+

@@ -21,7 +21,7 @@ app = FastAPI(
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins_list,
+    allow_origins=["*"],  # Allow all origins for now
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -41,13 +41,21 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    """Detailed health check including database connectivity."""
-    # TODO: Add database connection check
+    """Health check endpoint for Cloud Run."""
+    from app.db.connection import db
+    
+    try:
+        db_ok = db.test_connection()
+    except Exception:
+        db_ok = False
+    
     return {
-        "status": "healthy",
-        "database": "not_checked",
-        "environment": settings.environment,
+        "status": "healthy" if db_ok else "degraded",
+        "database": "connected" if db_ok else "disconnected",
+        "service": "harmonylab",
+        "version": "1.0.0"
     }
+
 
 
 # Include routers
