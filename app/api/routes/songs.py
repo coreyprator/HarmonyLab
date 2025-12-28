@@ -6,7 +6,7 @@ CRUD operations for songs.
 from typing import List
 from fastapi import APIRouter, HTTPException, Depends
 from app.models import Song, SongCreate, SongUpdate
-from app.db.connection import DatabaseConnection, get_db
+from app.db.connection import get_db_connection
 
 
 router = APIRouter()
@@ -17,7 +17,7 @@ async def list_songs(
     skip: int = 0,
     limit: int = 100,
     genre: str = None,
-    db: DatabaseConnection = Depends(get_db)
+    
 ):
     """
     List all songs with optional filtering.
@@ -41,7 +41,7 @@ async def list_songs(
 
 
 @router.get("/{song_id}", response_model=Song)
-async def get_song(song_id: int, db: DatabaseConnection = Depends(get_db)):
+async def get_song(song_id: int, ):
     """Get a specific song by ID."""
     query = "SELECT * FROM Songs WHERE id = ?"
     songs = db.execute_query(query, (song_id,))
@@ -53,7 +53,7 @@ async def get_song(song_id: int, db: DatabaseConnection = Depends(get_db)):
 
 
 @router.post("/", response_model=Song, status_code=201)
-async def create_song(song: SongCreate, db: DatabaseConnection = Depends(get_db)):
+async def create_song(song: SongCreate, ):
     """Create a new song."""
     query = """
     INSERT INTO Songs (
@@ -84,7 +84,7 @@ async def create_song(song: SongCreate, db: DatabaseConnection = Depends(get_db)
 async def update_song(
     song_id: int,
     song_update: SongUpdate,
-    db: DatabaseConnection = Depends(get_db)
+    
 ):
     """Update an existing song."""
     # Check if song exists
@@ -114,7 +114,7 @@ async def update_song(
 
 
 @router.delete("/{song_id}", status_code=204)
-async def delete_song(song_id: int, db: DatabaseConnection = Depends(get_db)):
+async def delete_song(song_id: int, ):
     """Delete a song (cascades to sections, measures, chords)."""
     result = db.execute_non_query("DELETE FROM Songs WHERE id = ?", (song_id,))
     
