@@ -30,12 +30,11 @@ app.add_middleware(
 
 @app.get("/")
 async def root():
-    """Health check endpoint."""
+    """Root endpoint."""
     return {
         "message": "Harmony Lab API",
         "version": "1.0.0",
         "status": "healthy",
-        "environment": settings.environment,
     }
 
 
