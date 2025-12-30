@@ -50,6 +50,7 @@ jobs:
             --platform managed \
             --region ${{ env.REGION }} \
             --allow-unauthenticated \
+            --add-cloudsql-instances=${{ env.PROJECT_ID }}:${{ env.REGION }}:flashcards-db \
             --set-secrets=DB_SERVER=harmonylab-db-server:latest,DB_NAME=harmonylab-db-name:latest,DB_USER=harmonylab-db-user:latest,DB_PASSWORD=harmonylab-db-password:latest
       
       - name: Show URL
