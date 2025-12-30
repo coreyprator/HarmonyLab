@@ -24,7 +24,7 @@ def get_secret(secret_id: str, project_id: str = "super-flashcards-475210") -> s
     env_key = secret_id.upper().replace("-", "_")
     env_value = os.getenv(env_key)
     if env_value:
-        return env_value
+        return env_value.strip()
     
     # Try Secret Manager
     if HAS_SECRET_MANAGER:
@@ -32,7 +32,7 @@ def get_secret(secret_id: str, project_id: str = "super-flashcards-475210") -> s
             client = secretmanager.SecretManagerServiceClient()
             name = f"projects/{project_id}/secrets/{secret_id}/versions/latest"
             response = client.access_secret_version(request={"name": name})
-            return response.payload.data.decode("UTF-8")
+            return response.payload.data.decode("UTF-8").strip()
         except Exception as e:
             print(f"Warning: Could not fetch secret {secret_id}: {e}")
     
