@@ -17,14 +17,20 @@ class Database:
     @property
     def connection_string(self) -> str:
         """Build pyodbc connection string for Cloud SQL."""
+        # Add port and connection timeout for Cloud Run
+        server = settings.db_server
+        if ':' not in server:
+            server = f"{server},1433"
+        
         return (
             f"DRIVER={{{settings.db_driver}}};"
-            f"SERVER={settings.db_server};"
+            f"SERVER={server};"
             f"DATABASE={settings.db_name};"
             f"UID={settings.db_user};"
             f"PWD={settings.db_password};"
             f"Encrypt=yes;"
             f"TrustServerCertificate=yes;"
+            f"Connection Timeout=30;"
         )
     
     def get_connection(self):
