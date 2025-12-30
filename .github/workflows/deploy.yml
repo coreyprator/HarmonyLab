@@ -6,12 +6,40 @@ on:
 
 env:
   PROJECT_ID: super-flashcards-475210
-  SERVICE_NAME: harmonylab
+  SERVICE_NAME_API: harmonylab
+  SERVICE_NAME_FRONTEND: harmonylab-frontend
   REGION: us-central1
   REPOSITORY: harmonylab
 
 jobs:
-  deploy:
+  test-backend:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-asyncio httpx
+      
+      - name: Run tests with coverage
+        run: |
+          pytest --cov=app --cov-report=xml --cov-report=term --cov-fail-under=70
+        env:
+          DB_SERVER: ${{ secrets.DB_SERVER }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+
+  deploy-backend:
+    needs: test-backend
     runs-on: ubuntu-latest
     
     permissions:
@@ -35,26 +63,76 @@ jobs:
       - name: Configure Docker
         run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
       
-      - name: Build Container
+      - name: Build Backend Container
         run: |
-          docker build -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE_NAME }}:${{ github.sha }} .
+          docker build -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE_NAME_API }}:${{ github.sha }} .
       
-      - name: Push Container
+      - name: Push Backend Container
         run: |
-          docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+          docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE_NAME_API }}:${{ github.sha }}
       
-      - name: Deploy to Cloud Run
+      - name: Deploy Backend to Cloud Run
         run: |
-          gcloud run deploy ${{ env.SERVICE_NAME }} \
-            --image ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE_NAME }}:${{ github.sha }} \
+          gcloud run deploy ${{ env.SERVICE_NAME_API }} \
+            --image ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE_NAME_API }}:${{ github.sha }} \
             --platform managed \
             --region ${{ env.REGION }} \
             --allow-unauthenticated \
             --add-cloudsql-instances=${{ env.PROJECT_ID }}:${{ env.REGION }}:flashcards-db \
             --set-secrets=DB_SERVER=harmonylab-db-server:latest,DB_NAME=harmonylab-db-name:latest,DB_USER=harmonylab-db-user:latest,DB_PASSWORD=harmonylab-db-password:latest
       
-      - name: Show URL
+      - name: Show Backend URL
         run: |
-          gcloud run services describe ${{ env.SERVICE_NAME }} \
+          gcloud run services describe ${{ env.SERVICE_NAME_API }} \
             --region ${{ env.REGION }} \
             --format="value(status.url)"
+
+  deploy-frontend:
+    needs: test-backend
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: read
+      id-token: write
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Google Auth
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+      
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+      
+      - name: Configure Docker
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
+      
+      - name: Build Frontend Container
+        run: |
+          cd frontend
+          docker build -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE_NAME_FRONTEND }}:${{ github.sha }} .
+      
+      - name: Push Frontend Container
+        run: |
+          docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE_NAME_FRONTEND }}:${{ github.sha }}
+      
+      - name: Deploy Frontend to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.SERVICE_NAME_FRONTEND }} \
+            --image ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE_NAME_FRONTEND }}:${{ github.sha }} \
+            --platform managed \
+            --region ${{ env.REGION }} \
+            --allow-unauthenticated \
+            --port 80
+      
+      - name: Show Frontend URL
+        run: |
+          gcloud run services describe ${{ env.SERVICE_NAME_FRONTEND }} \
+            --region ${{ env.REGION }} \
+            --format="value(status.url)"
+
