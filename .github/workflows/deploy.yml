@@ -33,6 +33,7 @@ jobs:
         run: |
           pytest -v
         env:
+          CI: "true"
           DB_SERVER: "mock"
           DB_NAME: "mock"
           DB_USER: "mock"

@@ -1,11 +1,19 @@
 """
 Basic API tests for HarmonyLab backend.
 Tests run against the deployed Cloud Run instance.
+These are integration tests - skip during CI.
 """
 import pytest
 import httpx
+import os
 
 API_URL = "https://harmonylab-wmrla7fhwa-uc.a.run.app"
+
+# Skip all tests in this file during CI
+pytestmark = pytest.mark.skipif(
+    os.environ.get("CI") == "true",
+    reason="Integration tests require deployed API"
+)
 
 
 @pytest.mark.asyncio
