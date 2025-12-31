@@ -1,8 +1,144 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import FileDropZone from '../components/import/FileDropZone';
+import ImportPreview from '../components/import/ImportPreview';
+
 export default function ImportPage() {
+  const [file, setFile] = useState(null);
+  const [parsedData, setParsedData] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const [error, setError] = useState(null);
+  const navigate = useNavigate();
+
+  const handleFileSelect = (selectedFile) => {
+    setFile(selectedFile);
+    setParsedData(null);
+    setError(null);
+  };
+
+  const handleParse = async () => {
+    if (!file) return;
+
+    setImporting(true);
+    setError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/imports/midi`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to parse MIDI file');
+      }
+
+      const data = await response.json();
+      setParsedData(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!parsedData) return;
+
+    setImporting(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/songs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: parsedData.title,
+          composer: parsedData.composer,
+          genre: parsedData.genre || 'Standard',
+          key: parsedData.key,
+          time_signature: parsedData.time_signature,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save song');
+      }
+
+      const savedSong = await response.json();
+      navigate(`/songs/${savedSong.song_id}`);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setFile(null);
+    setParsedData(null);
+    setError(null);
+  };
+
   return (
-    <div className="text-center py-12">
-      <h1 className="text-4xl font-bold mb-4">Import MIDI Files</h1>
-      <p className="text-gray-600">Import functionality coming soon...</p>
+    <div className="max-w-4xl mx-auto">
+      <h1 className="text-3xl font-bold text-gray-900 mb-8">Import MIDI File</h1>
+
+      {error && (
+        <div className="mb-6 bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded">
+          {error}
+        </div>
+      )}
+
+      {!parsedData ? (
+        <>
+          <FileDropZone onFileSelect={handleFileSelect} selectedFile={file} />
+          
+          {file && (
+            <div className="mt-6 flex gap-4">
+              <button
+                onClick={handleParse}
+                disabled={importing}
+                className="flex-1 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {importing ? 'Parsing...' : 'Parse MIDI File'}
+              </button>
+              <button
+                onClick={handleCancel}
+                className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          <ImportPreview data={parsedData} />
+          
+          <div className="mt-6 flex gap-4">
+            <button
+              onClick={handleSave}
+              disabled={importing}
+              className="flex-1 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {importing ? 'Saving...' : 'Save to Library'}
+            </button>
+            <button
+              onClick={handleCancel}
+              className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </>
+      )}
     </div>
-  )
+  );
 }
+
