@@ -39,6 +39,9 @@ async def preview_midi(file: UploadFile = File(...)):
         return {
             "filename": file.filename,
             "title": parsed_song.title or file.filename.replace('.mid', '').replace('.midi', ''),
+            "composer": None,  # MIDI files don't typically contain composer info
+            "key": None,  # Would need key signature analysis
+            "genre": "Standard",
             "tempo": parsed_song.tempo,
             "time_signature": parsed_song.time_signature,
             "total_measures": parsed_song.total_measures,

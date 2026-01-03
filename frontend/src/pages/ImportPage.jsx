@@ -52,16 +52,16 @@ export default function ImportPage() {
     setError(null);
 
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/songs`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/songs/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           title: parsedData.title,
-          composer: parsedData.composer,
+          composer: parsedData.composer || 'Unknown',
           genre: parsedData.genre || 'Standard',
-          key: parsedData.key,
+          original_key: parsedData.key || null,
           time_signature: parsedData.time_signature,
         }),
       });
