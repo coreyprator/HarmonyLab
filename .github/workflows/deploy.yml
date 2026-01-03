@@ -116,7 +116,9 @@ jobs:
       - name: Build Frontend Container
         run: |
           cd frontend
-          docker build -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE_NAME_FRONTEND }}:${{ github.sha }} .
+          docker build \
+            --build-arg VITE_API_URL=https://harmonylab-wmrla7fhwa-uc.a.run.app \
+            -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE_NAME_FRONTEND }}:${{ github.sha }} .
       
       - name: Push Frontend Container
         run: |

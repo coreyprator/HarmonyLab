@@ -12,6 +12,10 @@ RUN npm install
 # Copy source code
 COPY . .
 
+# Set API URL for build time
+ARG VITE_API_URL=https://harmonylab-wmrla7fhwa-uc.a.run.app
+ENV VITE_API_URL=$VITE_API_URL
+
 # Build the app
 RUN npm run build
 
