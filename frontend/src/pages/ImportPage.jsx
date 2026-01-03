@@ -26,7 +26,7 @@ export default function ImportPage() {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/imports/midi`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/v1/imports/midi/preview`, {
         method: 'POST',
         body: formData,
       });
