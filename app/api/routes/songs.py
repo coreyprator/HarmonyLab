@@ -77,7 +77,7 @@ async def create_song(song: SongCreate, ):
     if not song_id:
         raise HTTPException(status_code=500, detail="Failed to create song")
     
-    return await get_song(song_id, db)
+    return await get_song(song_id)
 
 
 @router.put("/{song_id}", response_model=Song)
