@@ -135,11 +135,11 @@ async def import_midi(
             # Create measure if it doesn't exist
             if measure_num not in measures_created:
                 measure_query = """
-                    INSERT INTO Measures (section_id, measure_number, measure_order)
+                    INSERT INTO Measures (section_id, measure_number)
                     OUTPUT INSERTED.id
-                    VALUES (?, ?, ?)
+                    VALUES (?, ?)
                 """
-                measure_result = db.execute_query(measure_query, (section_id, measure_num, measure_num))
+                measure_result = db.execute_query(measure_query, (section_id, measure_num))
                 measures_created[measure_num] = measure_result[0]['id']
             
             measure_id = measures_created[measure_num]
