@@ -71,7 +71,7 @@ export default function ImportPage() {
       }
 
       const savedSong = await response.json();
-      navigate(`/songs/${savedSong.song_id}`);
+      navigate(`/songs/${savedSong.id}`);
     } catch (err) {
       setError(err.message);
     } finally {

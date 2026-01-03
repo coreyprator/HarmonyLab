@@ -58,7 +58,7 @@ async def health_check():
 
 
 # Include routers
-app.include_router(songs.router, tags=["songs"])
+app.include_router(songs.router, prefix="/api/songs", tags=["songs"])
 app.include_router(sections.router, tags=["sections"])
 app.include_router(vocabulary.router, tags=["vocabulary"])
 app.include_router(measures.router, tags=["measures"])
