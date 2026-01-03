@@ -46,32 +46,31 @@ export default function ImportPage() {
   };
 
   const handleSave = async () => {
-    if (!parsedData) return;
+    if (!parsedData || !file) return;
 
     setImporting(true);
     setError(null);
 
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/songs/`, {
+      // Use the full import endpoint that saves chords too
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('title', parsedData.title);
+      formData.append('composer', parsedData.composer || 'Unknown');
+      formData.append('genre', parsedData.genre || 'Standard');
+
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/v1/imports/midi/import`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          title: parsedData.title,
-          composer: parsedData.composer || 'Unknown',
-          genre: parsedData.genre || 'Standard',
-          original_key: parsedData.key || null,
-          time_signature: parsedData.time_signature,
-        }),
+        body: formData,
       });
 
       if (!response.ok) {
-        throw new Error('Failed to save song');
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to import MIDI file');
       }
 
-      const savedSong = await response.json();
-      navigate(`/songs/${savedSong.id}`);
+      const result = await response.json();
+      navigate(`/songs/${result.song_id}`);
     } catch (err) {
       setError(err.message);
     } finally {
