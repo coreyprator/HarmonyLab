@@ -6,7 +6,7 @@ CRUD operations for songs.
 from typing import List
 from fastapi import APIRouter, HTTPException, Depends
 from app.models import Song, SongCreate, SongUpdate
-from app.db.connection import get_db_connection
+from app.db.connection import get_db_connection, db_legacy as db
 
 
 router = APIRouter()
