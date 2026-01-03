@@ -122,3 +122,48 @@ async def delete_song(song_id: int, ):
         raise HTTPException(status_code=404, detail="Song not found")
     
     return None
+
+
+@router.get("/{song_id}/progression")
+async def get_song_progression(song_id: int, ):
+    """Get the complete chord progression for a song with all sections, measures, and chords."""
+    # Get sections
+    sections_query = """
+    SELECT id, song_id, name as section_name, section_order, repeat_count 
+    FROM Sections 
+    WHERE song_id = ? 
+    ORDER BY section_order
+    """
+    sections = db.execute_query(sections_query, (song_id,))
+    
+    if not sections:
+        return {"sections": []}
+    
+    # For each section, get measures and chords
+    for section in sections:
+        section['section_id'] = section['id']
+        
+        # Get measures for this section
+        measures_query = """
+        SELECT id, measure_number 
+        FROM Measures 
+        WHERE section_id = ? 
+        ORDER BY measure_number
+        """
+        measures = db.execute_query(measures_query, (section['id'],))
+        
+        # For each measure, get chords
+        for measure in measures:
+            measure['measure_id'] = measure['id']
+            
+            chords_query = """
+            SELECT id, chord_symbol, beat_position, chord_order 
+            FROM Chords 
+            WHERE measure_id = ? 
+            ORDER BY chord_order
+            """
+            measure['chords'] = db.execute_query(chords_query, (measure['id'],))
+        
+        section['measures'] = measures
+    
+    return {"sections": sections}
