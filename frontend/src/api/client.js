@@ -38,10 +38,10 @@ export async function apiClient(endpoint, options = {}) {
 // API methods
 export const api = {
   // Songs
-  getSongs: () => apiClient('/api/songs'),
+  getSongs: () => apiClient('/api/songs/'),
   getSong: (id) => apiClient(`/api/songs/${id}`),
-  getSongProgression: (id) => apiClient(`/api/songs/${id}/progression`),
-  createSong: (data) => apiClient('/api/songs', { method: 'POST', body: JSON.stringify(data) }),
+  getSongProgression: (id) => apiClient(`/${id}/sections`),  // Sections endpoint, not progression
+  createSong: (data) => apiClient('/api/songs/', { method: 'POST', body: JSON.stringify(data) }),
   updateSong: (id, data) => apiClient(`/api/songs/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteSong: (id) => apiClient(`/api/songs/${id}`, { method: 'DELETE' }),
 
