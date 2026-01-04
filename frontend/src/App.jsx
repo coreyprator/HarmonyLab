@@ -5,6 +5,7 @@ import SongPage from './pages/SongPage'
 import QuizPage from './pages/QuizPage'
 import ProgressPage from './pages/ProgressPage'
 import ImportPage from './pages/ImportPage'
+import MidiAuditPage from './pages/MidiAuditPage'
 import { AudioProvider } from './context/AudioContext'
 
 function App() {
@@ -18,6 +19,7 @@ function App() {
             <Route path="/quiz/:id" element={<QuizPage />} />
             <Route path="/progress" element={<ProgressPage />} />
             <Route path="/import" element={<ImportPage />} />
+            <Route path="/import/audit" element={<MidiAuditPage />} />
           </Routes>
         </Layout>
       </Router>

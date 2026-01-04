@@ -6,6 +6,7 @@ from typing import Optional
 import tempfile
 import os
 from app.services.midi_parser import parse_midi_file, ParsedSong
+from app.services.midi_audit import audit_midi_file
 from app.models import SongCreate, SectionCreate, MeasureCreate, ChordCreate
 from app.db.connection import DatabaseConnection
 from config.settings import Settings
@@ -176,6 +177,42 @@ async def import_midi(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to import MIDI file: {str(e)}"
+        )
+    
+    finally:
+        # Clean up temp file
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+
+
+@router.post("/midi/audit")
+async def audit_midi(file: UploadFile = File(...)):
+    """
+    Perform detailed audit of MIDI file parsing.
+    Returns comprehensive report of all MIDI events, measures, and parser decisions.
+    Used for debugging chord detection issues.
+    """
+    if not file.filename.endswith(('.mid', '.midi')):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File must be a MIDI file (.mid or .midi)"
+        )
+    
+    # Save uploaded file to temp location
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.mid') as tmp:
+        content = await file.read()
+        tmp.write(content)
+        tmp_path = tmp.name
+    
+    try:
+        # Run audit
+        audit_report = audit_midi_file(tmp_path)
+        return audit_report
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to audit MIDI file: {str(e)}"
         )
     
     finally:

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import FileDropZone from '../components/import/FileDropZone';
 import ImportPreview from '../components/import/ImportPreview';
 
@@ -86,7 +86,15 @@ export default function ImportPage() {
 
   return (
     <div className="max-w-4xl mx-auto">
-      <h1 className="text-3xl font-bold text-gray-900 mb-8">Import MIDI File</h1>
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-3xl font-bold text-gray-900">Import MIDI File</h1>
+        <Link 
+          to="/import/audit"
+          className="text-blue-600 hover:text-blue-800 underline text-sm"
+        >
+          Debug Parser →
+        </Link>
+      </div>
 
       {error && (
         <div className="mb-6 bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded">
