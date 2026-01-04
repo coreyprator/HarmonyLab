@@ -45,6 +45,9 @@ export const api = {
   updateSong: (id, data) => apiClient(`/api/songs/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteSong: (id) => apiClient(`/api/songs/${id}`, { method: 'DELETE' }),
 
+  // Chords
+  updateChord: (id, data) => apiClient(`/api/v1/chords/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
   // Vocabulary
   getChords: () => apiClient('/api/vocabulary/chords'),
   

@@ -10,6 +10,8 @@ export default function SongPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [showAnalysis, setShowAnalysis] = useState(false)
+  const [editingChord, setEditingChord] = useState(null)
+  const [editValue, setEditValue] = useState('')
 
   useEffect(() => {
     loadSong()
@@ -33,19 +35,68 @@ export default function SongPage() {
     }
   }
 
+  const startEditChord = (chordId, currentSymbol) => {
+    setEditingChord(chordId)
+    setEditValue(currentSymbol)
+  }
+
+  const saveChordEdit = async (chordId) => {
+    try {
+      await api.updateChord(chordId, { chord_symbol: editValue })
+      // Refresh progression data
+      const progressionData = await api.getSongProgression(id)
+      setProgression(progressionData)
+      setEditingChord(null)
+      setEditValue('')
+    } catch (err) {
+      alert('Failed to update chord')
+      console.error(err)
+    }
+  }
+
+  const cancelEdit = () => {
+    setEditingChord(null)
+    setEditValue('')
+  }
+
+  const midiNoteToName = (midiNote) => {
+    const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+    const octave = Math.floor(midiNote / 12) - 1
+    const noteName = noteNames[midiNote % 12]
+    return `${noteName}${octave}`
+  }
+
+  const parseIntervals = (midiNotes) => {
+    if (!midiNotes || midiNotes.length === 0) return 'No notes'
+    const notes = typeof midiNotes === 'string' ? JSON.parse(midiNotes) : midiNotes
+    if (notes.length === 0) return 'No notes'
+    
+    const root = notes[0]
+    const intervals = notes.map(note => (note - root) % 12)
+    return intervals.join(', ') + ' semitones from root'
+  }
+
+  const getRootNote = (midiNotes) => {
+    if (!midiNotes) return 'Unknown'
+    const notes = typeof midiNotes === 'string' ? JSON.parse(midiNotes) : midiNotes
+    if (notes.length === 0) return 'Unknown'
+    return midiNoteToName(notes[0])
+  }
+
+  const getMidiNotesList = (midiNotes) => {
+    if (!midiNotes) return 'No MIDI data'
+    try {
+      const notes = typeof midiNotes === 'string' ? JSON.parse(midiNotes) : midiNotes
+      if (notes.length === 0) return 'No notes recorded'
+      return notes.map(n => midiNoteToName(n)).join(', ')
+    } catch {
+      return 'Invalid data'
+    }
+  }
+
   if (loading) return <div className="text-center py-12">Loading...</div>
   if (error) return <div className="text-center py-12 text-error">{error}</div>
   if (!song) return <div className="text-center py-12">Song not found.</div>
-
-  const getChordTemplate = (symbol) => {
-    if (symbol.includes('Maj7')) return 'Major 7th (root, M3, P5, M7)'
-    if (symbol.includes('m7')) return 'Minor 7th (root, m3, P5, m7)'
-    if (symbol.includes('7') && !symbol.includes('Maj')) return 'Dominant 7th (root, M3, P5, m7)'
-    if (symbol.includes('m') && !symbol.includes('Maj')) return 'Minor triad (root, m3, P5)'
-    if (symbol.includes('dim')) return 'Diminished (root, m3, d5)'
-    if (symbol.includes('aug')) return 'Augmented (root, M3, A5)'
-    return 'Major triad (root, M3, P5)'
-  }
 
   return (
     <div>
@@ -99,21 +150,52 @@ export default function SongPage() {
                           {measure.chords.length > 0 ? (
                             measure.chords.map((chord, idx) => (
                               <div key={idx} className="bg-gray-50 p-3 rounded">
-                                <div className="flex items-center gap-3 mb-2">
-                                  <span className="text-xl font-bold text-primary">
-                                    {chord.chord_symbol}
-                                  </span>
-                                  <span className="text-sm text-gray-500">
-                                    Beat {chord.beat_position || 1}
-                                  </span>
-                                </div>
+                                {editingChord === chord.id ? (
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <input
+                                      type="text"
+                                      value={editValue}
+                                      onChange={(e) => setEditValue(e.target.value)}
+                                      className="px-2 py-1 border border-gray-300 rounded text-lg font-bold"
+                                      placeholder="e.g., Dm7/G"
+                                      autoFocus
+                                    />
+                                    <button
+                                      onClick={() => saveChordEdit(chord.id)}
+                                      className="px-2 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700"
+                                    >
+                                      ✓ Save
+                                    </button>
+                                    <button
+                                      onClick={cancelEdit}
+                                      className="px-2 py-1 bg-gray-300 rounded text-sm hover:bg-gray-400"
+                                    >
+                                      ✕ Cancel
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-3 mb-2">
+                                    <span className="text-xl font-bold text-primary">
+                                      {chord.chord_symbol}
+                                    </span>
+                                    <span className="text-sm text-gray-500">
+                                      Beat {chord.beat_position || 1}
+                                    </span>
+                                    <button
+                                      onClick={() => startEditChord(chord.id, chord.chord_symbol)}
+                                      className="text-blue-600 hover:text-blue-800 text-sm"
+                                    >
+                                      ✏️ Edit
+                                    </button>
+                                  </div>
+                                )}
                                 <div className="text-sm text-gray-600">
-                                  <strong>Parsing Algorithm:</strong>
+                                  <strong>Analysis:</strong>
                                   <div className="mt-1 space-y-1 ml-3">
-                                    <div>• <strong>Method:</strong> Template matching from MIDI note intervals</div>
-                                    <div>• <strong>Root Detection:</strong> Lowest MIDI note in chord voicing</div>
-                                    <div>• <strong>Intervals:</strong> {getChordTemplate(chord.chord_symbol)}</div>
-                                    <div>• <strong>Source:</strong> Extracted from simultaneous notes in MIDI track</div>
+                                    <div>• <strong>Method:</strong> {chord.midi_notes ? 'MIDI Analysis' : 'Manual Override'}</div>
+                                    <div>• <strong>Root Note:</strong> {getRootNote(chord.midi_notes)}</div>
+                                    <div>• <strong>Intervals:</strong> {parseIntervals(chord.midi_notes)}</div>
+                                    <div>• <strong>Notes in analysis:</strong> {getMidiNotesList(chord.midi_notes)}</div>
                                   </div>
                                 </div>
                               </div>

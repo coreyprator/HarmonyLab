@@ -8,7 +8,7 @@ export default function Layout({ children }) {
         {children}
       </main>
       <footer className="bg-gray-800 text-white text-center py-4">
-        <p>HarmonyLab &copy; 2025</p>
+        <p>HarmonyLab v1.1.0 &copy; 2025</p>
       </footer>
     </div>
   )

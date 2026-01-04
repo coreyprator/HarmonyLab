@@ -151,12 +151,16 @@ async def import_midi(
             
             # Create chord
             chord_query = """
-                INSERT INTO Chords (measure_id, beat_position, chord_symbol, chord_order)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO Chords (measure_id, beat_position, chord_symbol, chord_order, midi_notes)
+                VALUES (?, ?, ?, ?, ?)
             """
+            # Convert midi_notes list to JSON string for storage
+            import json
+            midi_notes_json = json.dumps(chord_data.midi_notes) if chord_data.midi_notes else None
+            
             db.execute_non_query(
                 chord_query,
-                (measure_id, chord_data.beat_position, chord_data.chord_symbol, chord_order)
+                (measure_id, chord_data.beat_position, chord_data.chord_symbol, chord_order, midi_notes_json)
             )
         
         return {

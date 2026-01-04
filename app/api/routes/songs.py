@@ -157,7 +157,7 @@ async def get_song_progression(song_id: int, ):
             measure['measure_id'] = measure['id']
             
             chords_query = """
-            SELECT id, chord_symbol, beat_position, chord_order 
+            SELECT id, chord_symbol, beat_position, chord_order, midi_notes
             FROM Chords 
             WHERE measure_id = ? 
             ORDER BY chord_order
