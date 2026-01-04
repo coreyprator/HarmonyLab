@@ -27,6 +27,21 @@ export default function HomePage() {
     }
   }
 
+  const handleDelete = async (songId, songTitle, e) => {
+    e.preventDefault() // Prevent navigation to song detail
+    e.stopPropagation()
+    
+    if (!confirm(`Delete "${songTitle}"?`)) return
+    
+    try {
+      await api.deleteSong(songId)
+      setSongs(songs.filter(s => s.id !== songId))
+    } catch (err) {
+      alert('Failed to delete song')
+      console.error(err)
+    }
+  }
+
   const genres = ['all', ...new Set(songs.map(s => s.genre).filter(Boolean))]
   
   const filteredSongs = songs.filter(song => {
@@ -81,12 +96,14 @@ export default function HomePage() {
           <p className="text-center py-12 text-gray-500">No songs found.</p>
         ) : (
           filteredSongs.map(song => (
-            <Link
-              key={song.song_id}
-              to={`/songs/${song.song_id}`}
-              className="block border-b border-gray-200 last:border-b-0 hover:bg-gray-50 transition"
+            <div
+              key={song.id || song.song_id}
+              className="border-b border-gray-200 last:border-b-0 hover:bg-gray-50 transition flex items-center"
             >
-              <div className="p-4 flex items-center justify-between">
+              <Link
+                to={`/songs/${song.id || song.song_id}`}
+                className="flex-1 p-4 flex items-center justify-between"
+              >
                 <div className="flex-1">
                   <h3 className="text-lg font-semibold">{song.title}</h3>
                   <p className="text-gray-600 text-sm">{song.composer}</p>
@@ -97,8 +114,15 @@ export default function HomePage() {
                   </span>
                   <span className="text-2xl">→</span>
                 </div>
-              </div>
-            </Link>
+              </Link>
+              <button
+                onClick={(e) => handleDelete(song.id || song.song_id, song.title, e)}
+                className="px-3 py-1 mx-2 text-red-600 hover:bg-red-50 rounded transition"
+                title="Delete song"
+              >
+                🗑️
+              </button>
+            </div>
           ))
         )}
       </div>
