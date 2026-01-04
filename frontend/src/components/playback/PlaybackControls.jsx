@@ -1,34 +1,82 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import * as Tone from 'tone'
+
+const INSTRUMENTS = {
+  piano: {
+    name: 'Grand Piano',
+    type: 'sampler',
+    options: {
+      urls: {
+        A0: 'A0.mp3', C1: 'C1.mp3', 'D#1': 'Ds1.mp3', 'F#1': 'Fs1.mp3',
+        A1: 'A1.mp3', C2: 'C2.mp3', 'D#2': 'Ds2.mp3', 'F#2': 'Fs2.mp3',
+        A2: 'A2.mp3', C3: 'C3.mp3', 'D#3': 'Ds3.mp3', 'F#3': 'Fs3.mp3',
+        A3: 'A3.mp3', C4: 'C4.mp3', 'D#4': 'Ds4.mp3', 'F#4': 'Fs4.mp3',
+        A4: 'A4.mp3', C5: 'C5.mp3', 'D#5': 'Ds5.mp3', 'F#5': 'Fs5.mp3',
+        A5: 'A5.mp3', C6: 'C6.mp3', 'D#6': 'Ds6.mp3', 'F#6': 'Fs6.mp3',
+        A6: 'A6.mp3', C7: 'C7.mp3', 'D#7': 'Ds7.mp3', 'F#7': 'Fs7.mp3',
+        A7: 'A7.mp3', C8: 'C8.mp3'
+      },
+      release: 1,
+      baseUrl: 'https://tonejs.github.io/audio/salamander/'
+    }
+  },
+  epiano: {
+    name: 'Electric Piano',
+    type: 'synth',
+    options: {
+      oscillator: { type: 'fmsine', modulationType: 'sine', modulationIndex: 12 },
+      envelope: { attack: 0.001, decay: 2, sustain: 0.1, release: 2 }
+    }
+  },
+  guitar: {
+    name: 'Jazz Guitar',
+    type: 'synth',
+    options: {
+      oscillator: { type: 'triangle' },
+      envelope: { attack: 0.008, decay: 0.5, sustain: 0.2, release: 1.5 }
+    }
+  }
+}
 
 export default function PlaybackControls({ progression }) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentChord, setCurrentChord] = useState(null)
   const [tempo, setTempo] = useState(120)
+  const [instrument, setInstrument] = useState('piano')
+  const [loading, setLoading] = useState(true)
+  const instrumentRef = useRef(null)
 
-  // Initialize Tone.js synth
-  const [synth] = useState(() => 
-    new Tone.PolySynth(Tone.Synth, {
-      oscillator: { type: 'sine' },
-      envelope: {
-        attack: 0.02,
-        decay: 0.1,
-        sustain: 0.3,
-        release: 1,
-      },
-    }).toDestination()
-  )
-
+  // Initialize instrument
   useEffect(() => {
+    const initInstrument = async () => {
+      if (instrumentRef.current) {
+        instrumentRef.current.dispose()
+      }
+
+      const config = INSTRUMENTS[instrument]
+      if (config.type === 'sampler') {
+        instrumentRef.current = new Tone.Sampler(config.options).toDestination()
+        await Tone.loaded()
+      } else {
+        instrumentRef.current = new Tone.PolySynth(Tone.Synth, config.options).toDestination()
+      }
+      setLoading(false)
+    }
+
+    setLoading(true)
+    initInstrument()
+
     return () => {
-      synth.dispose()
+      if (instrumentRef.current) {
+        instrumentRef.current.dispose()
+      }
       Tone.Transport.stop()
       Tone.Transport.cancel()
     }
-  }, [synth])
+  }, [instrument])
 
   const playProgression = async () => {
-    if (!progression?.sections) return
+    if (!progression?.sections || !instrumentRef.current) return
 
     // Start Tone.js context (required for audio)
     await Tone.start()
@@ -45,7 +93,7 @@ export default function PlaybackControls({ progression }) {
           measure.chords.forEach(chord => {
             const chordNotes = parseChordSymbol(chord.chord_symbol)
             Tone.Transport.schedule((scheduleTime) => {
-              synth.triggerAttackRelease(chordNotes, '2n', scheduleTime)
+              instrumentRef.current.triggerAttackRelease(chordNotes, '2n', scheduleTime)
               setCurrentChord(chord.chord_symbol)
             }, time)
             time += beatDuration * 4 // 4 beats per measure (simplified)
@@ -101,14 +149,28 @@ export default function PlaybackControls({ progression }) {
   }
 
   return (
-    <div className="flex items-center gap-4">
+    <div className="flex items-center gap-4 flex-wrap">
       <button
         onClick={isPlaying ? stopPlayback : playProgression}
         className={isPlaying ? 'btn-secondary' : 'btn-primary'}
-        disabled={!progression?.sections?.length}
+        disabled={!progression?.sections?.length || loading}
       >
-        {isPlaying ? '⏹ Stop' : '▶ Play'}
+        {loading ? '⏳ Loading...' : isPlaying ? '⏹ Stop' : '▶ Play'}
       </button>
+
+      <div className="flex items-center gap-2">
+        <label className="text-sm font-medium">Instrument:</label>
+        <select
+          value={instrument}
+          onChange={(e) => setInstrument(e.target.value)}
+          disabled={isPlaying}
+          className="px-3 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-primary"
+        >
+          {Object.entries(INSTRUMENTS).map(([key, config]) => (
+            <option key={key} value={key}>{config.name}</option>
+          ))}
+        </select>
+      </div>
 
       <div className="flex items-center gap-2">
         <label className="text-sm font-medium">Tempo:</label>
