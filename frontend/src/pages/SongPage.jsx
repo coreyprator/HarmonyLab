@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { api } from '../api/client'
+import PlaybackControls from '../components/playback/PlaybackControls'
 
 export default function SongPage() {
   const { id } = useParams()
@@ -47,11 +48,13 @@ export default function SongPage() {
           {song.composer} {song.genre && `• ${song.genre}`}
         </p>
         
-        <div className="mt-4 flex gap-4">
-          <Link to={`/quiz/${id}`} className="btn-primary">
-            Start Quiz
-          </Link>
-          <button className="btn-secondary">▶ Play</button>
+        <div className="mt-4">
+          <div className="flex gap-4 mb-4">
+            <Link to={`/quiz/${id}`} className="btn-primary">
+              Start Quiz
+            </Link>
+          </div>
+          <PlaybackControls progression={progression} />
         </div>
       </div>
 
