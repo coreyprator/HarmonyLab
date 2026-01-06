@@ -84,9 +84,9 @@ export default function MidiAuditPage() {
           {/* File Info */}
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-2xl font-bold mb-4">File Information</h2>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               <div>
-                <strong>Filename:</strong> {audit.filename}
+                <strong>Filename:</strong> {audit.filename?.split('/').pop() || 'Unknown'}
               </div>
               <div>
                 <strong>Tempo:</strong> {audit.tempo} BPM
@@ -98,126 +98,71 @@ export default function MidiAuditPage() {
                 <strong>Total Measures:</strong> {audit.total_measures}
               </div>
               <div>
-                <strong>Ticks per Beat:</strong> {audit.ticks_per_beat}
+                <strong>Ticks/Beat:</strong> {audit.ticks_per_beat}
               </div>
               <div>
-                <strong>Total Beats:</strong> {audit.total_beats.toFixed(2)}
+                <strong>Chords Detected:</strong> {audit.total_chords_detected}
               </div>
             </div>
-
-            {audit.parser_issues.length > 0 && (
-              <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded">
-                <strong className="text-red-800">Parser Issues:</strong>
-                <ul className="list-disc ml-6 mt-2">
-                  {audit.parser_issues.map((issue, idx) => (
-                    <li key={idx} className="text-red-700">{issue}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
           </div>
 
           {/* Tracks Info */}
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-2xl font-bold mb-4">Tracks Analysis</h2>
-            <table className="w-full">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left p-2">Track #</th>
-                  <th className="text-left p-2">Name</th>
-                  <th className="text-right p-2">Total Events</th>
-                  <th className="text-right p-2">Note Events</th>
-                  <th className="text-right p-2">Max Polyphony</th>
-                </tr>
-              </thead>
-              <tbody>
-                {audit.tracks_analyzed.map((track) => (
-                  <tr key={track.track_number} className="border-b">
-                    <td className="p-2">{track.track_number}</td>
-                    <td className="p-2">{track.track_name}</td>
-                    <td className="text-right p-2">{track.total_events}</td>
-                    <td className="text-right p-2">{track.note_events}</td>
-                    <td className="text-right p-2 font-bold">{track.polyphony}</td>
+            <div className="overflow-x-auto">
+              <table className="min-w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-2 text-left">Track #</th>
+                    <th className="px-4 py-2 text-left">Name</th>
+                    <th className="px-4 py-2 text-left">Note Events</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {audit.tracks?.map((track) => (
+                    <tr key={track.index} className="border-t">
+                      <td className="px-4 py-2">{track.index}</td>
+                      <td className="px-4 py-2">{track.name}</td>
+                      <td className="px-4 py-2">{track.note_events}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
 
-          {/* Measure by Measure Analysis */}
+          {/* Chord Progression */}
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-2xl font-bold mb-4">
-              Measure-by-Measure Analysis ({audit.measures.length} measures)
+              Chord Progression by Measure ({Object.keys(audit.measures || {}).length} measures with chords)
             </h2>
-            <div className="space-y-4">
-              {audit.measures.filter(m => m.all_notes_played.length > 0).map((measure) => (
-                <div key={measure.measure_number} className="border border-gray-200 rounded p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-lg font-bold">Measure {measure.measure_number}</h3>
-                    <span className="text-sm text-gray-500">
-                      Beats {measure.start_beat.toFixed(1)} - {measure.end_beat.toFixed(1)}
-                    </span>
-                  </div>
-
-                  <div className="mb-3">
-                    <strong>All Notes Played:</strong>
-                    <div className="mt-1 flex flex-wrap gap-2">
-                      {measure.all_notes_played.map((note, idx) => (
-                        <span key={idx} className="px-2 py-1 bg-blue-100 rounded text-sm">
-                          {note}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-
-                  {measure.simultaneous_note_groups.length > 0 && (
-                    <div className="mb-3">
-                      <strong>Simultaneous Note Groups:</strong>
-                      <div className="mt-1 space-y-1">
-                        {measure.simultaneous_note_groups.map((group, idx) => (
-                          <div key={idx} className="text-sm bg-gray-50 p-2 rounded">
-                            <span className="font-medium">Beat {group.beat}:</span>{' '}
-                            {group.notes.join(', ')}
-                            <span className="text-gray-500 ml-2">
-                              (MIDI: {group.midi_notes.join(', ')})
+            <div className="space-y-4 max-h-[600px] overflow-y-auto">
+              {Object.entries(audit.measures || {})
+                .sort(([a], [b]) => parseInt(a) - parseInt(b))
+                .map(([measureNum, chords]) => (
+                  <div key={measureNum} className="border-l-4 border-primary pl-4">
+                    <h3 className="font-bold text-lg mb-2">Measure {measureNum}</h3>
+                    {chords.map((chord, idx) => (
+                      <div key={idx} className="mb-3 bg-gray-50 p-3 rounded">
+                        <div className="flex items-baseline gap-3 mb-1">
+                          <span className="font-semibold text-primary">Beat {chord.beat}:</span>
+                          <span className="text-xl font-bold">{chord.symbol}</span>
+                          {chord.confidence < 1.0 && (
+                            <span className="text-sm text-orange-600">
+                              ({Math.round(chord.confidence * 100)}% confidence)
                             </span>
-                          </div>
-                        ))}
+                          )}
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          <span className="font-medium">Notes:</span> {chord.notes?.join(', ')}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          MIDI: [{chord.midi_notes?.join(', ')}]
+                        </div>
                       </div>
-                    </div>
-                  )}
-
-                  <details className="mt-2">
-                    <summary className="cursor-pointer text-sm text-primary hover:underline">
-                      Show All MIDI Events ({measure.events.length})
-                    </summary>
-                    <div className="mt-2 max-h-60 overflow-y-auto">
-                      <table className="w-full text-xs">
-                        <thead>
-                          <tr className="border-b">
-                            <th className="text-left p-1">Time (ticks)</th>
-                            <th className="text-left p-1">Beat</th>
-                            <th className="text-left p-1">Event</th>
-                            <th className="text-left p-1">Note</th>
-                            <th className="text-left p-1">Velocity</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {measure.events.map((event, idx) => (
-                            <tr key={idx} className="border-b">
-                              <td className="p-1">{event.time_ticks}</td>
-                              <td className="p-1">{event.beat_in_measure}</td>
-                              <td className="p-1">{event.event_type}</td>
-                              <td className="p-1">{event.note_name}</td>
-                              <td className="p-1">{event.velocity}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </details>
-                </div>
-              ))}
+                    ))}
+                  </div>
+                ))}
             </div>
           </div>
         </div>

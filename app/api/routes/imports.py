@@ -5,8 +5,7 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, status
 from typing import Optional
 import tempfile
 import os
-from app.services.midi_parser import parse_midi_file, ParsedSong
-from app.services.midi_audit import audit_midi_file
+from app.services.midi_parser import parse_midi_file, ParsedSong, parse_midi_file_detailed
 from app.models import SongCreate, SectionCreate, MeasureCreate, ChordCreate
 from app.db.connection import DatabaseConnection
 from config.settings import Settings
@@ -189,7 +188,7 @@ async def import_midi(
 async def audit_midi(file: UploadFile = File(...)):
     """
     Perform detailed audit of MIDI file parsing.
-    Returns comprehensive report of all MIDI events, measures, and parser decisions.
+    Returns comprehensive report showing all detected chords by measure.
     Used for debugging chord detection issues.
     """
     if not file.filename.endswith(('.mid', '.midi')):
@@ -205,8 +204,8 @@ async def audit_midi(file: UploadFile = File(...)):
         tmp_path = tmp.name
     
     try:
-        # Run audit
-        audit_report = audit_midi_file(tmp_path)
+        # Run detailed analysis using corrected parser
+        audit_report = parse_midi_file_detailed(tmp_path)
         return audit_report
     
     except Exception as e:
