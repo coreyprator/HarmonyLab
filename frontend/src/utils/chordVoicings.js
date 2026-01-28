@@ -117,9 +117,10 @@ function midiToNoteName(midi) {
  * 
  * @param {string} chordSymbol - e.g., "Am6", "Dm7", "G7", "Cmaj7"
  * @param {number} octave - Base octave (default 3 for left-hand voicing)
+ * @param {number} inversion - 0=root, 1=1st, 2=2nd, 3=3rd (default 0)
  * @returns {string[]} - Array of note names like ["A3", "C4", "E4", "F#4"]
  */
-export function chordToNotes(chordSymbol, octave = 3) {
+export function chordToNotes(chordSymbol, octave = 3, inversion = 0) {
   // Parse the chord symbol
   const { root, quality } = parseChordSymbol(chordSymbol)
   
@@ -136,12 +137,40 @@ export function chordToNotes(chordSymbol, octave = 3) {
   const baseMidi = rootMidi + (octave + 1) * 12 // +1 because MIDI octave -1 starts at 0
   
   // Generate notes with intervals
-  const notes = intervals.map(interval => {
-    const midi = baseMidi + interval
-    return midiToNoteName(midi)
-  })
+  let midiNotes = intervals.map(interval => baseMidi + interval)
+  
+  // Apply inversion
+  if (inversion > 0 && inversion < midiNotes.length) {
+    // Move the first N notes up an octave
+    for (let i = 0; i < inversion; i++) {
+      midiNotes[i] += 12
+    }
+    // Re-sort so bass note is first
+    midiNotes.sort((a, b) => a - b)
+  }
+  
+  // Convert to note names
+  const notes = midiNotes.map(midi => midiToNoteName(midi))
   
   return notes
 }
 
-export default { chordToNotes, parseChordSymbol }
+/**
+ * Get inversion label with bass note.
+ */
+export function getInversionLabel(chordSymbol, inversion) {
+  const notes = chordToNotes(chordSymbol, 3, inversion)
+  if (!notes.length) return ''
+  
+  const bassNote = notes[0].replace(/\d+$/, '') // Remove octave
+  
+  switch (inversion) {
+    case 0: return `Root position (${bassNote} in bass)`
+    case 1: return `1st inversion (${bassNote} in bass)`
+    case 2: return `2nd inversion (${bassNote} in bass)`
+    case 3: return `3rd inversion (${bassNote} in bass)`
+    default: return 'Root position'
+  }
+}
+
+export default { chordToNotes, parseChordSymbol, getInversionLabel }

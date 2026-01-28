@@ -4,7 +4,7 @@ API routes for chord management.
 from fastapi import APIRouter, HTTPException, status
 from typing import List
 from pydantic import BaseModel
-from app.models import Chord, ChordCreate
+from app.models import Chord, ChordCreate, ChordUpdate
 from app.db.connection import DatabaseConnection
 from config.settings import Settings
 
@@ -207,8 +207,8 @@ async def get_measure_chords(measure_id: int):
 
 
 @router.put("/{chord_id}", response_model=Chord)
-async def update_chord(chord_id: int, chord_update: ChordCreate):
-    """Update a chord."""
+async def update_chord(chord_id: int, chord_update: ChordUpdate):
+    """Update a chord's symbol, inversion, octave, or other properties."""
     
     db = DatabaseConnection(settings)
     
@@ -221,30 +221,56 @@ async def update_chord(chord_id: int, chord_update: ChordCreate):
             detail=f"Chord with id {chord_id} not found"
         )
     
+    # Build dynamic UPDATE query based on provided fields
+    update_fields = []
+    params = []
+    
+    if chord_update.chord_symbol is not None:
+        update_fields.append("chord_symbol = ?")
+        params.append(chord_update.chord_symbol)
+    
+    if chord_update.chord_symbol_override is not None:
+        update_fields.append("chord_symbol_override = ?")
+        params.append(chord_update.chord_symbol_override)
+    
+    if chord_update.inversion is not None:
+        update_fields.append("inversion = ?")
+        params.append(chord_update.inversion)
+    
+    if chord_update.playback_octave is not None:
+        update_fields.append("playback_octave = ?")
+        params.append(chord_update.playback_octave)
+    
+    if chord_update.is_manual_edit is not None:
+        update_fields.append("is_manual_edit = ?")
+        params.append(1 if chord_update.is_manual_edit else 0)
+    
+    if chord_update.confidence is not None:
+        update_fields.append("confidence = ?")
+        params.append(float(chord_update.confidence))
+    
+    if not update_fields:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No fields to update"
+        )
+    
     # Update chord
-    query = """
+    params.append(chord_id)
+    query = f"""
         UPDATE Chords
-        SET measure_id = ?, beat_position = ?, chord_symbol = ?, roman_numeral = ?,
-            key_center = ?, function_label = ?, comments = ?, chord_order = ?
+        SET {', '.join(update_fields)}
         WHERE id = ?
     """
     
-    db.execute_non_query(query, (
-        chord_update.measure_id,
-        float(chord_update.beat_position),
-        chord_update.chord_symbol,
-        chord_update.roman_numeral,
-        chord_update.key_center,
-        chord_update.function_label,
-        chord_update.comments,
-        chord_update.chord_order,
-        chord_id
-    ))
+    db.execute_non_query(query, tuple(params))
     
     # Return updated chord
     select_query = """
         SELECT id, measure_id, beat_position, chord_symbol, roman_numeral,
-               key_center, function_label, comments, chord_order
+               key_center, function_label, comments, chord_order,
+               chord_symbol_override, inversion, playback_octave, 
+               is_manual_edit, confidence
         FROM Chords
         WHERE id = ?
     """
@@ -260,7 +286,12 @@ async def update_chord(chord_id: int, chord_update: ChordCreate):
         key_center=row[5],
         function_label=row[6],
         comments=row[7],
-        chord_order=row[8]
+        chord_order=row[8],
+        chord_symbol_override=row[9],
+        inversion=row[10] or 0,
+        playback_octave=row[11] or 3,
+        is_manual_edit=bool(row[12]) if row[12] is not None else False,
+        confidence=row[13]
     )
 
 

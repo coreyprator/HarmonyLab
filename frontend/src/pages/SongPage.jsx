@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { api } from '../api/client'
 import PlaybackControls from '../components/playback/PlaybackControls'
+import ChordEditModal from '../components/chords/ChordEditModal'
 
 export default function SongPage() {
   const { id } = useParams()
@@ -11,7 +12,7 @@ export default function SongPage() {
   const [error, setError] = useState(null)
   const [showAnalysis, setShowAnalysis] = useState(false)
   const [editingChord, setEditingChord] = useState(null)
-  const [editValue, setEditValue] = useState('')
+  const [chordToEdit, setChordToEdit] = useState(null)
 
   useEffect(() => {
     loadSong()
@@ -231,6 +232,15 @@ export default function SongPage() {
           <p className="text-gray-500">No chord progression available.</p>
         )}
       </div>
+      
+      {/* Chord Edit Modal */}
+      {chordToEdit && (
+        <ChordEditModal
+          chord={chordToEdit}
+          onSave={(updates) => saveChordEdit(chordToEdit.id, updates)}
+          onCancel={cancelEdit}
+        />
+      )}
     </div>
   )
 }

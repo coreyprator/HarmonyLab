@@ -127,12 +127,32 @@ class ChordCreate(ChordBase):
     pass
 
 
+class ChordUpdate(BaseModel):
+    """Model for updating chord properties (manual editing)."""
+    chord_symbol: Optional[str] = Field(None, max_length=20)
+    chord_symbol_override: Optional[str] = Field(None, max_length=20)
+    inversion: Optional[int] = Field(None, ge=0, le=3)
+    playback_octave: Optional[int] = Field(None, ge=1, le=5)
+    is_manual_edit: Optional[bool] = None
+    confidence: Optional[Decimal] = Field(None, ge=0, le=1)
+
+
 class Chord(ChordBase):
     """Complete chord model with database ID."""
     id: int
+    chord_symbol_override: Optional[str] = None
+    inversion: int = 0
+    playback_octave: int = 3
+    is_manual_edit: bool = False
+    confidence: Optional[Decimal] = None
     
     class Config:
         from_attributes = True
+    
+    @property
+    def display_symbol(self) -> str:
+        """Get the symbol to display (override if present, else original)."""
+        return self.chord_symbol_override or self.chord_symbol
 
 
 # =============================================
