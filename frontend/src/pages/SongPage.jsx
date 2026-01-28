@@ -36,19 +36,21 @@ export default function SongPage() {
   }
 
   const startEditChord = (chord) => {
+    console.log('Editing chord:', chord)
     setChordToEdit(chord)
   }
 
   const saveChordEdit = async (chordId, updates) => {
     try {
+      console.log('Updating chord:', chordId, 'with updates:', updates)
       await api.updateChord(chordId, updates)
       // Refresh progression data
       const progressionData = await api.getSongProgression(id)
       setProgression(progressionData)
       setChordToEdit(null)
     } catch (err) {
-      alert('Failed to update chord')
-      console.error(err)
+      console.error('Failed to update chord:', err)
+      alert(`Failed to update chord: ${err.message}`)
     }
   }
 
