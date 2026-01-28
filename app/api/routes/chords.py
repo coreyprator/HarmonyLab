@@ -278,20 +278,20 @@ async def update_chord(chord_id: int, chord_update: ChordUpdate):
     row = result[0]
     
     return Chord(
-        id=row[0],
-        measure_id=row[1],
-        beat_position=row[2],
-        chord_symbol=row[3],
-        roman_numeral=row[4],
-        key_center=row[5],
-        function_label=row[6],
-        comments=row[7],
-        chord_order=row[8],
-        chord_symbol_override=row[9],
-        inversion=row[10] or 0,
-        playback_octave=row[11] or 3,
-        is_manual_edit=bool(row[12]) if row[12] is not None else False,
-        confidence=row[13]
+        id=row['id'],
+        measure_id=row['measure_id'],
+        beat_position=row['beat_position'],
+        chord_symbol=row['chord_symbol'],
+        roman_numeral=row['roman_numeral'],
+        key_center=row['key_center'],
+        function_label=row['function_label'],
+        comments=row['comments'],
+        chord_order=row['chord_order'],
+        chord_symbol_override=row['chord_symbol_override'],
+        inversion=row['inversion'] or 0,
+        playback_octave=row['playback_octave'] or 3,
+        is_manual_edit=bool(row['is_manual_edit']) if row['is_manual_edit'] is not None else False,
+        confidence=row['confidence']
     )
 
 

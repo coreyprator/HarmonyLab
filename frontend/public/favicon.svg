@@ -1,0 +1,19 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Piano keys background -->
+  <rect width="64" height="64" rx="12" fill="#1e40af"/>
+  
+  <!-- Music staff lines -->
+  <line x1="8" y1="20" x2="56" y2="20" stroke="white" stroke-width="1.5"/>
+  <line x1="8" y1="26" x2="56" y2="26" stroke="white" stroke-width="1.5"/>
+  <line x1="8" y1="32" x2="56" y2="32" stroke="white" stroke-width="1.5"/>
+  <line x1="8" y1="38" x2="56" y2="38" stroke="white" stroke-width="1.5"/>
+  <line x1="8" y1="44" x2="56" y2="44" stroke="white" stroke-width="1.5"/>
+  
+  <!-- Treble clef -->
+  <path d="M 25 28 Q 25 22 28 20 Q 31 18 33 22 Q 35 26 32 30 Q 29 34 25 32 Q 22 30 22 26 Q 22 22 25 20" 
+        stroke="white" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <circle cx="33" cy="38" r="2" fill="white"/>
+  
+  <!-- Chord symbol "H" -->
+  <text x="40" y="48" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="white">H</text>
+</svg>
