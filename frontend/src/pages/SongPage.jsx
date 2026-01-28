@@ -11,7 +11,6 @@ export default function SongPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [showAnalysis, setShowAnalysis] = useState(false)
-  const [editingChord, setEditingChord] = useState(null)
   const [chordToEdit, setChordToEdit] = useState(null)
 
   useEffect(() => {
@@ -36,19 +35,17 @@ export default function SongPage() {
     }
   }
 
-  const startEditChord = (chordId, currentSymbol) => {
-    setEditingChord(chordId)
-    setEditValue(currentSymbol)
+  const startEditChord = (chord) => {
+    setChordToEdit(chord)
   }
 
-  const saveChordEdit = async (chordId) => {
+  const saveChordEdit = async (chordId, updates) => {
     try {
-      await api.updateChord(chordId, { chord_symbol: editValue })
+      await api.updateChord(chordId, updates)
       // Refresh progression data
       const progressionData = await api.getSongProgression(id)
       setProgression(progressionData)
-      setEditingChord(null)
-      setEditValue('')
+      setChordToEdit(null)
     } catch (err) {
       alert('Failed to update chord')
       console.error(err)
@@ -56,8 +53,7 @@ export default function SongPage() {
   }
 
   const cancelEdit = () => {
-    setEditingChord(null)
-    setEditValue('')
+    setChordToEdit(null)
   }
 
   const midiNoteToName = (midiNote) => {
@@ -151,45 +147,20 @@ export default function SongPage() {
                           {measure.chords.length > 0 ? (
                             measure.chords.map((chord, idx) => (
                               <div key={idx} className="bg-gray-50 p-3 rounded">
-                                {editingChord === chord.id ? (
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <input
-                                      type="text"
-                                      value={editValue}
-                                      onChange={(e) => setEditValue(e.target.value)}
-                                      className="px-2 py-1 border border-gray-300 rounded text-lg font-bold"
-                                      placeholder="e.g., Dm7/G"
-                                      autoFocus
-                                    />
-                                    <button
-                                      onClick={() => saveChordEdit(chord.id)}
-                                      className="px-2 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700"
-                                    >
-                                      ✓ Save
-                                    </button>
-                                    <button
-                                      onClick={cancelEdit}
-                                      className="px-2 py-1 bg-gray-300 rounded text-sm hover:bg-gray-400"
-                                    >
-                                      ✕ Cancel
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <div className="flex items-center gap-3 mb-2">
-                                    <span className="text-xl font-bold text-primary">
-                                      {chord.chord_symbol}
-                                    </span>
-                                    <span className="text-sm text-gray-500">
-                                      Beat {chord.beat_position || 1}
-                                    </span>
-                                    <button
-                                      onClick={() => startEditChord(chord.id, chord.chord_symbol)}
-                                      className="text-blue-600 hover:text-blue-800 text-sm"
-                                    >
-                                      ✏️ Edit
-                                    </button>
-                                  </div>
-                                )}
+                                <div className="flex items-center gap-3 mb-2">
+                                  <span className="text-xl font-bold text-primary">
+                                    {chord.chord_symbol}
+                                  </span>
+                                  <span className="text-sm text-gray-500">
+                                    Beat {chord.beat_position || 1}
+                                  </span>
+                                  <button
+                                    onClick={() => startEditChord(chord)}
+                                    className="text-blue-600 hover:text-blue-800 text-sm"
+                                  >
+                                    ✏️ Edit
+                                  </button>
+                                </div>
                                 <div className="text-sm text-gray-600">
                                   <strong>Analysis:</strong>
                                   <div className="mt-1 space-y-1 ml-3">
