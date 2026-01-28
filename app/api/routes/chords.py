@@ -21,7 +21,7 @@ class BulkChordCreate(BaseModel):
 async def create_chord(chord: ChordCreate):
     """Create a new chord in a measure."""
     
-    db = DatabaseConnection(settings)
+    db = DatabaseConnection()
     
     # Check if measure exists
     check_query = "SELECT COUNT(*) FROM Measures WHERE id = ?"
@@ -77,7 +77,7 @@ async def create_chord(chord: ChordCreate):
 async def create_chords_bulk(bulk_data: BulkChordCreate):
     """Create multiple chords at once (for imports)."""
     
-    db = DatabaseConnection(settings)
+    db = DatabaseConnection()
     created_chords = []
     
     for chord in bulk_data.chords:
@@ -166,7 +166,7 @@ async def get_chord(chord_id: int):
 async def get_measure_chords(measure_id: int):
     """List all chords in a measure."""
     
-    db = DatabaseConnection(settings)
+    db = DatabaseConnection()
     
     # Check if measure exists
     check_query = "SELECT COUNT(*) FROM Measures WHERE id = ?"
@@ -210,7 +210,7 @@ async def get_measure_chords(measure_id: int):
 async def update_chord(chord_id: int, chord_update: ChordUpdate):
     """Update a chord's symbol, inversion, octave, or other properties."""
     
-    db = DatabaseConnection(settings)
+    db = DatabaseConnection()
     
     # Check if chord exists
     check_query = "SELECT COUNT(*) FROM Chords WHERE id = ?"
@@ -299,7 +299,7 @@ async def update_chord(chord_id: int, chord_update: ChordUpdate):
 async def delete_chord(chord_id: int):
     """Delete a chord."""
     
-    db = DatabaseConnection(settings)
+    db = DatabaseConnection()
     
     # Check if chord exists
     check_query = "SELECT COUNT(*) FROM Chords WHERE id = ?"
