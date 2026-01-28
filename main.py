@@ -14,7 +14,7 @@ from app.api.routes import songs, sections, vocabulary, measures, chords, progre
 app = FastAPI(
     title="Harmony Lab API",
     description="Harmonic progression training system for musicians",
-    version="1.1.0",
+    version="1.2.0",
     debug=settings.debug,
 )
 
@@ -55,8 +55,8 @@ async def health_check():
         "status": "healthy" if db_ok else "degraded",
         "database": "connected" if db_ok else "disconnected",
         "service": "harmonylab",
-        "version": "1.1.0",
-        "build": "2026-01-28-chord-editing"
+        "version": "1.2.0",
+        "build": "2026-01-28-chord-override-fix"
     }
 
 

@@ -151,7 +151,7 @@ export default function SongPage() {
                               <div key={idx} className="bg-gray-50 p-3 rounded">
                                 <div className="flex items-center gap-3 mb-2">
                                   <span className="text-xl font-bold text-primary">
-                                    {chord.chord_symbol}
+                                    {chord.chord_symbol_override || chord.chord_symbol}
                                   </span>
                                   <span className="text-sm text-gray-500">
                                     Beat {chord.beat_position || 1}
@@ -189,7 +189,7 @@ export default function SongPage() {
                       {measure.chords.length > 0 ? (
                         measure.chords.map((chord, idx) => (
                           <span key={idx} className="block">
-                            {chord.chord_symbol}
+                            {chord.chord_symbol_override || chord.chord_symbol}
                           </span>
                         ))
                       ) : (
