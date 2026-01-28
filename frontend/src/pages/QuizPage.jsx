@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { api } from '../api/client'
 import * as Tone from 'tone'
+import { chordToNotes } from '../utils/chordVoicings'
 
 export default function QuizPage() {
   const { id: songId } = useParams()
@@ -148,28 +149,8 @@ export default function QuizPage() {
   const playChord = async (chordSymbol) => {
     if (!sampler) return
     await Tone.start()
-    const notes = parseChordSymbol(chordSymbol)
+    const notes = chordToNotes(chordSymbol, 4)
     sampler.triggerAttackRelease(notes, '2n')
-  }
-
-  const parseChordSymbol = (symbol) => {
-    const rootMap = {
-      'C': 'C4', 'Db': 'Db4', 'D': 'D4', 'Eb': 'Eb4', 'E': 'E4', 'F': 'F4',
-      'Gb': 'Gb4', 'G': 'G4', 'Ab': 'Ab4', 'A': 'A4', 'Bb': 'Bb4', 'B': 'B4'
-    }
-
-    let root = symbol.match(/^[A-G][b#]?/)?.[0] || 'C'
-    const rootNote = rootMap[root] || 'C4'
-
-    if (symbol.includes('m') && !symbol.includes('maj')) {
-      return [rootNote, Tone.Frequency(rootNote).transpose(3).toNote(), Tone.Frequency(rootNote).transpose(7).toNote()]
-    } else if (symbol.includes('dim')) {
-      return [rootNote, Tone.Frequency(rootNote).transpose(3).toNote(), Tone.Frequency(rootNote).transpose(6).toNote()]
-    } else if (symbol.includes('aug')) {
-      return [rootNote, Tone.Frequency(rootNote).transpose(4).toNote(), Tone.Frequency(rootNote).transpose(8).toNote()]
-    } else {
-      return [rootNote, Tone.Frequency(rootNote).transpose(4).toNote(), Tone.Frequency(rootNote).transpose(7).toNote()]
-    }
   }
 
   const submitAnswer = (answer) => {

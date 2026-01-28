@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import * as Tone from 'tone'
+import { chordToNotes } from '../../utils/chordVoicings'
 
 const INSTRUMENTS = {
   piano: {
@@ -91,7 +92,7 @@ export default function PlaybackControls({ progression }) {
       for (let repeat = 0; repeat < (section.repeat_count || 1); repeat++) {
         section.measures.forEach(measure => {
           measure.chords.forEach(chord => {
-            const chordNotes = parseChordSymbol(chord.chord_symbol)
+            const chordNotes = chordToNotes(chord.chord_symbol, 3)
             Tone.Transport.schedule((scheduleTime) => {
               instrumentRef.current.triggerAttackRelease(chordNotes, '2n', scheduleTime)
               setCurrentChord(chord.chord_symbol)
@@ -118,34 +119,6 @@ export default function PlaybackControls({ progression }) {
     Tone.Transport.cancel()
     setIsPlaying(false)
     setCurrentChord(null)
-  }
-
-  // Simple chord symbol parser (converts chord symbols to MIDI notes)
-  const parseChordSymbol = (symbol) => {
-    // Remove extensions for now, just get root and quality
-    const rootMap = {
-      'C': 'C4', 'Db': 'Db4', 'D': 'D4', 'Eb': 'Eb4', 'E': 'E4', 'F': 'F4',
-      'Gb': 'Gb4', 'G': 'G4', 'Ab': 'Ab4', 'A': 'A4', 'Bb': 'Bb4', 'B': 'B4'
-    }
-
-    // Parse root note
-    let root = symbol.match(/^[A-G][b#]?/)?.[0] || 'C'
-    const rootNote = rootMap[root] || 'C4'
-
-    // Determine chord quality and build intervals
-    if (symbol.includes('m') && !symbol.includes('maj')) {
-      // Minor chord: root, minor 3rd, perfect 5th
-      return [rootNote, Tone.Frequency(rootNote).transpose(3).toNote(), Tone.Frequency(rootNote).transpose(7).toNote()]
-    } else if (symbol.includes('dim')) {
-      // Diminished: root, minor 3rd, diminished 5th
-      return [rootNote, Tone.Frequency(rootNote).transpose(3).toNote(), Tone.Frequency(rootNote).transpose(6).toNote()]
-    } else if (symbol.includes('aug')) {
-      // Augmented: root, major 3rd, augmented 5th
-      return [rootNote, Tone.Frequency(rootNote).transpose(4).toNote(), Tone.Frequency(rootNote).transpose(8).toNote()]
-    } else {
-      // Major chord: root, major 3rd, perfect 5th
-      return [rootNote, Tone.Frequency(rootNote).transpose(4).toNote(), Tone.Frequency(rootNote).transpose(7).toNote()]
-    }
   }
 
   return (

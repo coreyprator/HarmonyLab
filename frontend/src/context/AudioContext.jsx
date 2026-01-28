@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import * as Tone from 'tone'
+import { chordToNotes } from '../utils/chordVoicings'
 
 const AudioContext = createContext()
 
@@ -59,7 +60,7 @@ export function AudioProvider({ children }) {
     if (!piano || !isLoaded) return
 
     await Tone.start()
-    const notes = parseChordToNotes(chordSymbol)
+    const notes = chordToNotes(chordSymbol, 3)
     piano.triggerAttackRelease(notes, "2n")
   }
 
@@ -71,7 +72,7 @@ export function AudioProvider({ children }) {
 
     chords.forEach((chord, index) => {
       Tone.Transport.schedule((time) => {
-        const notes = parseChordToNotes(chord.symbol)
+        const notes = chordToNotes(chord.symbol, 3)
         piano.triggerAttackRelease(notes, "2n", time)
         if (onChordChange) {
           onChordChange(index)
@@ -100,32 +101,4 @@ export function useAudio() {
     throw new Error('useAudio must be used within AudioProvider')
   }
   return context
-}
-
-// Helper function to parse chord symbols to notes
-function parseChordToNotes(chordSymbol) {
-  // Simplified chord parsing - expand this based on your chord vocabulary
-  const rootMatch = chordSymbol.match(/^([A-G][b#]?)/)
-  if (!rootMatch) return ['C4', 'E4', 'G4'] // Default to C major
-  
-  const root = rootMatch[1]
-  const quality = chordSymbol.slice(root.length)
-  
-  // Map root notes to MIDI numbers (C4 = middle C = 60)
-  const noteMap = {
-    'C': 0, 'C#': 1, 'Db': 1, 'D': 2, 'D#': 3, 'Eb': 3,
-    'E': 4, 'F': 5, 'F#': 6, 'Gb': 6, 'G': 7, 'G#': 8,
-    'Ab': 8, 'A': 9, 'A#': 10, 'Bb': 10, 'B': 11
-  }
-  
-  const rootMidi = 60 + (noteMap[root] || 0) // Middle C + offset
-  
-  // Basic chord voicings
-  let intervals = [0, 4, 7] // Major triad
-  if (quality.includes('m7')) intervals = [0, 3, 7, 10]
-  else if (quality.includes('7')) intervals = [0, 4, 7, 10]
-  else if (quality.includes('Maj7')) intervals = [0, 4, 7, 11]
-  else if (quality.includes('m')) intervals = [0, 3, 7]
-  
-  return intervals.map(i => Tone.Frequency(rootMidi + i, 'midi').toNote())
 }
