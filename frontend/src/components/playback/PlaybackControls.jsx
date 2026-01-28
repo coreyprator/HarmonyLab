@@ -92,10 +92,15 @@ export default function PlaybackControls({ progression }) {
       for (let repeat = 0; repeat < (section.repeat_count || 1); repeat++) {
         section.measures.forEach(measure => {
           measure.chords.forEach(chord => {
-            const chordNotes = chordToNotes(chord.chord_symbol, 3)
+            // Use override symbol if present, otherwise use detected symbol
+            const chordSymbol = chord.chord_symbol_override || chord.chord_symbol
+            const inversion = chord.inversion || 0
+            const octave = chord.playback_octave || 3
+            
+            const chordNotes = chordToNotes(chordSymbol, octave, inversion)
             Tone.Transport.schedule((scheduleTime) => {
               instrumentRef.current.triggerAttackRelease(chordNotes, '2n', scheduleTime)
-              setCurrentChord(chord.chord_symbol)
+              setCurrentChord(chordSymbol)
             }, time)
             time += beatDuration * 4 // 4 beats per measure (simplified)
           })

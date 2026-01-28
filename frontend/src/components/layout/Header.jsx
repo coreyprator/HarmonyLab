@@ -10,7 +10,7 @@ export default function Header() {
       <div className="container mx-auto px-4 py-4">
         <nav className="flex items-center justify-between">
           <Link to="/" className="text-2xl font-bold flex items-center gap-2">
-            🎹 HarmonyLab <span className="text-sm font-normal text-gray-300">v1.2.0</span>
+            🎹 HarmonyLab <span className="text-sm font-normal text-gray-300">v1.2.2</span>
           </Link>
           
           <div className="flex gap-6">
