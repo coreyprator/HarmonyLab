@@ -205,6 +205,10 @@ async def get_stats(user_id: int):
     """
     songs_count = db.execute_scalar(songs_query, (user_id,))
 
+    # Total songs in library
+    total_songs_query = "SELECT COUNT(*) FROM Songs"
+    total_songs = db.execute_scalar(total_songs_query)
+
     # Average accuracy
     accuracy_query = """
         SELECT AVG(CAST(accuracy_rate AS FLOAT))
@@ -213,29 +217,98 @@ async def get_stats(user_id: int):
     """
     avg_accuracy = db.execute_scalar(accuracy_query, (user_id,))
 
-    # Total practice sessions
+    # Total quiz sessions (from QuizAttempts)
     sessions_query = """
-        SELECT SUM(times_practiced)
-        FROM UserSongProgress
-        WHERE user_id = ?
+        SELECT COUNT(*)
+        FROM QuizAttempts
+        WHERE user_id = ? AND completed_at IS NOT NULL
     """
-    total_sessions = db.execute_scalar(sessions_query, (user_id,))
+    quiz_sessions = db.execute_scalar(sessions_query, (user_id,))
 
-    # Mastery distribution
-    mastery_query = """
-        SELECT mastery_level, COUNT(*) AS cnt
-        FROM UserSongProgress
-        WHERE user_id = ?
-        GROUP BY mastery_level
-        ORDER BY mastery_level
+    # Calculate streak (simplified - days with activity in last 30 days)
+    streak_query = """
+        SELECT COUNT(DISTINCT CAST(completed_at AS DATE))
+        FROM QuizAttempts
+        WHERE user_id = ? AND completed_at IS NOT NULL
+        AND completed_at >= DATEADD(day, -30, GETDATE())
     """
-    mastery_result = db.execute_query(mastery_query, (user_id,))
-    mastery_dist = {row['mastery_level']: row['cnt'] for row in mastery_result} if mastery_result else {}
+    streak_days = db.execute_scalar(streak_query, (user_id,))
 
+    # Return in format expected by frontend
     return {
-        "user_id": user_id,
-        "total_songs_practiced": songs_count or 0,
-        "average_accuracy": round(float(avg_accuracy), 2) if avg_accuracy else 0.0,
-        "total_practice_sessions": total_sessions or 0,
-        "mastery_distribution": mastery_dist
+        "songs_practiced": songs_count or 0,
+        "total_songs": total_songs or 0,
+        "overall_accuracy": round(float(avg_accuracy), 1) if avg_accuracy else 0.0,
+        "quiz_sessions": quiz_sessions or 0,
+        "current_streak": streak_days or 0
     }
+
+
+@router.get("/history", response_model=list)
+async def get_history(user_id: int, limit: int = 10):
+    """Get recent quiz activity for a user."""
+
+    db = DatabaseConnection(settings)
+
+    query = """
+        SELECT TOP (?)
+            qa.id, qa.song_id, s.title as song_title, qa.quiz_type,
+            qa.completed_at as date, qa.correct_answers, qa.total_questions
+        FROM QuizAttempts qa
+        INNER JOIN Songs s ON qa.song_id = s.id
+        WHERE qa.user_id = ? AND qa.completed_at IS NOT NULL
+        ORDER BY qa.completed_at DESC
+    """
+
+    result = db.execute_query(query, (limit, user_id))
+
+    if not result:
+        return []
+
+    history = []
+    for row in result:
+        score = round((row['correct_answers'] / row['total_questions'] * 100), 0) if row['total_questions'] else 0
+        history.append({
+            "id": row['id'],
+            "song_id": row['song_id'],
+            "song_title": row['song_title'],
+            "quiz_type": row['quiz_type'],
+            "date": row['date'].isoformat() if row['date'] else None,
+            "score": int(score)
+        })
+
+    return history
+
+
+@router.get("/songs", response_model=list)
+async def get_song_progress_list(user_id: int):
+    """Get progress for all songs a user has practiced."""
+
+    db = DatabaseConnection(settings)
+
+    query = """
+        SELECT p.song_id, s.title, p.last_practiced, p.times_practiced,
+               p.accuracy_rate as accuracy, p.mastery_level
+        FROM UserSongProgress p
+        INNER JOIN Songs s ON p.song_id = s.id
+        WHERE p.user_id = ? AND p.times_practiced > 0
+        ORDER BY p.last_practiced DESC
+    """
+
+    result = db.execute_query(query, (user_id,))
+
+    if not result:
+        return []
+
+    songs = []
+    for row in result:
+        songs.append({
+            "song_id": row['song_id'],
+            "title": row['title'],
+            "last_practiced": row['last_practiced'].isoformat() if row['last_practiced'] else None,
+            "times_practiced": row['times_practiced'],
+            "accuracy": float(row['accuracy']) if row['accuracy'] else 0.0,
+            "mastery_level": row['mastery_level'] or 0
+        })
+
+    return songs
