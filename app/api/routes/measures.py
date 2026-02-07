@@ -14,9 +14,9 @@ settings = Settings()
 @router.post("/", response_model=Measure, status_code=status.HTTP_201_CREATED)
 async def create_measure(measure: MeasureCreate):
     """Create a new measure in a section."""
-    
+
     db = DatabaseConnection(settings)
-    
+
     # Check if section exists
     check_query = "SELECT COUNT(*) FROM Sections WHERE id = ?"
     count = db.execute_scalar(check_query, (measure.section_id,))
@@ -25,37 +25,37 @@ async def create_measure(measure: MeasureCreate):
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Section with id {measure.section_id} not found"
         )
-    
+
     # Insert measure
     query = """
         INSERT INTO Measures (section_id, measure_number)
         OUTPUT INSERTED.id, INSERTED.section_id, INSERTED.measure_number, INSERTED.created_at
         VALUES (?, ?)
     """
-    
+
     result = db.execute_query(query, (measure.section_id, measure.measure_number))
-    
+
     if not result:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create measure"
         )
-    
+
     row = result[0]
     return Measure(
-        id=row[0],
-        section_id=row[1],
-        measure_number=row[2],
-        created_at=row[3]
+        id=row['id'],
+        section_id=row['section_id'],
+        measure_number=row['measure_number'],
+        created_at=row['created_at']
     )
 
 
 @router.get("/{measure_id}", response_model=MeasureWithChords)
 async def get_measure(measure_id: int):
     """Get a single measure with its chords."""
-    
+
     db = DatabaseConnection(settings)
-    
+
     # Get measure
     measure_query = """
         SELECT id, section_id, measure_number, created_at
@@ -63,21 +63,21 @@ async def get_measure(measure_id: int):
         WHERE id = ?
     """
     measure_result = db.execute_query(measure_query, (measure_id,))
-    
+
     if not measure_result:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Measure with id {measure_id} not found"
         )
-    
+
     row = measure_result[0]
     measure = Measure(
-        id=row[0],
-        section_id=row[1],
-        measure_number=row[2],
-        created_at=row[3]
+        id=row['id'],
+        section_id=row['section_id'],
+        measure_number=row['measure_number'],
+        created_at=row['created_at']
     )
-    
+
     # Get chords for this measure
     chords_query = """
         SELECT id, measure_id, beat_position, chord_symbol, roman_numeral,
@@ -87,22 +87,22 @@ async def get_measure(measure_id: int):
         ORDER BY chord_order
     """
     chords_result = db.execute_query(chords_query, (measure_id,))
-    
+
     chords = []
     if chords_result:
         for chord_row in chords_result:
             chords.append(Chord(
-                id=chord_row[0],
-                measure_id=chord_row[1],
-                beat_position=chord_row[2],
-                chord_symbol=chord_row[3],
-                roman_numeral=chord_row[4],
-                key_center=chord_row[5],
-                function_label=chord_row[6],
-                comments=chord_row[7],
-                chord_order=chord_row[8]
+                id=chord_row['id'],
+                measure_id=chord_row['measure_id'],
+                beat_position=chord_row['beat_position'],
+                chord_symbol=chord_row['chord_symbol'],
+                roman_numeral=chord_row['roman_numeral'],
+                key_center=chord_row['key_center'],
+                function_label=chord_row['function_label'],
+                comments=chord_row['comments'],
+                chord_order=chord_row['chord_order']
             ))
-    
+
     return MeasureWithChords(
         id=measure.id,
         section_id=measure.section_id,
@@ -115,9 +115,9 @@ async def get_measure(measure_id: int):
 @router.get("/section/{section_id}", response_model=List[MeasureWithChords])
 async def get_section_measures(section_id: int):
     """List all measures in a section with their chords."""
-    
+
     db = DatabaseConnection(settings)
-    
+
     # Check if section exists
     check_query = "SELECT COUNT(*) FROM Sections WHERE id = ?"
     count = db.execute_scalar(check_query, (section_id,))
@@ -126,7 +126,7 @@ async def get_section_measures(section_id: int):
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Section with id {section_id} not found"
         )
-    
+
     # Get all measures for the section
     measures_query = """
         SELECT id, section_id, measure_number, created_at
@@ -135,14 +135,14 @@ async def get_section_measures(section_id: int):
         ORDER BY measure_number
     """
     measures_result = db.execute_query(measures_query, (section_id,))
-    
+
     if not measures_result:
         return []
-    
+
     measures = []
     for row in measures_result:
-        measure_id = row[0]
-        
+        measure_id = row['id']
+
         # Get chords for this measure
         chords_query = """
             SELECT id, measure_id, beat_position, chord_symbol, roman_numeral,
@@ -152,39 +152,39 @@ async def get_section_measures(section_id: int):
             ORDER BY chord_order
         """
         chords_result = db.execute_query(chords_query, (measure_id,))
-        
+
         chords = []
         if chords_result:
             for chord_row in chords_result:
                 chords.append(Chord(
-                    id=chord_row[0],
-                    measure_id=chord_row[1],
-                    beat_position=chord_row[2],
-                    chord_symbol=chord_row[3],
-                    roman_numeral=chord_row[4],
-                    key_center=chord_row[5],
-                    function_label=chord_row[6],
-                    comments=chord_row[7],
-                    chord_order=chord_row[8]
+                    id=chord_row['id'],
+                    measure_id=chord_row['measure_id'],
+                    beat_position=chord_row['beat_position'],
+                    chord_symbol=chord_row['chord_symbol'],
+                    roman_numeral=chord_row['roman_numeral'],
+                    key_center=chord_row['key_center'],
+                    function_label=chord_row['function_label'],
+                    comments=chord_row['comments'],
+                    chord_order=chord_row['chord_order']
                 ))
-        
+
         measures.append(MeasureWithChords(
-            id=row[0],
-            section_id=row[1],
-            measure_number=row[2],
-            created_at=row[3],
+            id=row['id'],
+            section_id=row['section_id'],
+            measure_number=row['measure_number'],
+            created_at=row['created_at'],
             chords=chords
         ))
-    
+
     return measures
 
 
 @router.put("/{measure_id}", response_model=Measure)
 async def update_measure(measure_id: int, measure_update: MeasureCreate):
     """Update a measure's data."""
-    
+
     db = DatabaseConnection(settings)
-    
+
     # Check if measure exists
     check_query = "SELECT COUNT(*) FROM Measures WHERE id = ?"
     count = db.execute_scalar(check_query, (measure_id,))
@@ -193,16 +193,16 @@ async def update_measure(measure_id: int, measure_update: MeasureCreate):
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Measure with id {measure_id} not found"
         )
-    
+
     # Update measure
     query = """
         UPDATE Measures
         SET section_id = ?, measure_number = ?
         WHERE id = ?
     """
-    
+
     db.execute_non_query(query, (measure_update.section_id, measure_update.measure_number, measure_id))
-    
+
     # Return updated measure
     select_query = """
         SELECT id, section_id, measure_number, created_at
@@ -211,21 +211,21 @@ async def update_measure(measure_id: int, measure_update: MeasureCreate):
     """
     result = db.execute_query(select_query, (measure_id,))
     row = result[0]
-    
+
     return Measure(
-        id=row[0],
-        section_id=row[1],
-        measure_number=row[2],
-        created_at=row[3]
+        id=row['id'],
+        section_id=row['section_id'],
+        measure_number=row['measure_number'],
+        created_at=row['created_at']
     )
 
 
 @router.delete("/{measure_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_measure(measure_id: int):
     """Delete a measure (cascades to chords)."""
-    
+
     db = DatabaseConnection(settings)
-    
+
     # Check if measure exists
     check_query = "SELECT COUNT(*) FROM Measures WHERE id = ?"
     count = db.execute_scalar(check_query, (measure_id,))
@@ -234,7 +234,7 @@ async def delete_measure(measure_id: int):
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Measure with id {measure_id} not found"
         )
-    
+
     # Delete measure (chords will cascade)
     query = "DELETE FROM Measures WHERE id = ?"
     db.execute_non_query(query, (measure_id,))

@@ -9,7 +9,7 @@ from app.models import Song, SongCreate, SongUpdate
 from app.db.connection import DatabaseConnection, get_db
 
 
-router = APIRouter()
+router = APIRouter(prefix="/api/v1/songs", tags=["songs"])
 
 
 @router.get("/", response_model=List[Song])

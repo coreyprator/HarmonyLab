@@ -21,10 +21,16 @@ def get_secret(secret_id: str, project_id: str = "super-flashcards-475210") -> s
     Falls back to environment variable if Secret Manager unavailable.
     """
     # Environment variable takes precedence (for Cloud Run injection)
+    # Check full name first (HARMONYLAB_DB_SERVER), then short name (DB_SERVER)
     env_key = secret_id.upper().replace("-", "_")
     env_value = os.getenv(env_key)
     if env_value:
-        return env_value
+        return env_value.strip()
+    # Check short env var name (strip prefix)
+    short_key = env_key.split("_", 1)[-1] if "_" in env_key else env_key
+    env_value = os.getenv(short_key)
+    if env_value:
+        return env_value.strip()
     
     # Try Secret Manager
     if HAS_SECRET_MANAGER:
@@ -32,7 +38,7 @@ def get_secret(secret_id: str, project_id: str = "super-flashcards-475210") -> s
             client = secretmanager.SecretManagerServiceClient()
             name = f"projects/{project_id}/secrets/{secret_id}/versions/latest"
             response = client.access_secret_version(request={"name": name})
-            return response.payload.data.decode("UTF-8")
+            return response.payload.data.decode("UTF-8").strip()
         except Exception as e:
             print(f"Warning: Could not fetch secret {secret_id}: {e}")
     
@@ -74,14 +80,28 @@ class Settings:
     @property
     def debug(self) -> bool:
         return os.getenv("DEBUG", "false").lower() == "true"
-    
+
+    @property
+    def environment(self) -> str:
+        if os.getenv("K_SERVICE"):
+            return "production"
+        return os.getenv("ENVIRONMENT", "development")
+
     @property
     def host(self) -> str:
         return os.getenv("HOST", "0.0.0.0")
-    
+
+    @property
+    def api_host(self) -> str:
+        return self.host
+
     @property
     def port(self) -> int:
         return int(os.getenv("PORT", "8080"))
+
+    @property
+    def api_port(self) -> int:
+        return self.port
 
 
 @lru_cache()
