@@ -212,10 +212,13 @@ async def google_callback(request: Request, response: Response):
         refresh_token = create_refresh_token(token_data)
 
         # Redirect to frontend with token
-        if os.getenv("K_SERVICE"):
-            frontend_url = "https://harmonylab-frontend-wmrla7fhwa-uc.a.run.app"
-        else:
-            frontend_url = "http://localhost:8080"
+        # Use FRONTEND_URL env var if set, otherwise default to Cloud Run URL
+        frontend_url = os.getenv("FRONTEND_URL")
+        if not frontend_url:
+            if os.getenv("K_SERVICE"):
+                frontend_url = "https://harmonylab.rentyourcio.com"
+            else:
+                frontend_url = "http://localhost:8080"
 
         redirect_url = f"{frontend_url}/index.html?auth=success&token={access_token}"
 
