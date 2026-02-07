@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz - HarmonyLab</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body style="display: none;">
+    <!-- Navigation Bar -->
+    <nav class="main-nav">
+        <a href="index.html" class="nav-brand">HarmonyLab</a>
+        <div class="nav-links">
+            <a href="index.html" class="nav-link">Songs</a>
+            <a href="quiz.html" class="nav-link active">Quiz</a>
+            <a href="progress.html" class="nav-link">Progress</a>
+        </div>
+        <div id="auth-container" class="nav-auth">
+            <a href="/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
+        </div>
+        <div class="nav-version">v1.4.2</div>
+    </nav>
+
+    <header>
+        <div class="header-content">
+            <h1>Chord Quiz</h1>
+        </div>
+        <p class="subtitle">Test your knowledge of jazz chord progressions</p>
+    </header>
+
+    <main>
+        <!-- Quiz Setup (shown before quiz starts) -->
+        <div id="quiz-setup" class="quiz-setup">
+            <div class="setup-card">
+                <h2>Start a Quiz</h2>
+
+                <div class="form-group">
+                    <label for="song-select">Choose a Song</label>
+                    <select id="song-select" class="filter-select">
+                        <option value="">Loading songs...</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="mode-select">Quiz Mode</label>
+                    <select id="mode-select" class="filter-select">
+                        <option value="sequential">Sequential (What comes next?)</option>
+                        <option value="fill_blank">Fill in the Blank</option>
+                        <option value="roman_numeral">Roman Numeral (Identify function)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="num-questions">Number of Questions</label>
+                    <select id="num-questions" class="filter-select">
+                        <option value="5">5 questions</option>
+                        <option value="10" selected>10 questions</option>
+                        <option value="15">15 questions</option>
+                        <option value="20">20 questions</option>
+                    </select>
+                </div>
+
+                <button id="start-quiz-btn" class="btn btn-primary btn-large" disabled>
+                    Start Quiz
+                </button>
+            </div>
+        </div>
+
+        <!-- Quiz Container (shown during quiz) -->
+        <div id="quiz-container" class="quiz-container" style="display: none;">
+            <div class="quiz-header">
+                <div class="quiz-song-info">
+                    <span id="quiz-song-title"></span>
+                    <span id="quiz-mode-label" class="quiz-mode-badge"></span>
+                </div>
+                <button id="end-quiz-btn" class="btn btn-sm">End Quiz</button>
+            </div>
+
+            <div class="quiz-progress">
+                <div class="quiz-progress-text">
+                    Question <span id="current-question">1</span> of <span id="total-questions">10</span>
+                </div>
+                <div class="quiz-progress-bar">
+                    <div id="progress-fill" class="quiz-progress-fill" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <div id="quiz-question" class="quiz-question">
+                <div class="quiz-prompt">What chord comes next?</div>
+                <div id="quiz-context" class="quiz-context">
+                    <!-- Context chords will be inserted here -->
+                </div>
+                <div class="quiz-blank">?</div>
+            </div>
+
+            <div id="quiz-options" class="quiz-options">
+                <!-- Options will be inserted here -->
+            </div>
+
+            <div id="quiz-feedback" class="quiz-feedback" style="display: none;">
+                <div id="feedback-message" class="feedback-message"></div>
+            </div>
+        </div>
+
+        <!-- Quiz Results (shown after quiz ends) -->
+        <div id="quiz-results" class="quiz-results" style="display: none;">
+            <div class="results-card">
+                <h2>Quiz Complete!</h2>
+
+                <div class="results-score">
+                    <div class="score-circle">
+                        <span id="score-value">0</span>
+                        <span class="score-total">/ <span id="score-max">10</span></span>
+                    </div>
+                    <div id="score-percentage" class="score-percentage">0%</div>
+                </div>
+
+                <div id="score-message" class="score-message"></div>
+
+                <div class="results-details">
+                    <div class="detail-item">
+                        <span class="detail-label">Correct</span>
+                        <span id="correct-count" class="detail-value correct">0</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">Wrong</span>
+                        <span id="wrong-count" class="detail-value wrong">0</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">Avg Time</span>
+                        <span id="avg-time" class="detail-value">0s</span>
+                    </div>
+                </div>
+
+                <div class="results-actions">
+                    <button id="retry-btn" class="btn btn-primary">Try Again</button>
+                    <button id="new-quiz-btn" class="btn">New Quiz</button>
+                    <a href="progress.html" class="btn">View Progress</a>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const API_BASE = window.location.hostname.includes('localhost')
+            ? 'http://localhost:8080'
+            : 'https://harmonylab-wmrla7fhwa-uc.a.run.app';
+
+        let songs = [];
+        let currentQuiz = null;
+        let currentQuestionIndex = 0;
+        let answers = [];
+        let questionStartTime = null;
+
+        // ==========================================
+        // INITIALIZATION
+        // ==========================================
+
+        async function init() {
+            await loadSongs();
+            setupEventListeners();
+        }
+
+        async function loadSongs() {
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/songs/?limit=100`);
+                songs = await res.json();
+
+                const select = document.getElementById('song-select');
+                select.innerHTML = '<option value="">-- Select a song --</option>';
+
+                songs.forEach(song => {
+                    const opt = document.createElement('option');
+                    opt.value = song.id;
+                    opt.textContent = `${song.title}${song.composer ? ` - ${song.composer}` : ''}`;
+                    select.appendChild(opt);
+                });
+
+                document.getElementById('start-quiz-btn').disabled = false;
+            } catch (err) {
+                console.error('Failed to load songs:', err);
+                document.getElementById('song-select').innerHTML =
+                    '<option value="">Failed to load songs</option>';
+            }
+        }
+
+        function setupEventListeners() {
+            document.getElementById('song-select').addEventListener('change', updateStartButton);
+            document.getElementById('start-quiz-btn').addEventListener('click', startQuiz);
+            document.getElementById('end-quiz-btn').addEventListener('click', endQuiz);
+            document.getElementById('retry-btn').addEventListener('click', retryQuiz);
+            document.getElementById('new-quiz-btn').addEventListener('click', showSetup);
+        }
+
+        function updateStartButton() {
+            const songId = document.getElementById('song-select').value;
+            document.getElementById('start-quiz-btn').disabled = !songId;
+        }
+
+        // ==========================================
+        // QUIZ FLOW
+        // ==========================================
+
+        async function startQuiz() {
+            // Require authentication
+            if (!window.auth || !window.auth.isAuthenticated()) {
+                alert('Please sign in to take quizzes');
+                window.location.href = '/api/v1/auth/google/login';
+                return;
+            }
+
+            const userId = window.auth.getUserId();
+            const songId = document.getElementById('song-select').value;
+            const mode = document.getElementById('mode-select').value;
+            const numQuestions = parseInt(document.getElementById('num-questions').value);
+
+            if (!songId) {
+                alert('Please select a song');
+                return;
+            }
+
+            try {
+                // Calculate blank_percentage based on num_questions
+                const blankPercentage = Math.min(0.5, numQuestions / 20);
+
+                const res = await fetch(
+                    `${API_BASE}/api/v1/quiz/generate?user_id=${userId}`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            song_id: parseInt(songId),
+                            blank_percentage: blankPercentage
+                        })
+                    }
+                );
+
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    throw new Error(errData.detail || 'Failed to generate quiz');
+                }
+
+                currentQuiz = await res.json();
+                currentQuestionIndex = 0;
+                answers = [];
+
+                // Get song title
+                const song = songs.find(s => s.id == songId);
+                document.getElementById('quiz-song-title').textContent = song?.title || 'Unknown Song';
+
+                // Set mode label
+                const modeLabels = {
+                    'sequential': 'Sequential',
+                    'fill_blank': 'Fill in Blank',
+                    'roman_numeral': 'Roman Numeral'
+                };
+                document.getElementById('quiz-mode-label').textContent = modeLabels[mode] || mode;
+
+                // Update totals
+                document.getElementById('total-questions').textContent = currentQuiz.questions.length;
+                document.getElementById('score-max').textContent = currentQuiz.questions.length;
+
+                showQuizContainer();
+                displayQuestion();
+            } catch (err) {
+                console.error('Failed to start quiz:', err);
+                alert('Failed to generate quiz. Please try again.');
+            }
+        }
+
+        function displayQuestion() {
+            const question = currentQuiz.questions[currentQuestionIndex];
+
+            // Update progress
+            document.getElementById('current-question').textContent = currentQuestionIndex + 1;
+            const progress = ((currentQuestionIndex) / currentQuiz.questions.length) * 100;
+            document.getElementById('progress-fill').style.width = `${progress}%`;
+
+            // Display context
+            const contextEl = document.getElementById('quiz-context');
+            contextEl.innerHTML = question.context.map(chord =>
+                `<span class="context-chord">${escHtml(chord)}</span>`
+            ).join(' <span class="arrow">→</span> ');
+
+            // Display options
+            const optionsEl = document.getElementById('quiz-options');
+            optionsEl.innerHTML = question.options.map((opt, i) =>
+                `<button class="quiz-option" data-index="${i}" data-value="${escHtml(opt)}">${escHtml(opt)}</button>`
+            ).join('');
+
+            // Add click handlers
+            optionsEl.querySelectorAll('.quiz-option').forEach(btn => {
+                btn.addEventListener('click', () => handleAnswer(btn.dataset.value));
+            });
+
+            // Hide feedback
+            document.getElementById('quiz-feedback').style.display = 'none';
+
+            // Start timer
+            questionStartTime = Date.now();
+        }
+
+        async function handleAnswer(selectedAnswer) {
+            const question = currentQuiz.questions[currentQuestionIndex];
+            const timeTaken = Date.now() - questionStartTime;
+            const isCorrect = selectedAnswer === question.correct_answer;
+
+            // Highlight selected answer
+            const options = document.querySelectorAll('.quiz-option');
+            options.forEach(opt => {
+                opt.disabled = true;
+                if (opt.dataset.value === selectedAnswer) {
+                    opt.classList.add(isCorrect ? 'correct' : 'wrong');
+                }
+                if (opt.dataset.value === question.correct_answer) {
+                    opt.classList.add('correct');
+                }
+            });
+
+            // Show feedback
+            showFeedback(isCorrect, question.correct_answer);
+
+            // Record answer
+            answers.push({
+                questionIndex: currentQuestionIndex,
+                userAnswer: selectedAnswer,
+                correctAnswer: question.correct_answer,
+                isCorrect,
+                timeTaken
+            });
+
+            // Submit to API
+            try {
+                await fetch(`${API_BASE}/api/v1/quiz/submit`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        song_id: currentQuiz.song_id,
+                        question_index: currentQuestionIndex,
+                        user_answer: selectedAnswer,
+                        correct_answer: question.correct_answer,
+                        time_taken_ms: timeTaken
+                    })
+                });
+            } catch (err) {
+                console.error('Failed to submit answer:', err);
+            }
+
+            // Auto-advance after delay
+            setTimeout(() => {
+                currentQuestionIndex++;
+                if (currentQuestionIndex < currentQuiz.questions.length) {
+                    displayQuestion();
+                } else {
+                    showResults();
+                }
+            }, 1500);
+        }
+
+        function showFeedback(isCorrect, correctAnswer) {
+            const feedbackEl = document.getElementById('quiz-feedback');
+            const messageEl = document.getElementById('feedback-message');
+
+            feedbackEl.style.display = 'block';
+            feedbackEl.className = `quiz-feedback ${isCorrect ? 'correct' : 'wrong'}`;
+
+            if (isCorrect) {
+                messageEl.textContent = 'Correct!';
+            } else {
+                messageEl.textContent = `The correct answer was: ${correctAnswer}`;
+            }
+        }
+
+        function showResults() {
+            const correct = answers.filter(a => a.isCorrect).length;
+            const total = answers.length;
+            const percentage = Math.round((correct / total) * 100);
+            const avgTime = Math.round(answers.reduce((sum, a) => sum + a.timeTaken, 0) / total / 1000);
+
+            document.getElementById('score-value').textContent = correct;
+            document.getElementById('score-percentage').textContent = `${percentage}%`;
+            document.getElementById('correct-count').textContent = correct;
+            document.getElementById('wrong-count').textContent = total - correct;
+            document.getElementById('avg-time').textContent = `${avgTime}s`;
+
+            // Score message
+            let message = '';
+            if (percentage >= 90) message = 'Excellent! You really know this song!';
+            else if (percentage >= 70) message = 'Great job! Keep practicing!';
+            else if (percentage >= 50) message = 'Good effort! A bit more practice will help.';
+            else message = 'Keep at it! Practice makes perfect.';
+            document.getElementById('score-message').textContent = message;
+
+            document.getElementById('quiz-container').style.display = 'none';
+            document.getElementById('quiz-results').style.display = 'block';
+        }
+
+        function endQuiz() {
+            if (confirm('Are you sure you want to end this quiz?')) {
+                if (answers.length > 0) {
+                    showResults();
+                } else {
+                    showSetup();
+                }
+            }
+        }
+
+        function retryQuiz() {
+            currentQuestionIndex = 0;
+            answers = [];
+            document.getElementById('quiz-results').style.display = 'none';
+            showQuizContainer();
+            displayQuestion();
+        }
+
+        function showSetup() {
+            document.getElementById('quiz-setup').style.display = 'block';
+            document.getElementById('quiz-container').style.display = 'none';
+            document.getElementById('quiz-results').style.display = 'none';
+            currentQuiz = null;
+            currentQuestionIndex = 0;
+            answers = [];
+        }
+
+        function showQuizContainer() {
+            document.getElementById('quiz-setup').style.display = 'none';
+            document.getElementById('quiz-container').style.display = 'block';
+            document.getElementById('quiz-results').style.display = 'none';
+        }
+
+        function escHtml(str) {
+            if (!str) return '';
+            const d = document.createElement('div');
+            d.textContent = str;
+            return d.innerHTML;
+        }
+    </script>
+
+    <style>
+        /* ==========================================
+           QUIZ STYLES
+           ========================================== */
+
+        .quiz-setup, .quiz-results {
+            display: flex;
+            justify-content: center;
+            padding: 40px 20px;
+        }
+
+        .setup-card, .results-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 32px;
+            max-width: 480px;
+            width: 100%;
+        }
+
+        .setup-card h2, .results-card h2 {
+            margin-bottom: 24px;
+            text-align: center;
+        }
+
+        .btn-large {
+            width: 100%;
+            padding: 14px;
+            font-size: 1rem;
+            margin-top: 16px;
+        }
+
+        .btn-large:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Quiz Container */
+        .quiz-container {
+            max-width: 700px;
+            margin: 0 auto;
+        }
+
+        .quiz-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .quiz-song-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .quiz-mode-badge {
+            background: rgba(59,130,246,0.2);
+            color: var(--accent);
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+        }
+
+        /* Progress */
+        .quiz-progress {
+            margin-bottom: 24px;
+        }
+
+        .quiz-progress-text {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+
+        .quiz-progress-bar {
+            height: 8px;
+            background: var(--bg-card);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .quiz-progress-fill {
+            height: 100%;
+            background: var(--accent);
+            transition: width 0.3s ease;
+        }
+
+        /* Question */
+        .quiz-question {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 32px;
+            text-align: center;
+            margin-bottom: 24px;
+        }
+
+        .quiz-prompt {
+            font-size: 1.1rem;
+            color: var(--text-muted);
+            margin-bottom: 20px;
+        }
+
+        .quiz-context {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .context-chord {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+
+        .arrow {
+            color: var(--text-muted);
+            font-size: 1.5rem;
+        }
+
+        .quiz-blank {
+            display: inline-block;
+            background: rgba(59,130,246,0.2);
+            border: 2px dashed var(--accent);
+            padding: 8px 24px;
+            border-radius: 8px;
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        /* Options */
+        .quiz-options {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .quiz-option {
+            background: var(--bg-card);
+            border: 2px solid var(--border);
+            color: var(--text);
+            padding: 16px;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .quiz-option:hover:not(:disabled) {
+            border-color: var(--accent);
+            background: var(--bg-hover);
+        }
+
+        .quiz-option:disabled {
+            cursor: default;
+        }
+
+        .quiz-option.correct {
+            background: rgba(34, 197, 94, 0.2);
+            border-color: var(--tonic);
+            color: var(--tonic);
+        }
+
+        .quiz-option.wrong {
+            background: rgba(239, 68, 68, 0.2);
+            border-color: var(--dominant);
+            color: var(--dominant);
+        }
+
+        /* Feedback */
+        .quiz-feedback {
+            text-align: center;
+            padding: 16px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .quiz-feedback.correct {
+            background: rgba(34, 197, 94, 0.2);
+            border: 1px solid var(--tonic);
+        }
+
+        .quiz-feedback.wrong {
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid var(--dominant);
+        }
+
+        .feedback-message {
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        .quiz-feedback.correct .feedback-message {
+            color: var(--tonic);
+        }
+
+        .quiz-feedback.wrong .feedback-message {
+            color: var(--dominant);
+        }
+
+        /* Results */
+        .results-score {
+            text-align: center;
+            margin: 32px 0;
+        }
+
+        .score-circle {
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            background: var(--bg);
+            border: 4px solid var(--accent);
+            margin-bottom: 12px;
+        }
+
+        .score-circle span:first-child {
+            font-size: 3rem;
+            font-weight: 700;
+            color: var(--accent);
+            line-height: 1;
+        }
+
+        .score-total {
+            font-size: 1.2rem;
+            color: var(--text-muted);
+        }
+
+        .score-percentage {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .score-message {
+            text-align: center;
+            color: var(--text-muted);
+            margin-bottom: 24px;
+        }
+
+        .results-details {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .detail-item {
+            text-align: center;
+            padding: 12px;
+            background: var(--bg);
+            border-radius: 8px;
+        }
+
+        .detail-label {
+            display: block;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+
+        .detail-value {
+            font-size: 1.3rem;
+            font-weight: 600;
+        }
+
+        .detail-value.correct {
+            color: var(--tonic);
+        }
+
+        .detail-value.wrong {
+            color: var(--dominant);
+        }
+
+        .results-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        /* Responsive */
+        @media (max-width: 640px) {
+            .quiz-options {
+                grid-template-columns: 1fr;
+            }
+
+            .results-details {
+                grid-template-columns: 1fr;
+            }
+
+            .quiz-context {
+                flex-direction: column;
+            }
+
+            .arrow {
+                transform: rotate(90deg);
+            }
+        }
+    </style>
+    <script src="js/auth.js"></script>
+    <script>
+        // Auth gate - check before showing page
+        document.addEventListener('DOMContentLoaded', async () => {
+            const isAuthenticated = await window.auth.checkAuth();
+            if (!isAuthenticated) {
+                window.location.href = '/login.html';
+                return;
+            }
+            // Authenticated - show page and load content
+            document.body.style.display = '';
+            window.auth.updateAuthUI();
+            init();
+        });
+    </script>
+</body>
+</html>

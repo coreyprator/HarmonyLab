@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Progress - HarmonyLab</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body style="display: none;">
+    <!-- Navigation Bar -->
+    <nav class="main-nav">
+        <a href="index.html" class="nav-brand">HarmonyLab</a>
+        <div class="nav-links">
+            <a href="index.html" class="nav-link">Songs</a>
+            <a href="quiz.html" class="nav-link">Quiz</a>
+            <a href="progress.html" class="nav-link active">Progress</a>
+        </div>
+        <div id="auth-container" class="nav-auth">
+            <a href="/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
+        </div>
+        <div class="nav-version">v1.4.2</div>
+    </nav>
+
+    <header>
+        <div class="header-content">
+            <h1>Your Progress</h1>
+        </div>
+        <p class="subtitle">Track your jazz harmony mastery</p>
+    </header>
+
+    <main>
+        <!-- Summary Cards -->
+        <div id="summary-cards" class="summary-cards">
+            <div class="summary-card">
+                <div class="card-icon">
+                    <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z"/>
+                    </svg>
+                </div>
+                <div class="card-value" id="songs-practiced">-</div>
+                <div class="card-label">Songs Practiced</div>
+            </div>
+            <div class="summary-card">
+                <div class="card-icon accuracy">
+                    <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M12 8v4l2 2"/>
+                    </svg>
+                </div>
+                <div class="card-value" id="overall-accuracy">-</div>
+                <div class="card-label">Overall Accuracy</div>
+            </div>
+            <div class="summary-card">
+                <div class="card-icon sessions">
+                    <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                        <path d="M9 12h6M9 16h6"/>
+                    </svg>
+                </div>
+                <div class="card-value" id="quiz-sessions">-</div>
+                <div class="card-label">Quiz Sessions</div>
+            </div>
+            <div class="summary-card">
+                <div class="card-icon streak">
+                    <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                    </svg>
+                </div>
+                <div class="card-value" id="current-streak">-</div>
+                <div class="card-label">Day Streak</div>
+            </div>
+        </div>
+
+        <!-- Recent Activity -->
+        <section class="progress-section">
+            <h2>Recent Activity</h2>
+            <div id="recent-activity" class="recent-activity">
+                <p class="loading">Loading activity...</p>
+            </div>
+        </section>
+
+        <!-- Song Mastery -->
+        <section class="progress-section">
+            <div class="section-header-row">
+                <h2>Song Mastery</h2>
+                <select id="sort-select" class="filter-select">
+                    <option value="mastery">Sort by Mastery</option>
+                    <option value="accuracy">Sort by Accuracy</option>
+                    <option value="recent">Sort by Recent</option>
+                    <option value="alphabetical">Sort A-Z</option>
+                </select>
+            </div>
+            <div id="song-mastery" class="song-mastery">
+                <p class="loading">Loading songs...</p>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const API_BASE = window.location.hostname.includes('localhost')
+            ? 'http://localhost:8080'
+            : 'https://harmonylab-wmrla7fhwa-uc.a.run.app';
+
+        let songProgress = [];
+
+        // ==========================================
+        // INITIALIZATION
+        // ==========================================
+
+        async function init() {
+            await Promise.all([
+                loadStats(),
+                loadRecentHistory(),
+                loadSongProgress()
+            ]);
+            setupEventListeners();
+        }
+
+        function setupEventListeners() {
+            document.getElementById('sort-select').addEventListener('change', (e) => {
+                renderSongMastery(songProgress, e.target.value);
+            });
+        }
+
+        // ==========================================
+        // API CALLS
+        // ==========================================
+
+        function getUserId() {
+            if (window.auth && window.auth.isAuthenticated()) {
+                return window.auth.getUserId();
+            }
+            return null;
+        }
+
+        async function loadStats() {
+            const userId = getUserId();
+            if (!userId) {
+                renderSummaryCards({
+                    songs_practiced: 0,
+                    total_songs: 0,
+                    overall_accuracy: 0,
+                    quiz_sessions: 0,
+                    current_streak: 0
+                });
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/progress/stats?user_id=${userId}`);
+                if (!res.ok) throw new Error('Failed to load stats');
+                const stats = await res.json();
+                renderSummaryCards(stats);
+            } catch (err) {
+                console.error('Failed to load stats:', err);
+                renderSummaryCards({
+                    songs_practiced: 0,
+                    total_songs: 0,
+                    overall_accuracy: 0,
+                    quiz_sessions: 0,
+                    current_streak: 0
+                });
+            }
+        }
+
+        async function loadRecentHistory() {
+            const userId = getUserId();
+            if (!userId) {
+                document.getElementById('recent-activity').innerHTML =
+                    '<p class="empty">Sign in to see your activity.</p>';
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/progress/history?user_id=${userId}&limit=10`);
+                if (!res.ok) throw new Error('Failed to load history');
+                const history = await res.json();
+                renderRecentActivity(history);
+            } catch (err) {
+                console.error('Failed to load history:', err);
+                document.getElementById('recent-activity').innerHTML =
+                    '<p class="empty">No recent activity yet. Take a quiz to get started!</p>';
+            }
+        }
+
+        async function loadSongProgress() {
+            const userId = getUserId();
+            if (!userId) {
+                document.getElementById('song-mastery').innerHTML =
+                    '<p class="empty">Sign in to track your progress.</p>';
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/progress/songs?user_id=${userId}`);
+                if (!res.ok) throw new Error('Failed to load songs');
+                songProgress = await res.json();
+                renderSongMastery(songProgress, 'mastery');
+            } catch (err) {
+                console.error('Failed to load song progress:', err);
+                document.getElementById('song-mastery').innerHTML =
+                    '<p class="empty">No song data available.</p>';
+            }
+        }
+
+        // ==========================================
+        // RENDERING
+        // ==========================================
+
+        function renderSummaryCards(stats) {
+            document.getElementById('songs-practiced').textContent =
+                `${stats.songs_practiced || 0}/${stats.total_songs || 0}`;
+            document.getElementById('overall-accuracy').textContent =
+                `${Math.round(stats.overall_accuracy || 0)}%`;
+            document.getElementById('quiz-sessions').textContent =
+                stats.quiz_sessions || 0;
+            document.getElementById('current-streak').textContent =
+                `${stats.current_streak || 0} days`;
+        }
+
+        function renderRecentActivity(history) {
+            const container = document.getElementById('recent-activity');
+
+            if (!history || history.length === 0) {
+                container.innerHTML = '<p class="empty">No recent activity yet. Take a quiz to get started!</p>';
+                return;
+            }
+
+            container.innerHTML = history.map(item => {
+                const date = formatDate(item.date);
+                const modeLabel = getModeLabel(item.quiz_type);
+                const scoreClass = item.score >= 80 ? 'high' : item.score >= 60 ? 'medium' : 'low';
+
+                return `
+                    <div class="activity-item">
+                        <div class="activity-date">${date}</div>
+                        <div class="activity-song">${escHtml(item.song_title)}</div>
+                        <div class="activity-type">${modeLabel}</div>
+                        <div class="activity-score ${scoreClass}">${item.score}%</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderSongMastery(songs, sortBy) {
+            const container = document.getElementById('song-mastery');
+
+            if (!songs || songs.length === 0) {
+                container.innerHTML = '<p class="empty">No songs practiced yet.</p>';
+                return;
+            }
+
+            // Sort songs
+            const sorted = [...songs].sort((a, b) => {
+                switch (sortBy) {
+                    case 'mastery':
+                        return b.mastery_level - a.mastery_level;
+                    case 'accuracy':
+                        return b.accuracy - a.accuracy;
+                    case 'recent':
+                        return new Date(b.last_practiced || 0) - new Date(a.last_practiced || 0);
+                    case 'alphabetical':
+                        return a.title.localeCompare(b.title);
+                    default:
+                        return 0;
+                }
+            });
+
+            container.innerHTML = sorted.map(song => {
+                const accuracy = Math.round(song.accuracy || 0);
+                const stars = getMasteryStars(song.mastery_level || 0);
+                const barWidth = accuracy;
+
+                return `
+                    <a href="song.html?id=${song.song_id}" class="mastery-item">
+                        <div class="mastery-info">
+                            <div class="mastery-title">${escHtml(song.title)}</div>
+                            <div class="mastery-stats">
+                                <span class="practice-count">${song.times_practiced || 0} practice${song.times_practiced === 1 ? '' : 's'}</span>
+                            </div>
+                        </div>
+                        <div class="mastery-progress">
+                            <div class="mastery-bar-container">
+                                <div class="mastery-bar" style="width: ${barWidth}%"></div>
+                            </div>
+                            <span class="mastery-percent">${accuracy}%</span>
+                        </div>
+                        <div class="mastery-stars">${stars}</div>
+                    </a>
+                `;
+            }).join('');
+        }
+
+        // ==========================================
+        // HELPERS
+        // ==========================================
+
+        function getMasteryStars(level) {
+            const filled = level || 0;
+            const empty = 5 - filled;
+            return '<span class="star filled">★</span>'.repeat(filled) +
+                   '<span class="star empty">★</span>'.repeat(empty);
+        }
+
+        function getModeLabel(mode) {
+            const labels = {
+                'sequential': 'Sequential',
+                'fill_blank': 'Fill Blank',
+                'roman_numeral': 'Roman'
+            };
+            return labels[mode] || mode || 'Quiz';
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return 'Unknown';
+            const date = new Date(dateStr);
+            const now = new Date();
+            const diff = Math.floor((now - date) / (1000 * 60 * 60 * 24));
+
+            if (diff === 0) return 'Today';
+            if (diff === 1) return 'Yesterday';
+            if (diff < 7) return `${diff} days ago`;
+
+            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        }
+
+        function escHtml(str) {
+            if (!str) return '';
+            const d = document.createElement('div');
+            d.textContent = str;
+            return d.innerHTML;
+        }
+    </script>
+
+    <style>
+        /* ==========================================
+           PROGRESS STYLES
+           ========================================== */
+
+        /* Summary Cards */
+        .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .summary-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .card-icon {
+            width: 48px;
+            height: 48px;
+            margin: 0 auto 12px;
+            background: rgba(59, 130, 246, 0.2);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--accent);
+        }
+
+        .card-icon.accuracy {
+            background: rgba(34, 197, 94, 0.2);
+            color: var(--tonic);
+        }
+
+        .card-icon.sessions {
+            background: rgba(139, 92, 246, 0.2);
+            color: var(--chromatic);
+        }
+
+        .card-icon.streak {
+            background: rgba(245, 158, 11, 0.2);
+            color: var(--secondary);
+        }
+
+        .card-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .card-label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        /* Sections */
+        .progress-section {
+            margin-bottom: 32px;
+        }
+
+        .progress-section h2 {
+            font-size: 1.2rem;
+            margin-bottom: 16px;
+        }
+
+        .section-header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .section-header-row h2 {
+            margin-bottom: 0;
+        }
+
+        /* Recent Activity */
+        .recent-activity {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .activity-item {
+            display: grid;
+            grid-template-columns: 100px 1fr auto auto;
+            gap: 16px;
+            align-items: center;
+            padding: 14px 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .activity-item:last-child {
+            border-bottom: none;
+        }
+
+        .activity-date {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .activity-song {
+            font-weight: 500;
+        }
+
+        .activity-type {
+            font-size: 0.8rem;
+            background: var(--bg);
+            padding: 4px 10px;
+            border-radius: 12px;
+            color: var(--text-muted);
+        }
+
+        .activity-score {
+            font-weight: 600;
+            padding: 4px 12px;
+            border-radius: 12px;
+        }
+
+        .activity-score.high {
+            background: rgba(34, 197, 94, 0.2);
+            color: var(--tonic);
+        }
+
+        .activity-score.medium {
+            background: rgba(245, 158, 11, 0.2);
+            color: var(--secondary);
+        }
+
+        .activity-score.low {
+            background: rgba(239, 68, 68, 0.2);
+            color: var(--dominant);
+        }
+
+        /* Song Mastery */
+        .song-mastery {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .mastery-item {
+            display: grid;
+            grid-template-columns: 1fr 200px 100px;
+            gap: 16px;
+            align-items: center;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 14px 20px;
+            text-decoration: none;
+            color: var(--text);
+            transition: border-color 0.15s;
+        }
+
+        .mastery-item:hover {
+            border-color: var(--accent);
+        }
+
+        .mastery-title {
+            font-weight: 500;
+        }
+
+        .mastery-stats {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .mastery-progress {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .mastery-bar-container {
+            flex: 1;
+            height: 8px;
+            background: var(--bg);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .mastery-bar {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), var(--tonic));
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+
+        .mastery-percent {
+            font-size: 0.85rem;
+            font-weight: 600;
+            min-width: 45px;
+            text-align: right;
+        }
+
+        .mastery-stars {
+            text-align: right;
+            font-size: 1rem;
+        }
+
+        .star {
+            margin-left: 2px;
+        }
+
+        .star.filled {
+            color: var(--secondary);
+        }
+
+        .star.empty {
+            color: var(--border);
+        }
+
+        /* Empty states */
+        .empty {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-muted);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .summary-cards {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .activity-item {
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+            }
+
+            .activity-date {
+                order: 1;
+            }
+
+            .activity-score {
+                order: 2;
+                text-align: right;
+            }
+
+            .activity-song {
+                order: 3;
+                grid-column: span 2;
+            }
+
+            .activity-type {
+                order: 4;
+                grid-column: span 2;
+                justify-self: start;
+            }
+
+            .mastery-item {
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+
+            .mastery-progress {
+                order: 3;
+            }
+
+            .mastery-stars {
+                order: 2;
+                text-align: left;
+            }
+
+            .section-header-row {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 12px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .summary-cards {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+    <script src="js/auth.js"></script>
+    <script>
+        // Auth gate - check before showing page
+        document.addEventListener('DOMContentLoaded', async () => {
+            const isAuthenticated = await window.auth.checkAuth();
+            if (!isAuthenticated) {
+                window.location.href = '/login.html';
+                return;
+            }
+            // Authenticated - show page and load content
+            document.body.style.display = '';
+            window.auth.updateAuthUI();
+            init();
+        });
+    </script>
+</body>
+</html>

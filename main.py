@@ -6,14 +6,15 @@ Main entry point for the Harmony Lab API server.
 import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 from config.settings import settings
 
 # Import routes
-from app.api.routes import songs, sections, vocabulary, measures, chords, progress, quiz, imports, analysis
+from app.api.routes import songs, sections, vocabulary, measures, chords, progress, quiz, imports, analysis, auth
 
 logger = logging.getLogger(__name__)
 
-VERSION = "1.3.0"
+VERSION = "1.4.2"
 
 app = FastAPI(
     title="Harmony Lab API",
@@ -29,6 +30,14 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+# Session middleware (required for OAuth state storage)
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=settings.jwt_secret_key,
+    same_site="lax",
+    https_only=True,
 )
 
 
@@ -72,6 +81,7 @@ async def health_check():
 
 
 # Include routers
+app.include_router(auth.router)  # Auth first for login/logout
 app.include_router(songs.router)
 app.include_router(sections.router)
 app.include_router(vocabulary.router)
