@@ -103,6 +103,39 @@ class Settings:
     def api_port(self) -> int:
         return self.port
 
+    @property
+    def jwt_secret_key(self) -> str:
+        """Secret key for JWT tokens."""
+        try:
+            return get_secret(f"{self._prefix}-jwt-secret", self._project_id)
+        except ValueError:
+            # Fallback for local development
+            import secrets
+            return os.getenv("JWT_SECRET_KEY", secrets.token_urlsafe(32))
+
+    @property
+    def google_client_id(self) -> Optional[str]:
+        """Google OAuth Client ID."""
+        try:
+            return get_secret(f"{self._prefix}-google-client-id", self._project_id)
+        except ValueError:
+            return os.getenv("GOOGLE_CLIENT_ID")
+
+    @property
+    def google_client_secret(self) -> Optional[str]:
+        """Google OAuth Client Secret."""
+        try:
+            return get_secret(f"{self._prefix}-google-client-secret", self._project_id)
+        except ValueError:
+            return os.getenv("GOOGLE_CLIENT_SECRET")
+
+    @property
+    def google_redirect_uri(self) -> Optional[str]:
+        """Google OAuth redirect URI."""
+        if os.getenv("K_SERVICE"):
+            return "https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/callback"
+        return os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8080/api/v1/auth/google/callback")
+
 
 @lru_cache()
 def get_settings() -> Settings:

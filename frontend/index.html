@@ -6,16 +6,19 @@
     <title>HarmonyLab</title>
     <link rel="stylesheet" href="styles.css">
 </head>
-<body>
+<body style="display: none;">
     <!-- Navigation Bar -->
     <nav class="main-nav">
         <a href="index.html" class="nav-brand">HarmonyLab</a>
         <div class="nav-links">
             <a href="index.html" class="nav-link active">Songs</a>
-            <a href="#" class="nav-link disabled" title="Coming in v1.4.0">Quiz</a>
-            <a href="#" class="nav-link disabled" title="Coming in v1.4.0">Progress</a>
+            <a href="quiz.html" class="nav-link">Quiz</a>
+            <a href="progress.html" class="nav-link">Progress</a>
         </div>
-        <div class="nav-version">v1.3.0</div>
+        <div id="auth-container" class="nav-auth">
+            <a href="/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
+        </div>
+        <div class="nav-version">v1.4.2</div>
     </nav>
 
     <header>
@@ -98,8 +101,21 @@
         });
 
         document.getElementById('genre-filter').addEventListener('change', loadSongs);
-
-        loadSongs();
+    </script>
+    <script src="js/auth.js"></script>
+    <script>
+        // Auth gate - check before showing page
+        document.addEventListener('DOMContentLoaded', async () => {
+            const isAuthenticated = await window.auth.checkAuth();
+            if (!isAuthenticated) {
+                window.location.href = '/login.html';
+                return;
+            }
+            // Authenticated - show page and load content
+            document.body.style.display = '';
+            window.auth.updateAuthUI();
+            loadSongs();
+        });
     </script>
 </body>
 </html>

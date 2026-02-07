@@ -1,5 +1,5 @@
 /* ==========================================
-   HarmonyLab Styles v1.3.0
+   HarmonyLab Styles v1.4.2
    ========================================== */
 
 :root {
@@ -76,10 +76,13 @@ body {
 .nav-link.disabled {
     color: var(--border);
     cursor: not-allowed;
+    pointer-events: auto; /* Required for tooltip to show */
+    opacity: 0.5;
 }
 
 .nav-link.disabled:hover {
     color: var(--border);
+    text-decoration: none;
 }
 
 .nav-version {
@@ -89,6 +92,35 @@ body {
     padding: 2px 8px;
     border-radius: 10px;
     font-weight: 500;
+}
+
+/* Auth UI */
+.nav-auth {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.user-profile {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.user-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.user-name {
+    font-size: 0.85rem;
+    color: var(--text);
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* ==========================================
