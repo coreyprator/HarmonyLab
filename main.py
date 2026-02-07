@@ -3,18 +3,22 @@ Harmony Lab FastAPI Application
 
 Main entry point for the Harmony Lab API server.
 """
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from config.settings import settings
 
 # Import routes
-from app.api.routes import songs, sections, vocabulary, measures, chords, progress, quiz, imports
+from app.api.routes import songs, sections, vocabulary, measures, chords, progress, quiz, imports, analysis
 
+logger = logging.getLogger(__name__)
+
+VERSION = "1.3.0"
 
 app = FastAPI(
     title="Harmony Lab API",
     description="Harmonic progression training system for musicians",
-    version="1.0.0",
+    version=VERSION,
     debug=settings.debug,
 )
 
@@ -28,12 +32,22 @@ app.add_middleware(
 )
 
 
+@app.on_event("startup")
+async def startup_event():
+    """Run migrations on startup."""
+    try:
+        from app.migrations import run_migrations
+        run_migrations()
+    except Exception as e:
+        logger.warning(f"Migration warning (non-fatal): {e}")
+
+
 @app.get("/")
 async def root():
     """Health check endpoint."""
     return {
         "message": "Harmony Lab API",
-        "version": "1.0.0",
+        "version": VERSION,
         "status": "healthy",
         "environment": settings.environment,
     }
@@ -43,30 +57,30 @@ async def root():
 async def health_check():
     """Health check endpoint for Cloud Run."""
     from app.db.connection import db
-    
+
     try:
         db_ok = db.test_connection()
     except Exception:
         db_ok = False
-    
+
     return {
         "status": "healthy" if db_ok else "degraded",
         "database": "connected" if db_ok else "disconnected",
         "service": "harmonylab",
-        "version": "1.0.0"
+        "version": VERSION
     }
 
 
-
 # Include routers
-app.include_router(songs.router, tags=["songs"])
-app.include_router(sections.router, tags=["sections"])
-app.include_router(vocabulary.router, tags=["vocabulary"])
-app.include_router(measures.router, tags=["measures"])
-app.include_router(chords.router, tags=["chords"])
-app.include_router(progress.router, tags=["progress"])
-app.include_router(quiz.router, tags=["quiz"])
-app.include_router(imports.router, tags=["imports"])
+app.include_router(songs.router)
+app.include_router(sections.router)
+app.include_router(vocabulary.router)
+app.include_router(measures.router)
+app.include_router(chords.router)
+app.include_router(progress.router)
+app.include_router(quiz.router)
+app.include_router(imports.router)
+app.include_router(analysis.router)
 
 
 if __name__ == "__main__":

@@ -139,5 +139,12 @@ Before debugging ANY deployment issue:
 
 ---
 
-**Last Updated**: 2026-01-31
+## Communication Protocol
+
+All responses to Claude.ai or Corey **MUST** use the Handoff Bridge.
+See `project-methodology/CLAUDE.md` for full policy.
+
+---
+
+**Last Updated**: 2026-02-07
 **Methodology Version**: 3.14

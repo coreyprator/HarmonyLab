@@ -9,7 +9,7 @@ from app.models import Section, SectionCreate
 from app.db.connection import DatabaseConnection, get_db
 
 
-router = APIRouter()
+router = APIRouter(prefix="/api/v1/songs", tags=["sections"])
 
 
 @router.get("/{song_id}/sections", response_model=List[Section])

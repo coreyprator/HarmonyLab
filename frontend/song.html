@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Song - HarmonyLab</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <a href="index.html" class="back-link">&larr; Songs</a>
+            <h1 id="song-title">Loading...</h1>
+            <span class="version-badge">v1.3.0</span>
+        </div>
+        <div class="song-info">
+            <span id="song-composer"></span>
+            <span id="song-key" class="key-badge"></span>
+            <span id="song-genre" class="genre-badge"></span>
+            <span id="song-time"></span>
+        </div>
+    </header>
+
+    <main>
+        <!-- View Toggle + Analysis Controls -->
+        <div class="controls-bar">
+            <div class="view-toggle">
+                <label><input type="radio" name="view" value="chords" checked> Chords</label>
+                <label><input type="radio" name="view" value="analysis"> Analysis</label>
+            </div>
+
+            <div class="analysis-controls" id="analysis-controls" style="display:none">
+                <label>Key:</label>
+                <select id="key-select">
+                    <option value="">Auto-detect</option>
+                    <option value="C">C major</option>
+                    <option value="c">C minor</option>
+                    <option value="D-">Db major</option>
+                    <option value="c#">C# minor</option>
+                    <option value="D">D major</option>
+                    <option value="d">D minor</option>
+                    <option value="E-">Eb major</option>
+                    <option value="e-">Eb minor</option>
+                    <option value="E">E major</option>
+                    <option value="e">E minor</option>
+                    <option value="F">F major</option>
+                    <option value="f">F minor</option>
+                    <option value="F#">F# major</option>
+                    <option value="f#">F# minor</option>
+                    <option value="G">G major</option>
+                    <option value="g">G minor</option>
+                    <option value="A-">Ab major</option>
+                    <option value="g#">G# minor</option>
+                    <option value="A">A major</option>
+                    <option value="a">A minor</option>
+                    <option value="B-">Bb major</option>
+                    <option value="b-">Bb minor</option>
+                    <option value="B">B major</option>
+                    <option value="b">B minor</option>
+                </select>
+                <button id="reanalyze-btn" class="btn btn-sm">Re-analyze</button>
+                <span id="detected-key" class="detected-key"></span>
+                <span id="confidence" class="confidence"></span>
+            </div>
+        </div>
+
+        <!-- Function Legend (analysis view) -->
+        <div class="function-legend" id="function-legend" style="display:none">
+            <span class="legend-item"><span class="legend-dot tonic"></span> Tonic (I, iii, vi)</span>
+            <span class="legend-item"><span class="legend-dot subdominant"></span> Subdominant (ii, IV)</span>
+            <span class="legend-item"><span class="legend-dot dominant"></span> Dominant (V, vii)</span>
+            <span class="legend-item"><span class="legend-dot secondary"></span> Secondary Dom</span>
+            <span class="legend-item"><span class="legend-dot chromatic"></span> Chromatic</span>
+        </div>
+
+        <!-- Pattern info -->
+        <div id="patterns-info" class="patterns-info" style="display:none"></div>
+
+        <!-- Chord Display -->
+        <div id="chord-display" class="chord-display">
+            <p class="loading">Loading chords...</p>
+        </div>
+
+        <!-- Sections -->
+        <div id="sections-display"></div>
+    </main>
+
+    <!-- Chord Edit Modal -->
+    <div id="chord-modal" class="modal" style="display:none">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Edit Chord Analysis</h3>
+                <button class="modal-close" onclick="closeChordModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Chord Symbol</label>
+                    <input type="text" id="modal-symbol" readonly class="input-readonly">
+                </div>
+                <div class="form-group">
+                    <label>Roman Numeral (auto)</label>
+                    <input type="text" id="modal-roman-auto" readonly class="input-readonly">
+                </div>
+                <div class="form-group">
+                    <label>Roman Numeral Override</label>
+                    <input type="text" id="modal-roman" placeholder="e.g. V/vi">
+                </div>
+                <div class="form-group">
+                    <label>Function Override</label>
+                    <select id="modal-function">
+                        <option value="">Auto</option>
+                        <option value="tonic">Tonic</option>
+                        <option value="subdominant">Subdominant</option>
+                        <option value="dominant">Dominant</option>
+                        <option value="secondary">Secondary Dominant</option>
+                        <option value="chromatic">Chromatic</option>
+                        <option value="diminished">Diminished</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Key Context Override</label>
+                    <input type="text" id="modal-key-context" placeholder="e.g. A minor">
+                </div>
+                <div class="form-group checkbox-group">
+                    <label><input type="checkbox" id="modal-is-pivot"> Pivot Chord</label>
+                </div>
+                <div class="form-group" id="pivot-key-group" style="display:none">
+                    <label>Pivot To Key</label>
+                    <input type="text" id="modal-pivot-key" placeholder="e.g. G major">
+                </div>
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea id="modal-notes" rows="2" placeholder="Analysis notes..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-danger" onclick="deleteOverride()">Reset to Auto</button>
+                <button class="btn" onclick="closeChordModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveOverride()">Save Override</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.hostname.includes('localhost')
+            ? 'http://localhost:8080'
+            : 'https://harmonylab-wmrla7fhwa-uc.a.run.app';
+
+        const params = new URLSearchParams(window.location.search);
+        const songId = params.get('id');
+
+        let currentView = 'chords';
+        let songData = null;
+        let analysisData = null;
+        let allChords = [];
+        let editingChordIndex = null;
+
+        // ==========================================
+        // INITIALIZATION
+        // ==========================================
+
+        async function init() {
+            if (!songId) {
+                document.getElementById('chord-display').innerHTML =
+                    '<p class="error">No song ID provided.</p>';
+                return;
+            }
+            await loadSong();
+            await loadSongChords();
+        }
+
+        // ==========================================
+        // DATA LOADING
+        // ==========================================
+
+        async function loadSong() {
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/songs/${songId}`);
+                if (!res.ok) throw new Error('Song not found');
+                songData = await res.json();
+
+                document.getElementById('song-title').textContent = songData.title || 'Untitled';
+                document.title = `${songData.title} - HarmonyLab`;
+
+                if (songData.composer)
+                    document.getElementById('song-composer').textContent = songData.composer;
+                if (songData.original_key)
+                    document.getElementById('song-key').textContent = songData.original_key;
+                if (songData.genre)
+                    document.getElementById('song-genre').textContent = songData.genre;
+                if (songData.time_signature)
+                    document.getElementById('song-time').textContent = songData.time_signature;
+            } catch (err) {
+                document.getElementById('song-title').textContent = 'Error loading song';
+            }
+        }
+
+        async function loadSongChords() {
+            try {
+                // Load sections with measures and chords
+                const res = await fetch(`${API_BASE}/api/v1/songs/${songId}/sections`);
+                if (!res.ok) throw new Error('Failed to load sections');
+                const sections = await res.json();
+
+                allChords = [];
+                let chordIndex = 0;
+
+                const display = document.getElementById('sections-display');
+                display.innerHTML = '';
+
+                for (const section of sections) {
+                    const sectionDiv = document.createElement('div');
+                    sectionDiv.className = 'section-block';
+
+                    const sectionHeader = document.createElement('div');
+                    sectionHeader.className = 'section-header';
+                    sectionHeader.textContent = section.name || `Section ${section.section_order}`;
+                    sectionDiv.appendChild(sectionHeader);
+
+                    // Load measures for this section
+                    const measRes = await fetch(`${API_BASE}/api/v1/measures/section/${section.id}`);
+                    const measures = measRes.ok ? await measRes.json() : [];
+
+                    const measuresRow = document.createElement('div');
+                    measuresRow.className = 'measures-row';
+
+                    for (const measure of measures) {
+                        const measureDiv = document.createElement('div');
+                        measureDiv.className = 'measure-block';
+
+                        const measureNum = document.createElement('div');
+                        measureNum.className = 'measure-number';
+                        measureNum.textContent = measure.measure_number;
+                        measureDiv.appendChild(measureNum);
+
+                        const chordsDiv = document.createElement('div');
+                        chordsDiv.className = 'measure-chords';
+
+                        const measureChords = measure.chords || [];
+                        for (const chord of measureChords) {
+                            const card = document.createElement('div');
+                            card.className = 'chord-card';
+                            card.dataset.index = chordIndex;
+                            card.dataset.symbol = chord.chord_symbol;
+
+                            const symbolSpan = document.createElement('div');
+                            symbolSpan.className = 'chord-symbol';
+                            symbolSpan.textContent = chord.chord_symbol;
+                            card.appendChild(symbolSpan);
+
+                            const romanSpan = document.createElement('div');
+                            romanSpan.className = 'roman-numeral';
+                            romanSpan.style.display = 'none';
+                            card.appendChild(romanSpan);
+
+                            card.addEventListener('click', () => openChordEditor(parseInt(card.dataset.index)));
+
+                            chordsDiv.appendChild(card);
+                            allChords.push({
+                                index: chordIndex,
+                                symbol: chord.chord_symbol,
+                                element: card,
+                                romanElement: romanSpan
+                            });
+                            chordIndex++;
+                        }
+
+                        measureDiv.appendChild(chordsDiv);
+                        measuresRow.appendChild(measureDiv);
+                    }
+
+                    sectionDiv.appendChild(measuresRow);
+                    display.appendChild(sectionDiv);
+                }
+
+                document.getElementById('chord-display').innerHTML = '';
+
+                if (allChords.length === 0) {
+                    document.getElementById('chord-display').innerHTML =
+                        '<p class="empty">No chords found for this song.</p>';
+                }
+            } catch (err) {
+                document.getElementById('chord-display').innerHTML =
+                    `<p class="error">Failed to load chords: ${err.message}</p>`;
+            }
+        }
+
+        async function loadAnalysis(forceRefresh = false) {
+            try {
+                const url = `${API_BASE}/api/v1/analysis/songs/${songId}${forceRefresh ? '?refresh=true' : ''}`;
+                const res = await fetch(url);
+                if (!res.ok) throw new Error('Analysis failed');
+                analysisData = await res.json();
+                renderAnalysis();
+            } catch (err) {
+                console.error('Analysis error:', err);
+                document.getElementById('detected-key').textContent = 'Analysis unavailable';
+            }
+        }
+
+        // ==========================================
+        // RENDERING
+        // ==========================================
+
+        function renderAnalysis() {
+            if (!analysisData) return;
+
+            // Show detected key and confidence
+            document.getElementById('detected-key').textContent =
+                `Key: ${analysisData.detected_key}`;
+            const conf = Math.round((analysisData.confidence || 0) * 100);
+            document.getElementById('confidence').textContent = `(${conf}% confidence)`;
+
+            // Color-code each chord card
+            const analyzedChords = analysisData.chords || [];
+            for (const ac of analyzedChords) {
+                const chordInfo = allChords[ac.index];
+                if (!chordInfo) continue;
+
+                const card = chordInfo.element;
+                const romanEl = chordInfo.romanElement;
+
+                // Set function class and color
+                card.className = 'chord-card chord-function-' + ac.function;
+                if (ac.is_override) card.classList.add('is-override');
+
+                // Show roman numeral
+                romanEl.textContent = ac.roman;
+                romanEl.style.display = currentView === 'analysis' ? '' : 'none';
+
+                // Secondary target
+                if (ac.is_secondary && ac.secondary_target) {
+                    let targetEl = card.querySelector('.secondary-target');
+                    if (!targetEl) {
+                        targetEl = document.createElement('div');
+                        targetEl.className = 'secondary-target';
+                        card.appendChild(targetEl);
+                    }
+                    targetEl.textContent = `of ${ac.secondary_target}`;
+                    targetEl.style.display = currentView === 'analysis' ? '' : 'none';
+                }
+
+                // Pivot chord indicator
+                if (ac.is_pivot) {
+                    card.classList.add('is-pivot');
+                }
+            }
+
+            // Render patterns
+            renderPatterns(analysisData.patterns || []);
+        }
+
+        function renderPatterns(patterns) {
+            const container = document.getElementById('patterns-info');
+            if (patterns.length === 0) {
+                container.style.display = 'none';
+                return;
+            }
+
+            container.style.display = '';
+            container.innerHTML = '<strong>Patterns detected:</strong> ' +
+                patterns.map(p =>
+                    `<span class="pattern-tag">${escHtml(p.type)} (${p.description})</span>`
+                ).join(' ');
+
+            // Highlight pattern chords
+            for (const pattern of patterns) {
+                for (const idx of pattern.indices) {
+                    const chordInfo = allChords[idx];
+                    if (chordInfo) {
+                        chordInfo.element.classList.add('pattern-highlight');
+                    }
+                }
+            }
+        }
+
+        // ==========================================
+        // VIEW SWITCHING
+        // ==========================================
+
+        function switchView(view) {
+            currentView = view;
+            const isAnalysis = view === 'analysis';
+
+            document.getElementById('analysis-controls').style.display = isAnalysis ? '' : 'none';
+            document.getElementById('function-legend').style.display = isAnalysis ? '' : 'none';
+            document.getElementById('patterns-info').style.display =
+                isAnalysis && analysisData?.patterns?.length ? '' : 'none';
+
+            // Toggle roman numerals visibility
+            for (const chord of allChords) {
+                chord.romanElement.style.display = isAnalysis ? '' : 'none';
+                const secTarget = chord.element.querySelector('.secondary-target');
+                if (secTarget) secTarget.style.display = isAnalysis ? '' : 'none';
+            }
+
+            // Reset chord card classes if switching to chords view
+            if (!isAnalysis) {
+                for (const chord of allChords) {
+                    chord.element.className = 'chord-card';
+                }
+            } else if (analysisData) {
+                renderAnalysis();
+            } else {
+                loadAnalysis();
+            }
+        }
+
+        document.querySelectorAll('input[name="view"]').forEach(radio => {
+            radio.addEventListener('change', (e) => switchView(e.target.value));
+        });
+
+        // ==========================================
+        // RE-ANALYZE
+        // ==========================================
+
+        document.getElementById('reanalyze-btn').addEventListener('click', async () => {
+            const keyOverride = document.getElementById('key-select').value || null;
+
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/analysis/songs/${songId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key_override: keyOverride })
+                });
+
+                if (!res.ok) throw new Error('Re-analysis failed');
+                analysisData = await res.json();
+                renderAnalysis();
+            } catch (err) {
+                alert('Re-analysis failed: ' + err.message);
+            }
+        });
+
+        // ==========================================
+        // CHORD EDITOR MODAL
+        // ==========================================
+
+        function openChordEditor(chordIndex) {
+            if (currentView !== 'analysis') return;
+            if (!analysisData) return;
+
+            editingChordIndex = chordIndex;
+            const ac = analysisData.chords.find(c => c.index === chordIndex);
+            if (!ac) return;
+
+            document.getElementById('modal-symbol').value = ac.symbol;
+            document.getElementById('modal-roman-auto').value = ac.roman;
+            document.getElementById('modal-roman').value = ac.is_override ? ac.roman : '';
+            document.getElementById('modal-function').value = '';
+            document.getElementById('modal-key-context').value = ac.key_context || '';
+            document.getElementById('modal-is-pivot').checked = ac.is_pivot || false;
+            document.getElementById('modal-pivot-key').value = ac.pivot_to_key || '';
+            document.getElementById('modal-notes').value = ac.notes || '';
+
+            document.getElementById('pivot-key-group').style.display =
+                ac.is_pivot ? '' : 'none';
+
+            document.getElementById('chord-modal').style.display = 'flex';
+        }
+
+        document.getElementById('modal-is-pivot').addEventListener('change', (e) => {
+            document.getElementById('pivot-key-group').style.display =
+                e.target.checked ? '' : 'none';
+        });
+
+        function closeChordModal() {
+            document.getElementById('chord-modal').style.display = 'none';
+            editingChordIndex = null;
+        }
+
+        async function saveOverride() {
+            if (editingChordIndex === null) return;
+
+            const payload = {
+                roman: document.getElementById('modal-roman').value || null,
+                function: document.getElementById('modal-function').value || null,
+                key_context: document.getElementById('modal-key-context').value || null,
+                is_pivot: document.getElementById('modal-is-pivot').checked,
+                pivot_to_key: document.getElementById('modal-pivot-key').value || null,
+                notes: document.getElementById('modal-notes').value || null
+            };
+
+            try {
+                const res = await fetch(
+                    `${API_BASE}/api/v1/analysis/songs/${songId}/chord/${editingChordIndex}`,
+                    {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    }
+                );
+
+                if (!res.ok) throw new Error('Save failed');
+
+                closeChordModal();
+                await loadAnalysis(true);
+            } catch (err) {
+                alert('Failed to save override: ' + err.message);
+            }
+        }
+
+        async function deleteOverride() {
+            if (editingChordIndex === null) return;
+
+            try {
+                const res = await fetch(
+                    `${API_BASE}/api/v1/analysis/songs/${songId}/chord/${editingChordIndex}`,
+                    { method: 'DELETE' }
+                );
+
+                if (!res.ok) throw new Error('Delete failed');
+
+                closeChordModal();
+                await loadAnalysis(true);
+            } catch (err) {
+                alert('Failed to reset override: ' + err.message);
+            }
+        }
+
+        // ==========================================
+        // UTILITIES
+        // ==========================================
+
+        function escHtml(str) {
+            if (!str) return '';
+            const d = document.createElement('div');
+            d.textContent = str;
+            return d.innerHTML;
+        }
+
+        // Close modal on backdrop click
+        document.getElementById('chord-modal').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) closeChordModal();
+        });
+
+        // Start
+        init();
+    </script>
+</body>
+</html>

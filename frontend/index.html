@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HarmonyLab</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <h1>HarmonyLab</h1>
+            <span class="version-badge">v1.3.0</span>
+        </div>
+        <p class="subtitle">Jazz chord progression training</p>
+    </header>
+
+    <main>
+        <div class="toolbar">
+            <input type="text" id="search" placeholder="Search songs..." class="search-input">
+            <select id="genre-filter" class="filter-select">
+                <option value="">All Genres</option>
+                <option value="Jazz">Jazz</option>
+                <option value="Bossa Nova">Bossa Nova</option>
+                <option value="Blues">Blues</option>
+                <option value="Pop">Pop</option>
+            </select>
+        </div>
+
+        <div id="songs-list" class="songs-grid">
+            <p class="loading">Loading songs...</p>
+        </div>
+    </main>
+
+    <script>
+        const API_BASE = window.location.hostname.includes('localhost')
+            ? 'http://localhost:8080'
+            : 'https://harmonylab-wmrla7fhwa-uc.a.run.app';
+
+        async function loadSongs() {
+            try {
+                const genre = document.getElementById('genre-filter').value;
+                let url = `${API_BASE}/api/v1/songs/?limit=100`;
+                if (genre) url += `&genre=${encodeURIComponent(genre)}`;
+
+                const res = await fetch(url);
+                const songs = await res.json();
+                renderSongs(songs);
+            } catch (err) {
+                document.getElementById('songs-list').innerHTML =
+                    `<p class="error">Failed to load songs: ${err.message}</p>`;
+            }
+        }
+
+        function renderSongs(songs) {
+            const container = document.getElementById('songs-list');
+            if (!songs || songs.length === 0) {
+                container.innerHTML = '<p class="empty">No songs found.</p>';
+                return;
+            }
+
+            container.innerHTML = songs.map(s => `
+                <a href="song.html?id=${s.id}" class="song-card">
+                    <div class="song-title">${escHtml(s.title)}</div>
+                    <div class="song-meta">
+                        ${s.composer ? `<span>${escHtml(s.composer)}</span>` : ''}
+                        ${s.original_key ? `<span class="key-badge">${escHtml(s.original_key)}</span>` : ''}
+                        ${s.genre ? `<span class="genre-badge">${escHtml(s.genre)}</span>` : ''}
+                    </div>
+                </a>
+            `).join('');
+        }
+
+        function escHtml(str) {
+            if (!str) return '';
+            const d = document.createElement('div');
+            d.textContent = str;
+            return d.innerHTML;
+        }
+
+        // Search filter
+        document.getElementById('search').addEventListener('input', (e) => {
+            const q = e.target.value.toLowerCase();
+            document.querySelectorAll('.song-card').forEach(card => {
+                const text = card.textContent.toLowerCase();
+                card.style.display = text.includes(q) ? '' : 'none';
+            });
+        });
+
+        document.getElementById('genre-filter').addEventListener('change', loadSongs);
+
+        loadSongs();
+    </script>
+</body>
+</html>

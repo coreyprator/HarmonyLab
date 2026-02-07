@@ -9,7 +9,7 @@ from app.models import ChordVocabulary, RomanNumeralVocabulary
 from app.db.connection import DatabaseConnection, get_db
 
 
-router = APIRouter()
+router = APIRouter(prefix="/api/v1/vocabulary", tags=["vocabulary"])
 
 
 @router.get("/chord-symbols", response_model=List[ChordVocabulary])
