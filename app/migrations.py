@@ -102,4 +102,31 @@ def run_migrations():
     except Exception as e:
         logger.warning(f"  Migration 3 warning: {e}")
 
+    # Migration 4: Users table (for authentication)
+    try:
+        count = db.execute_scalar(
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'Users'"
+        )
+        if count == 0:
+            logger.info("  Migration 4: Creating Users table...")
+            db.execute_non_query("""
+                CREATE TABLE Users (
+                    id INT IDENTITY(1,1) PRIMARY KEY,
+                    email NVARCHAR(255) NOT NULL UNIQUE,
+                    display_name NVARCHAR(255),
+                    google_id NVARCHAR(255) UNIQUE,
+                    avatar_url NVARCHAR(500),
+                    created_at DATETIME2 DEFAULT GETDATE(),
+                    last_login_at DATETIME2,
+                    is_active BIT DEFAULT 1
+                )
+            """)
+            db.execute_non_query("CREATE INDEX IX_Users_Email ON Users(email)")
+            db.execute_non_query("CREATE INDEX IX_Users_GoogleID ON Users(google_id)")
+            logger.info("  Migration 4: Users table created.")
+        else:
+            logger.info("  Migration 4: Users table already exists.")
+    except Exception as e:
+        logger.warning(f"  Migration 4 warning: {e}")
+
     logger.info("Migrations complete.")

@@ -69,10 +69,35 @@ class HarmonicAnalyzer:
             logger.warning(f"Key detection failed: {e}")
             return key.Key('C'), 0.0
 
+    def _normalize_chord_symbol(self, symbol: str) -> str:
+        """Normalize chord symbols for music21 parsing.
+
+        Key conversions:
+        - 'b' flats in root → '-' (music21 format): Ab → A-, Bb7 → B-7
+        - 'Maj' suffix without number → remove: BbMaj → B-
+        """
+        import re
+
+        # Convert flat 'b' in root to '-' (music21 format)
+        # Pattern: letter + 'b' at position 2 → letter + '-'
+        # "Ab" → "A-", "Bb7" → "B-7", "Abm7" → "A-m7"
+        match = re.match(r'^([A-G])b(.*)$', symbol)
+        if match:
+            symbol = match.group(1) + '-' + match.group(2)
+
+        # Handle "Maj" suffix (without number) - remove it
+        # "CMaj" → "C", "A-Maj" → "A-"
+        if symbol.endswith('Maj') and not any(c.isdigit() for c in symbol):
+            symbol = symbol[:-3]
+
+        return symbol
+
     def _analyze_chord(self, symbol: str, index: int) -> Dict:
         """Analyze single chord."""
         try:
-            c = harmony.ChordSymbol(symbol)
+            # Normalize chord symbol before parsing
+            normalized = self._normalize_chord_symbol(symbol)
+            c = harmony.ChordSymbol(normalized)
             rn = roman.romanNumeralFromChord(c, self.current_key)
 
             func = self._get_function(rn)

@@ -1,5 +1,15 @@
 # CLAUDE.md - HarmonyLab AI Instructions
 
+---
+
+## ⚠️ Handoff Bridge — MANDATORY
+
+ALL responses to Claude.ai/Corey MUST use the handoff bridge.
+Create file → Run handoff_send.py → Provide URL.
+NO EXCEPTIONS. See project-methodology/CLAUDE.md for details.
+
+---
+
 > ⚠️ **READ THIS ENTIRE FILE** before writing any code or running any commands.
 > **DO NOT** invent or guess infrastructure values. Use EXACT values below.
 
@@ -136,6 +146,40 @@ Before debugging ANY deployment issue:
 - **Two services**: Backend (API) and Frontend (static/UI)
 - **Database**: SQL Server on Cloud SQL
 - **Purpose**: Jazz chord progression training
+
+---
+
+## 🔒 Security Requirements
+
+### API Keys & Secrets
+
+**NEVER**:
+- Hardcode API keys, passwords, or secrets in code
+- Include secrets in handoff documents
+- Log secrets to console or files
+- Commit secrets to git (even in .gitignore'd files)
+- Share secrets in chat responses
+
+**ALWAYS**:
+- Use GCP Secret Manager for all secrets
+- Reference secrets by name, not value: `gcloud secrets versions access latest --secret="secret-name"`
+- Use environment variables injected at runtime
+- Mask secrets in logs: `key=***REDACTED***`
+
+### If a Secret is Accidentally Exposed
+
+1. **Rotate immediately** — Generate new secret, update in Secret Manager
+2. **Notify Corey** — Security incident
+3. **Audit** — Check git history, handoff docs, logs for exposure
+4. **Document** — Add to lessons learned
+
+### Pre-Commit Checks
+
+Before any commit, verify:
+- [ ] No API keys in code
+- [ ] No secrets in comments
+- [ ] No credentials in test files
+- [ ] No keys in handoff documents
 
 ---
 
