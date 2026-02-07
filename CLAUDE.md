@@ -109,12 +109,26 @@ sqlcmd -S 35.224.242.223,1433 -U sqlserver -P "$(gcloud secrets versions access 
 2. ✅ State what you learned: "Backend service is harmonylab, frontend is harmonylab-frontend, database is HarmonyLab"
 3. ❌ Never invent infrastructure values
 
+### Git Commit Policy (MANDATORY)
+**THE RULE**: Every task = git commit before handoff. No exceptions.
+
+Before ANY handoff:
+```powershell
+git status                    # Check uncommitted changes
+git add [specific-files]      # Stage files (NOT git add -A)
+git commit -m "feat/fix/chore: description"
+git push origin master
+```
+
+**Definition of Done**: A task is NOT done until committed AND pushed.
+
 ### Before ANY Handoff (LL-030, LL-049)
-1. ✅ Deploy code (you own deployment)
-2. ✅ Run tests: `pytest tests/ -v`
-3. ✅ Verify deployment with PINEAPPLE test
-4. ✅ Include test output in handoff
-5. ❌ Never say "complete" without proof
+1. ✅ Git commit and push (MANDATORY)
+2. ✅ Deploy code (you own deployment)
+3. ✅ Run tests: `pytest tests/ -v`
+4. ✅ Verify deployment with PINEAPPLE test
+5. ✅ Include test output in handoff
+6. ❌ Never say "complete" without proof
 
 ### Locked Vocabulary (LL-049)
 These words require proof (deployed revision + test output):
