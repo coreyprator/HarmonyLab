@@ -29,6 +29,69 @@ body {
 }
 
 /* ==========================================
+   NAVIGATION BAR
+   ========================================== */
+
+.main-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 24px;
+    background: #0b1120;
+    border-bottom: 1px solid var(--border);
+}
+
+.nav-brand {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text);
+    text-decoration: none;
+}
+
+.nav-brand:hover {
+    color: var(--accent);
+}
+
+.nav-links {
+    display: flex;
+    gap: 24px;
+}
+
+.nav-link {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    text-decoration: none;
+    transition: color 0.15s;
+}
+
+.nav-link:hover {
+    color: var(--text);
+}
+
+.nav-link.active {
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.nav-link.disabled {
+    color: var(--border);
+    cursor: not-allowed;
+}
+
+.nav-link.disabled:hover {
+    color: var(--border);
+}
+
+.nav-version {
+    font-size: 0.7rem;
+    background: var(--bg-card);
+    color: var(--text-muted);
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 500;
+}
+
+/* ==========================================
    HEADER
    ========================================== */
 
@@ -88,6 +151,11 @@ header h1 {
     border-radius: 4px;
     font-weight: 600;
     font-size: 0.8rem;
+}
+
+.key-badge.detected {
+    background: rgba(34,197,94,0.2);
+    color: var(--tonic);
 }
 
 .genre-badge {
