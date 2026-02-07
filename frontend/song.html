@@ -7,15 +7,25 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+    <!-- Navigation Bar -->
+    <nav class="main-nav">
+        <a href="index.html" class="nav-brand">HarmonyLab</a>
+        <div class="nav-links">
+            <a href="index.html" class="nav-link">Songs</a>
+            <a href="#" class="nav-link disabled" title="Coming in v1.4.0">Quiz</a>
+            <a href="#" class="nav-link disabled" title="Coming in v1.4.0">Progress</a>
+        </div>
+        <div class="nav-version">v1.3.0</div>
+    </nav>
+
     <header>
         <div class="header-content">
-            <a href="index.html" class="back-link">&larr; Songs</a>
             <h1 id="song-title">Loading...</h1>
-            <span class="version-badge">v1.3.0</span>
         </div>
         <div class="song-info">
             <span id="song-composer"></span>
             <span id="song-key" class="key-badge"></span>
+            <span id="detected-key-header" class="key-badge detected"></span>
             <span id="song-genre" class="genre-badge"></span>
             <span id="song-time"></span>
         </div>
@@ -167,6 +177,26 @@
             }
             await loadSong();
             await loadSongChords();
+            // Pre-load analysis to show detected key in header
+            await loadAnalysisForHeader();
+        }
+
+        async function loadAnalysisForHeader() {
+            try {
+                const url = `${API_BASE}/api/v1/analysis/songs/${songId}`;
+                const res = await fetch(url);
+                if (!res.ok) return;
+                analysisData = await res.json();
+
+                // Update header with detected key
+                const detectedKeyEl = document.getElementById('detected-key-header');
+                if (analysisData.detected_key) {
+                    detectedKeyEl.textContent = `Detected: ${analysisData.detected_key}`;
+                    detectedKeyEl.style.display = '';
+                }
+            } catch (err) {
+                console.log('Analysis pre-load skipped:', err.message);
+            }
         }
 
         // ==========================================

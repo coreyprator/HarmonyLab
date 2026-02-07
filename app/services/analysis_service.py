@@ -76,11 +76,16 @@ class HarmonicAnalyzer:
             rn = roman.romanNumeralFromChord(c, self.current_key)
 
             func = self._get_function(rn)
-            is_secondary = '/' in rn.figure
+
+            # Get jazz-style Roman numeral (not figured bass)
+            jazz_roman = self._format_jazz_roman(rn, c, symbol)
+
+            # Check for secondary dominants
+            is_secondary = '/' in jazz_roman
             secondary_target = None
 
             if is_secondary:
-                parts = rn.figure.split('/')
+                parts = jazz_roman.split('/')
                 if len(parts) > 1:
                     secondary_target = parts[1]
                 func = 'secondary'
@@ -88,7 +93,7 @@ class HarmonicAnalyzer:
             return {
                 "index": index,
                 "symbol": symbol,
-                "roman": rn.figure,
+                "roman": jazz_roman,
                 "function": func,
                 "color": self.FUNCTION_COLORS.get(func, self.FUNCTION_COLORS['unknown']),
                 "key_context": str(self.current_key),
@@ -107,6 +112,79 @@ class HarmonicAnalyzer:
                 "is_secondary": False,
                 "secondary_target": None
             }
+
+    def _format_jazz_roman(self, rn, chord, symbol: str) -> str:
+        """Format Roman numeral in jazz style (e.g., 'vim7' not 'i#653')."""
+        # Get base numeral (I, ii, III, IV, V, vi, vii)
+        base = rn.romanNumeral
+
+        # Check for secondary dominant (V/V, V/ii, etc.)
+        if rn.secondaryRomanNumeral:
+            secondary = rn.secondaryRomanNumeral.romanNumeral
+            quality = self._get_quality_suffix(symbol)
+            return f"{base}{quality}/{secondary}"
+
+        # Get quality suffix from chord symbol
+        quality = self._get_quality_suffix(symbol)
+
+        return f"{base}{quality}"
+
+    def _get_quality_suffix(self, symbol: str) -> str:
+        """Extract jazz-style quality suffix from chord symbol."""
+        # Remove root note (A-G with optional # or b)
+        import re
+        match = re.match(r'^[A-G][#b]?(.*)$', symbol)
+        if not match:
+            return ''
+
+        suffix = match.group(1)
+
+        # Map common chord suffixes to jazz notation
+        # Already jazz-style, just clean up
+        suffix_map = {
+            '': '',           # Major triad
+            'M': '',          # Major triad
+            'maj': '',        # Major triad
+            'm': 'm',         # Minor
+            'min': 'm',       # Minor
+            '-': 'm',         # Minor (jazz notation)
+            '7': '7',         # Dominant 7
+            'M7': 'maj7',     # Major 7
+            'maj7': 'maj7',   # Major 7
+            'Maj7': 'maj7',   # Major 7
+            'm7': 'm7',       # Minor 7
+            'min7': 'm7',     # Minor 7
+            '-7': 'm7',       # Minor 7
+            'dim': 'dim',     # Diminished
+            'o': 'dim',       # Diminished
+            'dim7': 'dim7',   # Diminished 7
+            'o7': 'dim7',     # Diminished 7
+            'm7b5': 'm7b5',   # Half-diminished
+            'ø': 'm7b5',      # Half-diminished
+            'ø7': 'm7b5',     # Half-diminished
+            '+': 'aug',       # Augmented
+            'aug': 'aug',     # Augmented
+            '6': '6',         # Major 6
+            'm6': 'm6',       # Minor 6
+            '9': '9',         # Dominant 9
+            'maj9': 'maj9',   # Major 9
+            'm9': 'm9',       # Minor 9
+            '11': '11',       # 11th
+            '13': '13',       # 13th
+            'sus4': 'sus4',   # Suspended 4
+            'sus2': 'sus2',   # Suspended 2
+            'add9': 'add9',   # Add 9
+            '7alt': '7alt',   # Altered dominant
+            '7#9': '7#9',     # Sharp 9
+            '7b9': '7b9',     # Flat 9
+        }
+
+        # Try direct mapping first
+        if suffix in suffix_map:
+            return suffix_map[suffix]
+
+        # Return cleaned suffix as-is if not in map
+        return suffix
 
     def _get_function(self, rn) -> str:
         """Map scale degree to harmonic function."""
