@@ -14,7 +14,7 @@ from app.api.routes import songs, sections, vocabulary, measures, chords, progre
 
 logger = logging.getLogger(__name__)
 
-VERSION = "1.4.3"
+VERSION = "1.4.4"
 
 app = FastAPI(
     title="Harmony Lab API",
@@ -33,10 +33,11 @@ app.add_middleware(
 )
 
 # Session middleware (required for OAuth state storage)
+# same_site="none" required for OAuth redirect flow from Google
 app.add_middleware(
     SessionMiddleware,
     secret_key=settings.jwt_secret_key,
-    same_site="lax",
+    same_site="none",
     https_only=True,
 )
 
