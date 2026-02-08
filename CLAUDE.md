@@ -128,12 +128,20 @@ Before sending a completion handoff, ALL items must be checked:
 - [ ] Health check passes: `curl https://harmonylab.rentyourcio.com/health`
 - [ ] Version matches: Response shows new version
 
+**UAT (MANDATORY for features)**:
+- [ ] Claude.ai creates UAT checklist
+- [ ] Corey executes UAT
+- [ ] UAT results submitted to Claude.ai
+- [ ] UAT PASSED (all critical tests green)
+- [ ] UAT results stored in MetaPM
+
 **Handoff (MANDATORY)**:
 - [ ] Handoff created with deployment verification
 - [ ] Uploaded to GCS
 - [ ] URL provided
 
 ⚠️ "Next steps: Deploy" is NOT acceptable. Deploy first, then send handoff.
+⚠️ A feature is NOT complete until UAT passes.
 
 ### Before ANY Handoff (LL-030, LL-049)
 1. ✅ Git commit and push (MANDATORY)
