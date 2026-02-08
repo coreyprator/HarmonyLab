@@ -559,8 +559,9 @@
         }
 
         // Stop audio when moving to next question
-        const originalDisplayQuestion = displayQuestion;
-        displayQuestion = function() {
+        // Store original and override global function
+        const originalDisplayQuestion = window.displayQuestion || displayQuestion;
+        window.displayQuestion = displayQuestion = function() {
             stopAudio();
             originalDisplayQuestion();
         };
