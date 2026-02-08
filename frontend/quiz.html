@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Quiz - HarmonyLab</title>
     <link rel="stylesheet" href="styles.css">
+    <!-- Tone.js for audio playback -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
 </head>
 <body style="display: none;">
     <!-- Navigation Bar -->
@@ -18,7 +20,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v1.4.5</div>
+        <div class="nav-version">v1.5.0</div>
     </nav>
 
     <header>
@@ -91,6 +93,26 @@
                     <!-- Context chords will be inserted here -->
                 </div>
                 <div class="quiz-blank">?</div>
+
+                <!-- Audio Controls -->
+                <div id="audio-controls" class="audio-controls">
+                    <button id="btn-play" class="audio-btn" title="Play chord (all notes together)">
+                        ▶ Play
+                    </button>
+                    <button id="btn-arpeggiate" class="audio-btn" title="Arpeggiate (notes one by one)">
+                        🎹 Arpeggiate
+                    </button>
+                    <button id="btn-loop" class="audio-btn" title="Loop playback">
+                        🔁 Loop
+                    </button>
+                    <button id="btn-stop" class="audio-btn audio-btn-stop" title="Stop" style="display: none;">
+                        ⏹ Stop
+                    </button>
+                    <div class="volume-control">
+                        <span class="volume-icon">🔊</span>
+                        <input type="range" id="volume-slider" min="0" max="100" value="80" title="Volume">
+                    </div>
+                </div>
             </div>
 
             <div id="quiz-options" class="quiz-options">
@@ -159,6 +181,7 @@
         async function init() {
             await loadSongs();
             setupEventListeners();
+            setupAudioControls();
         }
 
         async function loadSongs() {
@@ -434,6 +457,113 @@
             d.textContent = str;
             return d.innerHTML;
         }
+
+        // ==========================================
+        // AUDIO CONTROLS
+        // ==========================================
+
+        let isLooping = false;
+        let audioInitialized = false;
+
+        function setupAudioControls() {
+            const playBtn = document.getElementById('btn-play');
+            const arpBtn = document.getElementById('btn-arpeggiate');
+            const loopBtn = document.getElementById('btn-loop');
+            const stopBtn = document.getElementById('btn-stop');
+            const volumeSlider = document.getElementById('volume-slider');
+
+            // Play button - plays all context chords as a sequence
+            playBtn.addEventListener('click', async () => {
+                await initAudioIfNeeded();
+                const chords = getContextChords();
+                if (chords.length === 0) return;
+
+                stopAudio();
+                // Play the last chord in the context
+                const lastChord = chords[chords.length - 1];
+                HarmonyAudio.play(lastChord, 1.5);
+            });
+
+            // Arpeggiate button
+            arpBtn.addEventListener('click', async () => {
+                await initAudioIfNeeded();
+                const chords = getContextChords();
+                if (chords.length === 0) return;
+
+                stopAudio();
+                const lastChord = chords[chords.length - 1];
+                HarmonyAudio.arpeggiate(lastChord, 0.12);
+            });
+
+            // Loop button
+            loopBtn.addEventListener('click', async () => {
+                await initAudioIfNeeded();
+                const chords = getContextChords();
+                if (chords.length === 0) return;
+
+                if (isLooping) {
+                    stopAudio();
+                } else {
+                    const lastChord = chords[chords.length - 1];
+                    HarmonyAudio.startLoop(lastChord, 2);
+                    isLooping = true;
+                    loopBtn.classList.add('active');
+                    stopBtn.style.display = 'inline-block';
+                }
+            });
+
+            // Stop button
+            stopBtn.addEventListener('click', () => {
+                stopAudio();
+            });
+
+            // Volume slider
+            volumeSlider.addEventListener('input', (e) => {
+                const vol = parseInt(e.target.value) / 100;
+                HarmonyAudio.setVolume(vol);
+            });
+        }
+
+        async function initAudioIfNeeded() {
+            if (audioInitialized) return;
+
+            // Show loading state
+            const controls = document.getElementById('audio-controls');
+            controls.classList.add('audio-loading');
+
+            try {
+                await HarmonyAudio.init();
+                audioInitialized = true;
+            } catch (err) {
+                console.error('Failed to initialize audio:', err);
+            } finally {
+                controls.classList.remove('audio-loading');
+            }
+        }
+
+        function getContextChords() {
+            // Get chords from the current question context
+            if (!currentQuiz || currentQuestionIndex >= currentQuiz.questions.length) {
+                return [];
+            }
+            return currentQuiz.questions[currentQuestionIndex].context || [];
+        }
+
+        function stopAudio() {
+            HarmonyAudio.stopLoop();
+            isLooping = false;
+            const loopBtn = document.getElementById('btn-loop');
+            const stopBtn = document.getElementById('btn-stop');
+            if (loopBtn) loopBtn.classList.remove('active');
+            if (stopBtn) stopBtn.style.display = 'none';
+        }
+
+        // Stop audio when moving to next question
+        const originalDisplayQuestion = displayQuestion;
+        displayQuestion = function() {
+            stopAudio();
+            originalDisplayQuestion();
+        };
     </script>
 
     <style>
@@ -730,6 +860,97 @@
             flex-wrap: wrap;
         }
 
+        /* Audio Controls */
+        .audio-controls {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 20px;
+            padding-top: 16px;
+            border-top: 1px solid var(--border);
+            flex-wrap: wrap;
+        }
+
+        .audio-btn {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 8px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.15s;
+        }
+
+        .audio-btn:hover {
+            border-color: var(--accent);
+            background: var(--bg-hover);
+        }
+
+        .audio-btn:active {
+            transform: scale(0.97);
+        }
+
+        .audio-btn.active {
+            background: rgba(59, 130, 246, 0.2);
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        .audio-btn-stop {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: var(--dominant);
+            color: var(--dominant);
+        }
+
+        .audio-btn-stop:hover {
+            background: rgba(239, 68, 68, 0.2);
+            border-color: var(--dominant);
+        }
+
+        .volume-control {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .volume-icon {
+            font-size: 1rem;
+        }
+
+        #volume-slider {
+            width: 80px;
+            height: 6px;
+            border-radius: 3px;
+            background: var(--bg);
+            cursor: pointer;
+            -webkit-appearance: none;
+        }
+
+        #volume-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: var(--accent);
+            cursor: pointer;
+        }
+
+        #volume-slider::-moz-range-thumb {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: var(--accent);
+            cursor: pointer;
+            border: none;
+        }
+
+        .audio-loading {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+
         /* Responsive */
         @media (max-width: 640px) {
             .quiz-options {
@@ -750,6 +971,7 @@
         }
     </style>
     <script src="js/auth.js"></script>
+    <script src="js/audio.js"></script>
     <script>
         // Auth gate - check before showing page
         document.addEventListener('DOMContentLoaded', async () => {
