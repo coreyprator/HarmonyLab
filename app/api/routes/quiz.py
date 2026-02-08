@@ -66,24 +66,56 @@ async def generate_quiz(quiz_request: QuizGenerate, user_id: int):
     num_blanks = max(1, int(total_chords * quiz_request.blank_percentage))
     blank_indices = random.sample(range(total_chords), num_blanks)
 
+    # Build list of all chord symbols for generating wrong options
+    all_chords = [row['chord_symbol'] for row in result]
+    unique_chords = list(set(all_chords))
+
     questions = []
     answers = []
 
     for i, row in enumerate(result):
         is_blank = i in blank_indices
-        questions.append({
-            "chord_id": row['id'],
-            "measure_number": row['measure_number'],
-            "beat_position": float(row['beat_position']),
-            "is_blank": is_blank,
-            "displayed_chord": None if is_blank else row['chord_symbol'],
-            "roman_numeral": row['roman_numeral'],
-            "key_center": row['key_center']
-        })
+
         if is_blank:
+            # Build context: preceding chords (up to 3)
+            context_start = max(0, i - 3)
+            context = [result[j]['chord_symbol'] for j in range(context_start, i)]
+
+            # Generate multiple choice options
+            correct_answer = row['chord_symbol']
+
+            # Get wrong options (other chords from the song, excluding correct)
+            wrong_options = [c for c in unique_chords if c != correct_answer]
+            random.shuffle(wrong_options)
+            wrong_options = wrong_options[:3]  # Take up to 3 wrong options
+
+            # If not enough wrong options, add some common jazz chords
+            common_jazz_chords = ['Cmaj7', 'Dm7', 'Em7', 'Fmaj7', 'G7', 'Am7', 'Bm7b5',
+                                  'Cm7', 'Fm7', 'Bb7', 'Ebmaj7', 'Abmaj7', 'Dbmaj7']
+            while len(wrong_options) < 3:
+                fallback = random.choice(common_jazz_chords)
+                if fallback != correct_answer and fallback not in wrong_options:
+                    wrong_options.append(fallback)
+
+            # Build options array and shuffle
+            options = [correct_answer] + wrong_options[:3]
+            random.shuffle(options)
+
+            # Build question object in format frontend expects
+            questions.append({
+                "context": context,
+                "options": options,
+                "correct_answer": correct_answer,
+                "chord_id": row['id'],
+                "measure_number": row['measure_number'],
+                "beat_position": float(row['beat_position']),
+                "roman_numeral": row['roman_numeral'],
+                "key_center": row['key_center']
+            })
+
             answers.append({
                 "chord_id": row['id'],
-                "correct_answer": row['chord_symbol']
+                "correct_answer": correct_answer
             })
 
     # Create quiz attempt record
