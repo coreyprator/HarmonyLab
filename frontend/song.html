@@ -308,6 +308,9 @@
                     display.appendChild(sectionDiv);
                 }
 
+                // Expose allChords to window for audio integration
+                window.allChords = allChords;
+
                 document.getElementById('chord-display').innerHTML = '';
 
                 if (allChords.length === 0) {
@@ -649,10 +652,12 @@
         // Must use window. to modify global function, not create local shadow
         const originalOpenChordEditor = window.openChordEditor;
         window.openChordEditor = function(chordIndex) {
-            // Play the chord on click
-            const chordInfo = window.allChords[chordIndex];
-            if (chordInfo) {
-                playChord(chordInfo.symbol);
+            // Play the chord on click (with defensive check)
+            if (window.allChords && window.allChords.length > 0) {
+                const chordInfo = window.allChords[chordIndex];
+                if (chordInfo && chordInfo.symbol) {
+                    playChord(chordInfo.symbol);
+                }
             }
             // Then open editor if in analysis mode
             originalOpenChordEditor(chordIndex);
