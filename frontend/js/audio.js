@@ -19,8 +19,8 @@ const HarmonyAudio = (function() {
     let volume = 0.8;
     let audioUnlocked = false;
 
-    // Salamander Grand Piano samples (hosted on CDN)
-    const SALAMANDER_URL = 'https://nbrosowsky.github.io/tonern-instruments/samples/piano/';
+    // Salamander Grand Piano samples (official Tone.js CDN)
+    const SALAMANDER_URL = 'https://tonejs.github.io/audio/salamander/';
 
     // Map chord symbols to MIDI notes
     // Base octave is 4 (middle C = C4)

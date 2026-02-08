@@ -292,7 +292,13 @@
         }
 
         function displayQuestion() {
-            const question = currentQuiz.questions[currentQuestionIndex];
+            const question = currentQuiz?.questions?.[currentQuestionIndex];
+
+            // Defensive check - ensure question exists with required data
+            if (!question || !question.context || !question.options) {
+                console.error('Invalid question data at index', currentQuestionIndex, question);
+                return;
+            }
 
             // Update progress
             document.getElementById('current-question').textContent = currentQuestionIndex + 1;
@@ -301,7 +307,8 @@
 
             // Display context
             const contextEl = document.getElementById('quiz-context');
-            contextEl.innerHTML = question.context.map(chord =>
+            const contextChords = question.context || [];
+            contextEl.innerHTML = contextChords.map(chord =>
                 `<span class="context-chord">${escHtml(chord)}</span>`
             ).join(' <span class="arrow">→</span> ');
 
