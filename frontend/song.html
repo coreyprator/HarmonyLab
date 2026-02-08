@@ -646,10 +646,11 @@
         }
 
         // Override chord card click to include audio
-        const originalOpenChordEditor = openChordEditor;
-        openChordEditor = function(chordIndex) {
+        // Must use window. to modify global function, not create local shadow
+        const originalOpenChordEditor = window.openChordEditor;
+        window.openChordEditor = function(chordIndex) {
             // Play the chord on click
-            const chordInfo = allChords[chordIndex];
+            const chordInfo = window.allChords[chordIndex];
             if (chordInfo) {
                 playChord(chordInfo.symbol);
             }
