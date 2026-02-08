@@ -109,18 +109,31 @@ sqlcmd -S 35.224.242.223,1433 -U sqlserver -P "$(gcloud secrets versions access 
 2. ✅ State what you learned: "Backend service is harmonylab, frontend is harmonylab-frontend, database is HarmonyLab"
 3. ❌ Never invent infrastructure values
 
-### Git Commit Policy (MANDATORY)
-**THE RULE**: Every task = git commit before handoff. No exceptions.
+### Definition of Done (MANDATORY for ALL Tasks)
 
-Before ANY handoff:
-```powershell
-git status                    # Check uncommitted changes
-git add [specific-files]      # Stage files (NOT git add -A)
-git commit -m "feat/fix/chore: description"
-git push origin master
-```
+Before sending a completion handoff, ALL items must be checked:
 
-**Definition of Done**: A task is NOT done until committed AND pushed.
+**Code**:
+- [ ] Code changes complete
+- [ ] Tests pass (if applicable)
+
+**Git (MANDATORY)**:
+- [ ] All changes staged: `git add [files]`
+- [ ] Committed: `git commit -m "type: description (vX.X.X)"`
+- [ ] Pushed: `git push origin master`
+
+**Deployment (MANDATORY)**:
+- [ ] Backend deployed: `gcloud run deploy harmonylab --source . --region us-central1`
+- [ ] Frontend deployed: `gcloud run deploy harmonylab-frontend --source ./frontend --region us-central1`
+- [ ] Health check passes: `curl https://harmonylab.rentyourcio.com/health`
+- [ ] Version matches: Response shows new version
+
+**Handoff (MANDATORY)**:
+- [ ] Handoff created with deployment verification
+- [ ] Uploaded to GCS
+- [ ] URL provided
+
+⚠️ "Next steps: Deploy" is NOT acceptable. Deploy first, then send handoff.
 
 ### Before ANY Handoff (LL-030, LL-049)
 1. ✅ Git commit and push (MANDATORY)
