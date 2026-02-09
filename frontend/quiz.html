@@ -20,7 +20,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v1.5.0</div>
+        <div class="nav-version">v1.5.4</div>
     </nav>
 
     <header>
@@ -479,40 +479,36 @@
             const stopBtn = document.getElementById('btn-stop');
             const volumeSlider = document.getElementById('volume-slider');
 
-            // Play button - plays all context chords as a sequence
+            // Play button - plays the answer chord (the chord being identified)
             playBtn.addEventListener('click', async () => {
                 await initAudioIfNeeded();
-                const chords = getContextChords();
-                if (chords.length === 0) return;
+                const chord = getAnswerChord();
+                if (!chord) return;
 
                 stopAudio();
-                // Play the last chord in the context
-                const lastChord = chords[chords.length - 1];
-                HarmonyAudio.play(lastChord, 1.5);
+                HarmonyAudio.play(chord, 1.5);
             });
 
-            // Arpeggiate button
+            // Arpeggiate button - arpeggiates the answer chord
             arpBtn.addEventListener('click', async () => {
                 await initAudioIfNeeded();
-                const chords = getContextChords();
-                if (chords.length === 0) return;
+                const chord = getAnswerChord();
+                if (!chord) return;
 
                 stopAudio();
-                const lastChord = chords[chords.length - 1];
-                HarmonyAudio.arpeggiate(lastChord, 0.12);
+                HarmonyAudio.arpeggiate(chord, 0.12);
             });
 
-            // Loop button
+            // Loop button - loops the answer chord
             loopBtn.addEventListener('click', async () => {
                 await initAudioIfNeeded();
-                const chords = getContextChords();
-                if (chords.length === 0) return;
+                const chord = getAnswerChord();
+                if (!chord) return;
 
                 if (isLooping) {
                     stopAudio();
                 } else {
-                    const lastChord = chords[chords.length - 1];
-                    HarmonyAudio.startLoop(lastChord, 2);
+                    HarmonyAudio.startLoop(chord, 2);
                     isLooping = true;
                     loopBtn.classList.add('active');
                     stopBtn.style.display = 'inline-block';
@@ -554,6 +550,14 @@
                 return [];
             }
             return currentQuiz.questions[currentQuestionIndex].context || [];
+        }
+
+        function getAnswerChord() {
+            // Get the chord the user is trying to identify (the answer)
+            if (!currentQuiz || currentQuestionIndex >= currentQuiz.questions.length) {
+                return null;
+            }
+            return currentQuiz.questions[currentQuestionIndex].correct_answer;
         }
 
         function stopAudio() {
