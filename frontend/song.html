@@ -20,7 +20,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v1.5.4</div>
+        <div class="nav-version">v1.6.0</div>
     </nav>
 
     <header>
@@ -100,7 +100,68 @@
         <div id="sections-display"></div>
     </main>
 
-    <!-- Chord Edit Modal -->
+    <!-- Chord Symbol Edit Modal (Chords View) -->
+    <div id="chord-edit-modal" class="modal" style="display:none">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Edit Chord</h3>
+                <button class="modal-close" onclick="closeChordEditModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Current</label>
+                    <input type="text" id="edit-current-symbol" readonly class="input-readonly">
+                </div>
+                <div class="form-group">
+                    <label>Root</label>
+                    <select id="edit-root" onchange="updateChordPreview()">
+                        <option value="C">C</option><option value="C#">C#</option><option value="Db">Db</option>
+                        <option value="D">D</option><option value="D#">D#</option><option value="Eb">Eb</option>
+                        <option value="E">E</option>
+                        <option value="F">F</option><option value="F#">F#</option><option value="Gb">Gb</option>
+                        <option value="G">G</option><option value="G#">G#</option><option value="Ab">Ab</option>
+                        <option value="A">A</option><option value="A#">A#</option><option value="Bb">Bb</option>
+                        <option value="B">B</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Quality</label>
+                    <select id="edit-quality" onchange="updateChordPreview()">
+                        <option value="">Major</option>
+                        <option value="m">Minor (m)</option>
+                        <option value="7">Dom 7</option>
+                        <option value="maj7">Maj 7</option>
+                        <option value="m7">Min 7</option>
+                        <option value="dim">Dim</option>
+                        <option value="dim7">Dim 7</option>
+                        <option value="m7b5">Half-dim (m7b5)</option>
+                        <option value="aug">Aug</option>
+                        <option value="6">Maj 6</option>
+                        <option value="m6">Min 6</option>
+                        <option value="9">Dom 9</option>
+                        <option value="maj9">Maj 9</option>
+                        <option value="m9">Min 9</option>
+                        <option value="13">Dom 13</option>
+                        <option value="sus4">Sus4</option>
+                        <option value="sus2">Sus2</option>
+                        <option value="7#9">7#9</option>
+                        <option value="7b9">7b9</option>
+                        <option value="alt">Altered</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>New Chord</label>
+                    <div id="edit-preview" style="font-size:1.4rem;font-weight:bold;padding:8px 0;"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" onclick="closeChordEditModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveChordEdit()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chord Analysis Override Modal (Analysis View) -->
     <div id="chord-modal" class="modal" style="display:none">
         <div class="modal-content">
             <div class="modal-header">
@@ -293,6 +354,10 @@
                             chordsDiv.appendChild(card);
                             allChords.push({
                                 index: chordIndex,
+                                id: chord.id,
+                                measure_id: chord.measure_id,
+                                beat_position: chord.beat_position,
+                                chord_order: chord.chord_order,
                                 symbol: chord.chord_symbol,
                                 element: card,
                                 romanElement: romanSpan
@@ -475,7 +540,13 @@
         // ==========================================
 
         function openChordEditor(chordIndex) {
-            if (currentView !== 'analysis') return;
+            // In chords view: open chord symbol editor
+            if (currentView === 'chords') {
+                openChordSymbolEditor(chordIndex);
+                return;
+            }
+
+            // In analysis view: open analysis override modal
             if (!analysisData) return;
 
             editingChordIndex = chordIndex;
@@ -496,6 +567,104 @@
 
             document.getElementById('chord-modal').style.display = 'flex';
         }
+
+        // ==========================================
+        // CHORD SYMBOL EDITOR (Chords View)
+        // ==========================================
+
+        let editingChordData = null;
+
+        function parseChordSymbol(symbol) {
+            if (!symbol) return { root: 'C', quality: '' };
+            // Match root note (with optional # or b) then everything else is quality
+            const match = symbol.match(/^([A-G][#b]?)(.*)/);
+            if (!match) return { root: 'C', quality: '' };
+            return { root: match[1], quality: match[2] };
+        }
+
+        function openChordSymbolEditor(chordIndex) {
+            const chordInfo = allChords[chordIndex];
+            if (!chordInfo) return;
+
+            editingChordData = chordInfo;
+            const parsed = parseChordSymbol(chordInfo.symbol);
+
+            document.getElementById('edit-current-symbol').value = chordInfo.symbol;
+
+            // Set root dropdown
+            const rootSelect = document.getElementById('edit-root');
+            rootSelect.value = parsed.root;
+            // If exact match not found (e.g., Db vs C#), try to find close match
+            if (rootSelect.value !== parsed.root) {
+                for (const opt of rootSelect.options) {
+                    if (opt.value === parsed.root) { rootSelect.value = parsed.root; break; }
+                }
+            }
+
+            // Set quality dropdown
+            const qualitySelect = document.getElementById('edit-quality');
+            qualitySelect.value = parsed.quality;
+            // If no exact match, leave as Major
+            if (qualitySelect.value !== parsed.quality) {
+                qualitySelect.value = '';
+            }
+
+            updateChordPreview();
+            document.getElementById('chord-edit-modal').style.display = 'flex';
+        }
+
+        function closeChordEditModal() {
+            document.getElementById('chord-edit-modal').style.display = 'none';
+            editingChordData = null;
+        }
+
+        function updateChordPreview() {
+            const root = document.getElementById('edit-root').value;
+            const quality = document.getElementById('edit-quality').value;
+            document.getElementById('edit-preview').textContent = root + quality;
+        }
+
+        async function saveChordEdit() {
+            if (!editingChordData) return;
+
+            const root = document.getElementById('edit-root').value;
+            const quality = document.getElementById('edit-quality').value;
+            const newSymbol = root + quality;
+
+            const payload = {
+                measure_id: editingChordData.measure_id,
+                beat_position: editingChordData.beat_position,
+                chord_symbol: newSymbol,
+                chord_order: editingChordData.chord_order
+            };
+
+            try {
+                const res = await fetch(
+                    `${API_BASE}/api/v1/chords/${editingChordData.id}`,
+                    {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    }
+                );
+
+                if (!res.ok) throw new Error('Save failed');
+
+                // Update the UI immediately
+                editingChordData.symbol = newSymbol;
+                editingChordData.element.querySelector('.chord-symbol').textContent = newSymbol;
+                editingChordData.element.dataset.symbol = newSymbol;
+
+                closeChordEditModal();
+            } catch (err) {
+                alert('Failed to save chord: ' + err.message);
+            }
+        }
+
+        // Close chord edit modal on backdrop click
+        document.getElementById('chord-edit-modal').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) closeChordEditModal();
+        });
 
         document.getElementById('modal-is-pivot').addEventListener('change', (e) => {
             document.getElementById('pivot-key-group').style.display =
