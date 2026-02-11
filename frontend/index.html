@@ -18,7 +18,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v1.6.0</div>
+        <div class="nav-version">v1.7.0</div>
     </nav>
 
     <header>
@@ -48,56 +48,107 @@
                     <h3>Add New Song</h3>
                     <button class="modal-close" onclick="closeAddSongModal()">&times;</button>
                 </div>
+                <div class="modal-tabs">
+                    <button class="tab active" id="tab-manual" onclick="switchAddTab('manual')">Manual</button>
+                    <button class="tab" id="tab-midi" onclick="switchAddTab('midi')">Import MIDI</button>
+                </div>
                 <div class="modal-body">
-                    <div class="form-group">
-                        <label>Title *</label>
-                        <input type="text" id="add-title" placeholder="Song title" required>
+                    <!-- Manual Entry Panel -->
+                    <div id="add-panel-manual">
+                        <div class="form-group">
+                            <label>Title *</label>
+                            <input type="text" id="add-title" placeholder="Song title" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Composer</label>
+                            <input type="text" id="add-composer" placeholder="e.g. Miles Davis">
+                        </div>
+                        <div class="form-group">
+                            <label>Key</label>
+                            <select id="add-key">
+                                <option value="">Select key...</option>
+                                <option value="C">C major</option><option value="Cm">C minor</option>
+                                <option value="Db">Db major</option><option value="C#m">C# minor</option>
+                                <option value="D">D major</option><option value="Dm">D minor</option>
+                                <option value="Eb">Eb major</option><option value="Ebm">Eb minor</option>
+                                <option value="E">E major</option><option value="Em">E minor</option>
+                                <option value="F">F major</option><option value="Fm">F minor</option>
+                                <option value="F#">F# major</option><option value="F#m">F# minor</option>
+                                <option value="G">G major</option><option value="Gm">G minor</option>
+                                <option value="Ab">Ab major</option><option value="G#m">G# minor</option>
+                                <option value="A">A major</option><option value="Am">A minor</option>
+                                <option value="Bb">Bb major</option><option value="Bbm">Bb minor</option>
+                                <option value="B">B major</option><option value="Bm">B minor</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Genre</label>
+                            <select id="add-genre">
+                                <option value="">Select genre...</option>
+                                <option value="Jazz">Jazz</option>
+                                <option value="Bossa Nova">Bossa Nova</option>
+                                <option value="Blues">Blues</option>
+                                <option value="Pop">Pop</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Time Signature</label>
+                            <select id="add-time-sig">
+                                <option value="4/4">4/4</option>
+                                <option value="3/4">3/4</option>
+                                <option value="6/8">6/8</option>
+                                <option value="5/4">5/4</option>
+                            </select>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label>Composer</label>
-                        <input type="text" id="add-composer" placeholder="e.g. Miles Davis">
-                    </div>
-                    <div class="form-group">
-                        <label>Key</label>
-                        <select id="add-key">
-                            <option value="">Select key...</option>
-                            <option value="C">C major</option><option value="Cm">C minor</option>
-                            <option value="Db">Db major</option><option value="C#m">C# minor</option>
-                            <option value="D">D major</option><option value="Dm">D minor</option>
-                            <option value="Eb">Eb major</option><option value="Ebm">Eb minor</option>
-                            <option value="E">E major</option><option value="Em">E minor</option>
-                            <option value="F">F major</option><option value="Fm">F minor</option>
-                            <option value="F#">F# major</option><option value="F#m">F# minor</option>
-                            <option value="G">G major</option><option value="Gm">G minor</option>
-                            <option value="Ab">Ab major</option><option value="G#m">G# minor</option>
-                            <option value="A">A major</option><option value="Am">A minor</option>
-                            <option value="Bb">Bb major</option><option value="Bbm">Bb minor</option>
-                            <option value="B">B major</option><option value="Bm">B minor</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Genre</label>
-                        <select id="add-genre">
-                            <option value="">Select genre...</option>
-                            <option value="Jazz">Jazz</option>
-                            <option value="Bossa Nova">Bossa Nova</option>
-                            <option value="Blues">Blues</option>
-                            <option value="Pop">Pop</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Time Signature</label>
-                        <select id="add-time-sig">
-                            <option value="4/4">4/4</option>
-                            <option value="3/4">3/4</option>
-                            <option value="6/8">6/8</option>
-                            <option value="5/4">5/4</option>
-                        </select>
+
+                    <!-- MIDI Import Panel -->
+                    <div id="add-panel-midi" style="display:none">
+                        <div class="form-group">
+                            <label>MIDI File (.mid, .midi)</label>
+                            <input type="file" id="midi-file" accept=".mid,.midi" onchange="onMidiFileSelected()">
+                        </div>
+                        <div id="midi-preview" style="display:none">
+                            <div class="midi-info">
+                                <div class="midi-stat"><strong>Detected Title:</strong> <span id="midi-detected-title"></span></div>
+                                <div class="midi-stat"><strong>Tempo:</strong> <span id="midi-tempo"></span> BPM</div>
+                                <div class="midi-stat"><strong>Time Signature:</strong> <span id="midi-time-sig"></span></div>
+                                <div class="midi-stat"><strong>Measures:</strong> <span id="midi-measures"></span></div>
+                                <div class="midi-stat"><strong>Chords Found:</strong> <span id="midi-chord-count"></span></div>
+                            </div>
+                            <div class="midi-chords-preview">
+                                <label>Chord Preview (first 20)</label>
+                                <div id="midi-chords-grid" class="midi-chords-grid"></div>
+                            </div>
+                            <hr style="margin:12px 0;border-color:#444">
+                            <div class="form-group">
+                                <label>Title (override)</label>
+                                <input type="text" id="midi-title" placeholder="Leave blank to use detected title">
+                            </div>
+                            <div class="form-group">
+                                <label>Composer</label>
+                                <input type="text" id="midi-composer" placeholder="e.g. Miles Davis">
+                            </div>
+                            <div class="form-group">
+                                <label>Genre</label>
+                                <select id="midi-genre">
+                                    <option value="">Select genre...</option>
+                                    <option value="Jazz">Jazz</option>
+                                    <option value="Bossa Nova">Bossa Nova</option>
+                                    <option value="Blues">Blues</option>
+                                    <option value="Pop">Pop</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div id="midi-loading" style="display:none">
+                            <p class="loading">Parsing MIDI file...</p>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button class="btn" onclick="closeAddSongModal()">Cancel</button>
-                    <button class="btn btn-primary" onclick="submitAddSong()">Create Song</button>
+                    <button class="btn btn-primary" id="btn-create-manual" onclick="submitAddSong()">Create Song</button>
+                    <button class="btn btn-primary" id="btn-import-midi" onclick="submitMidiImport()" style="display:none">Import Song</button>
                 </div>
             </div>
         </div>
@@ -177,6 +228,14 @@
 
         function closeAddSongModal() {
             document.getElementById('add-song-modal').style.display = 'none';
+            // Reset MIDI state
+            midiPreviewData = null;
+            midiSelectedFile = null;
+            document.getElementById('midi-file').value = '';
+            document.getElementById('midi-preview').style.display = 'none';
+            document.getElementById('midi-loading').style.display = 'none';
+            // Reset to manual tab
+            switchAddTab('manual');
         }
 
         async function submitAddSong() {
@@ -211,6 +270,118 @@
                 window.location.href = `song.html?id=${newSong.id}`;
             } catch (err) {
                 alert('Error creating song: ' + err.message);
+            }
+        }
+
+        // Tab switching
+        let currentAddTab = 'manual';
+
+        function switchAddTab(tab) {
+            currentAddTab = tab;
+            document.getElementById('add-panel-manual').style.display = tab === 'manual' ? '' : 'none';
+            document.getElementById('add-panel-midi').style.display = tab === 'midi' ? '' : 'none';
+            document.getElementById('btn-create-manual').style.display = tab === 'manual' ? '' : 'none';
+            document.getElementById('btn-import-midi').style.display = (tab === 'midi' && midiPreviewData) ? '' : 'none';
+            document.getElementById('tab-manual').classList.toggle('active', tab === 'manual');
+            document.getElementById('tab-midi').classList.toggle('active', tab === 'midi');
+        }
+
+        // MIDI Import
+        let midiPreviewData = null;
+        let midiSelectedFile = null;
+
+        async function onMidiFileSelected() {
+            const fileInput = document.getElementById('midi-file');
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            midiSelectedFile = file;
+            document.getElementById('midi-preview').style.display = 'none';
+            document.getElementById('midi-loading').style.display = '';
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/imports/midi/preview`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || 'Failed to parse MIDI');
+                }
+
+                midiPreviewData = await res.json();
+
+                document.getElementById('midi-detected-title').textContent = midiPreviewData.title || '(none)';
+                document.getElementById('midi-tempo').textContent = midiPreviewData.tempo || '?';
+                document.getElementById('midi-time-sig').textContent = midiPreviewData.time_signature || '?';
+                document.getElementById('midi-measures').textContent = midiPreviewData.total_measures || 0;
+                document.getElementById('midi-chord-count').textContent = midiPreviewData.chord_count || 0;
+
+                // Render chord preview grid
+                const grid = document.getElementById('midi-chords-grid');
+                const chords = midiPreviewData.chords_preview || [];
+                grid.innerHTML = chords.map(c =>
+                    `<span class="midi-chord-chip">m${c.measure}:${c.symbol}</span>`
+                ).join('');
+
+                // Pre-fill title
+                document.getElementById('midi-title').value = midiPreviewData.title || '';
+
+                document.getElementById('midi-preview').style.display = '';
+                document.getElementById('btn-import-midi').style.display = '';
+            } catch (err) {
+                alert('Error parsing MIDI: ' + err.message);
+            } finally {
+                document.getElementById('midi-loading').style.display = 'none';
+            }
+        }
+
+        async function submitMidiImport() {
+            if (!midiSelectedFile) {
+                alert('Please select a MIDI file first');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', midiSelectedFile);
+
+            const title = document.getElementById('midi-title').value.trim();
+            const composer = document.getElementById('midi-composer').value.trim();
+            const genre = document.getElementById('midi-genre').value;
+
+            let url = `${API_BASE}/api/v1/imports/midi/import`;
+            const params = new URLSearchParams();
+            if (title) params.set('title', title);
+            if (composer) params.set('composer', composer);
+            if (genre) params.set('genre', genre);
+            if (params.toString()) url += '?' + params.toString();
+
+            try {
+                document.getElementById('btn-import-midi').disabled = true;
+                document.getElementById('btn-import-midi').textContent = 'Importing...';
+
+                const res = await fetch(url, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || 'Failed to import MIDI');
+                }
+
+                const result = await res.json();
+                closeAddSongModal();
+                window.location.href = `song.html?id=${result.song_id}`;
+            } catch (err) {
+                alert('Error importing MIDI: ' + err.message);
+            } finally {
+                document.getElementById('btn-import-midi').disabled = false;
+                document.getElementById('btn-import-midi').textContent = 'Import Song';
             }
         }
 
