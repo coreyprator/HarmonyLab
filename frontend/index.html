@@ -18,7 +18,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v1.5.4</div>
+        <div class="nav-version">v1.6.0</div>
     </nav>
 
     <header>
@@ -38,6 +38,68 @@
                 <option value="Blues">Blues</option>
                 <option value="Pop">Pop</option>
             </select>
+            <button id="add-song-btn" class="btn btn-primary" onclick="openAddSongModal()">+ Add Song</button>
+        </div>
+
+        <!-- Add Song Modal -->
+        <div id="add-song-modal" class="modal" style="display:none">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Add New Song</h3>
+                    <button class="modal-close" onclick="closeAddSongModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>Title *</label>
+                        <input type="text" id="add-title" placeholder="Song title" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Composer</label>
+                        <input type="text" id="add-composer" placeholder="e.g. Miles Davis">
+                    </div>
+                    <div class="form-group">
+                        <label>Key</label>
+                        <select id="add-key">
+                            <option value="">Select key...</option>
+                            <option value="C">C major</option><option value="Cm">C minor</option>
+                            <option value="Db">Db major</option><option value="C#m">C# minor</option>
+                            <option value="D">D major</option><option value="Dm">D minor</option>
+                            <option value="Eb">Eb major</option><option value="Ebm">Eb minor</option>
+                            <option value="E">E major</option><option value="Em">E minor</option>
+                            <option value="F">F major</option><option value="Fm">F minor</option>
+                            <option value="F#">F# major</option><option value="F#m">F# minor</option>
+                            <option value="G">G major</option><option value="Gm">G minor</option>
+                            <option value="Ab">Ab major</option><option value="G#m">G# minor</option>
+                            <option value="A">A major</option><option value="Am">A minor</option>
+                            <option value="Bb">Bb major</option><option value="Bbm">Bb minor</option>
+                            <option value="B">B major</option><option value="Bm">B minor</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Genre</label>
+                        <select id="add-genre">
+                            <option value="">Select genre...</option>
+                            <option value="Jazz">Jazz</option>
+                            <option value="Bossa Nova">Bossa Nova</option>
+                            <option value="Blues">Blues</option>
+                            <option value="Pop">Pop</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Time Signature</label>
+                        <select id="add-time-sig">
+                            <option value="4/4">4/4</option>
+                            <option value="3/4">3/4</option>
+                            <option value="6/8">6/8</option>
+                            <option value="5/4">5/4</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn" onclick="closeAddSongModal()">Cancel</button>
+                    <button class="btn btn-primary" onclick="submitAddSong()">Create Song</button>
+                </div>
+            </div>
         </div>
 
         <div id="songs-list" class="songs-grid">
@@ -101,6 +163,61 @@
         });
 
         document.getElementById('genre-filter').addEventListener('change', loadSongs);
+
+        // Add Song Modal
+        function openAddSongModal() {
+            document.getElementById('add-title').value = '';
+            document.getElementById('add-composer').value = '';
+            document.getElementById('add-key').value = '';
+            document.getElementById('add-genre').value = '';
+            document.getElementById('add-time-sig').value = '4/4';
+            document.getElementById('add-song-modal').style.display = 'flex';
+            document.getElementById('add-title').focus();
+        }
+
+        function closeAddSongModal() {
+            document.getElementById('add-song-modal').style.display = 'none';
+        }
+
+        async function submitAddSong() {
+            const title = document.getElementById('add-title').value.trim();
+            if (!title) {
+                alert('Title is required');
+                return;
+            }
+
+            const payload = {
+                title: title,
+                composer: document.getElementById('add-composer').value.trim() || null,
+                original_key: document.getElementById('add-key').value || null,
+                genre: document.getElementById('add-genre').value || null,
+                time_signature: document.getElementById('add-time-sig').value || '4/4'
+            };
+
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/songs/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || 'Failed to create song');
+                }
+
+                const newSong = await res.json();
+                closeAddSongModal();
+                window.location.href = `song.html?id=${newSong.id}`;
+            } catch (err) {
+                alert('Error creating song: ' + err.message);
+            }
+        }
+
+        // Close modal on backdrop click
+        document.getElementById('add-song-modal').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) closeAddSongModal();
+        });
     </script>
     <script src="js/auth.js"></script>
     <script>
