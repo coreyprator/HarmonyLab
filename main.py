@@ -14,7 +14,7 @@ from app.api.routes import songs, sections, vocabulary, measures, chords, progre
 
 logger = logging.getLogger(__name__)
 
-VERSION = "1.6.0"
+VERSION = "1.7.0"
 
 app = FastAPI(
     title="Harmony Lab API",
