@@ -20,7 +20,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v1.7.0</div>
+        <div class="nav-version">v1.7.1</div>
     </nav>
 
     <header>
@@ -253,7 +253,8 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             song_id: parseInt(songId),
-                            blank_percentage: blankPercentage
+                            blank_percentage: blankPercentage,
+                            num_questions: numQuestions
                         })
                     }
                 );
@@ -359,23 +360,6 @@
                 timeTaken
             });
 
-            // Submit to API
-            try {
-                await fetch(`${API_BASE}/api/v1/quiz/submit`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        song_id: currentQuiz.song_id,
-                        question_index: currentQuestionIndex,
-                        user_answer: selectedAnswer,
-                        correct_answer: question.correct_answer,
-                        time_taken_ms: timeTaken
-                    })
-                });
-            } catch (err) {
-                console.error('Failed to submit answer:', err);
-            }
-
             // Auto-advance after delay
             setTimeout(() => {
                 currentQuestionIndex++;
@@ -406,6 +390,18 @@
             const total = answers.length;
             const percentage = Math.round((correct / total) * 100);
             const avgTime = Math.round(answers.reduce((sum, a) => sum + a.timeTaken, 0) / total / 1000);
+
+            // Submit all answers to backend for scoring
+            if (currentQuiz && currentQuiz.attempt_id) {
+                fetch(`${API_BASE}/api/v1/quiz/submit`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        attempt_id: currentQuiz.attempt_id,
+                        answers: answers.map(a => a.userAnswer)
+                    })
+                }).catch(err => console.error('Failed to submit quiz:', err));
+            }
 
             document.getElementById('score-value').textContent = correct;
             document.getElementById('score-percentage').textContent = `${percentage}%`;

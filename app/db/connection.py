@@ -30,9 +30,9 @@ class Database:
         )
 
     def get_connection(self):
-        """Get a new database connection."""
+        """Get a new database connection with autocommit enabled."""
         try:
-            return pyodbc.connect(self.connection_string)
+            return pyodbc.connect(self.connection_string, autocommit=True)
         except pyodbc.Error as e:
             print(f"Database connection failed: {e}")
             raise

@@ -64,7 +64,15 @@ async def generate_quiz(quiz_request: QuizGenerate, user_id: int):
     # Select random chords to blank out
     total_chords = len(result)
     num_blanks = max(1, int(total_chords * quiz_request.blank_percentage))
-    blank_indices = random.sample(range(total_chords), num_blanks)
+
+    # Cap to requested number of questions if provided
+    if quiz_request.num_questions and quiz_request.num_questions > 0:
+        num_blanks = min(num_blanks, quiz_request.num_questions)
+
+    # Exclude index 0 so every question has at least 1 context chord
+    blank_candidates = list(range(1, total_chords))
+    num_blanks = min(num_blanks, len(blank_candidates))
+    blank_indices = random.sample(blank_candidates, num_blanks)
 
     # Build list of all chord symbols for generating wrong options
     all_chords = [row['chord_symbol'] for row in result]

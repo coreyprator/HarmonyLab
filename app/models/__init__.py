@@ -242,6 +242,7 @@ class QuizGenerate(BaseModel):
     song_id: int
     section_id: Optional[int] = None
     blank_percentage: float = 0.3
+    num_questions: Optional[int] = None
     
 
 class QuizSubmission(BaseModel):
