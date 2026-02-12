@@ -61,17 +61,28 @@ async def generate_quiz(quiz_request: QuizGenerate, user_id: int):
             detail="No chords found for this song/section"
         )
 
+    # Filter out chords with empty/null symbols (prevents blank questions)
+    result = [r for r in result if r.get('chord_symbol') and r['chord_symbol'].strip()]
+
+    if len(result) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No valid chords found (all chord symbols are empty)"
+        )
+
     # Select random chords to blank out
     total_chords = len(result)
-    num_blanks = max(1, int(total_chords * quiz_request.blank_percentage))
-
-    # Cap to requested number of questions if provided
-    if quiz_request.num_questions and quiz_request.num_questions > 0:
-        num_blanks = min(num_blanks, quiz_request.num_questions)
 
     # Exclude index 0 so every question has at least 1 context chord
     blank_candidates = list(range(1, total_chords))
-    num_blanks = min(num_blanks, len(blank_candidates))
+
+    # Use num_questions directly when specified, fall back to percentage
+    if quiz_request.num_questions and quiz_request.num_questions > 0:
+        num_blanks = min(quiz_request.num_questions, len(blank_candidates))
+    else:
+        num_blanks = max(1, int(total_chords * quiz_request.blank_percentage))
+        num_blanks = min(num_blanks, len(blank_candidates))
+
     blank_indices = random.sample(blank_candidates, num_blanks)
 
     # Build list of all chord symbols for generating wrong options

@@ -112,7 +112,7 @@ async def import_midi(
             song_query,
             (song_title, composer, genre, parsed_song.time_signature, tempo_str, file.filename)
         )
-        song_id = song_result[0][0]
+        song_id = song_result[0]['id']
         
         # Create a single section (MIDI files usually don't have section markers)
         section_query = """
@@ -121,7 +121,7 @@ async def import_midi(
             VALUES (?, 'Main', 1, 1)
         """
         section_result = db.execute_query(section_query, (song_id,))
-        section_id = section_result[0][0]
+        section_id = section_result[0]['id']
         
         # Create measures and chords
         measures_created = {}
@@ -137,7 +137,7 @@ async def import_midi(
                     VALUES (?, ?)
                 """
                 measure_result = db.execute_query(measure_query, (section_id, measure_num))
-                measures_created[measure_num] = measure_result[0][0]
+                measures_created[measure_num] = measure_result[0]['id']
             
             measure_id = measures_created[measure_num]
             
