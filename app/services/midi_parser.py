@@ -22,9 +22,9 @@ logger = logging.getLogger(__name__)
 # Configurable defaults (all in fractions of a beat)
 # ---------------------------------------------------------------------------
 # Notes whose onsets fall within this many beats of each other are grouped
-# into a single chord.  1.0 = one full beat; works well for arpeggiated
-# passages like Bach's Prelude in C (BWV 846).
-DEFAULT_CHORD_WINDOW_BEATS: float = 1.0
+# into a single chord.  2.0 = half a measure in 4/4; captures full chord
+# voicings for both arpeggiated passages (Bach BWV 846) and block chords.
+DEFAULT_CHORD_WINDOW_BEATS: float = 2.0
 # Minimum number of distinct pitch-classes required to call a group a "chord".
 MIN_NOTES_FOR_CHORD: int = 2
 
@@ -102,36 +102,95 @@ def midi_notes_to_intervals(notes: List[int]) -> List[int]:
     return sorted(set(intervals))
 
 
+# Pre-compute mod-12 normalized templates for rotation-based matching.
+# Extended chord intervals (e.g. 14 = 9th) are reduced to mod 12.
+_TEMPLATES_MOD12: Dict[str, List[int]] = {}
+for _ct, _tmpl in CHORD_TEMPLATES.items():
+    _mod = sorted(set(i % 12 for i in _tmpl))
+    _TEMPLATES_MOD12[_ct] = _mod
+
+
 def identify_chord(notes: List[int]) -> Tuple[str, str]:
-    """
-    Identify chord from MIDI notes.
-    Returns (root_name, chord_type).
+    """Identify a chord from MIDI notes using rotation-based root detection.
+
+    Instead of assuming the lowest sounding note is the root, this tries
+    every unique pitch class as a candidate root and picks the template
+    match with the highest score.  This correctly handles inversions
+    (e.g. C/E → C major, not E-something).
+
+    For two-note groups (dyads), interval-based heuristics are used
+    instead of template subset matching, which would produce false
+    positives like "Gsus4" or "Gdim7".
+
+    Returns ``(root_name, chord_type)``.
     """
     if not notes:
         return ("", "")
-    
-    notes = sorted(set(notes))
-    root_midi = notes[0]
-    root_name = NOTE_NAMES[root_midi % 12]
-    
-    intervals = midi_notes_to_intervals(notes)
-    
-    # Try to match chord template
-    for chord_type, template in CHORD_TEMPLATES.items():
-        if intervals == template:
-            return (root_name, chord_type)
-    
-    # Try partial matches (for voicings with missing notes)
-    for chord_type, template in CHORD_TEMPLATES.items():
-        if set(intervals).issubset(set(template)):
-            return (root_name, chord_type)
-    
-    # Default to major/minor based on third
-    if 3 in intervals:
+
+    pitch_classes = sorted(set(n % 12 for n in notes))
+    num_pcs = len(pitch_classes)
+    bass_pc = min(notes) % 12  # lowest sounding note
+
+    if num_pcs < 2:
+        return (NOTE_NAMES[pitch_classes[0]], "")
+
+    # ----- Try every pitch class as a candidate root -----
+    best_root: Optional[str] = None
+    best_type = ""
+    best_score = -1
+
+    for root_pc in pitch_classes:
+        intervals = sorted(set((pc - root_pc) % 12 for pc in pitch_classes))
+
+        # --- Exact template match (highest priority) ---
+        for chord_type, template in _TEMPLATES_MOD12.items():
+            if intervals == template:
+                # Prefer root-position voicings (root == bass)
+                root_pos_bonus = 50 if root_pc == bass_pc else 0
+                score = 1000 + len(template) * 10 + root_pos_bonus
+                if score > best_score:
+                    best_score = score
+                    best_root = NOTE_NAMES[root_pc]
+                    best_type = chord_type
+
+        # --- Subset match — only when ≥ 3 pitch classes ---
+        if num_pcs >= 3 and best_score < 1000:
+            for chord_type, template in _TEMPLATES_MOD12.items():
+                if set(intervals).issubset(set(template)) and len(intervals) > 1:
+                    coverage = len(intervals) / len(template)
+                    root_pos_bonus = 10 if root_pc == bass_pc else 0
+                    score = int(coverage * 100) + len(template) + root_pos_bonus
+                    if score > best_score:
+                        best_score = score
+                        best_root = NOTE_NAMES[root_pc]
+                        best_type = chord_type
+
+    if best_root:
+        return (best_root, best_type)
+
+    # ----- Fallback for 2-note dyads -----
+    if num_pcs == 2:
+        interval = (pitch_classes[1] - pitch_classes[0]) % 12
+        if interval == 7:       # Perfect 5th
+            return (NOTE_NAMES[pitch_classes[0]], "")
+        elif interval == 5:     # Perfect 4th (inverted P5)
+            return (NOTE_NAMES[pitch_classes[1]], "")
+        elif interval == 4:     # Major 3rd
+            return (NOTE_NAMES[pitch_classes[0]], "")
+        elif interval == 3:     # Minor 3rd
+            return (NOTE_NAMES[pitch_classes[0]], "m")
+        elif interval == 8:     # Minor 6th (inverted M3)
+            return (NOTE_NAMES[pitch_classes[1]], "")
+        elif interval == 9:     # Major 6th (inverted m3)
+            return (NOTE_NAMES[pitch_classes[1]], "m")
+
+    # ----- Last resort: bass note as root -----
+    root_name = NOTE_NAMES[bass_pc]
+    intervals_from_bass = sorted(set((pc - bass_pc) % 12 for pc in pitch_classes))
+    if 3 in intervals_from_bass:
         return (root_name, "m")
-    elif 4 in intervals:
-        return (root_name, "Maj")
-    
+    elif 4 in intervals_from_bass:
+        return (root_name, "")
     return (root_name, "")
 
 
