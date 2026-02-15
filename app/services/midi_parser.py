@@ -6,11 +6,27 @@ Uses the `mido` library to:
 2. Extract chord data from chord tracks
 3. Detect time signature and tempo
 4. Map MIDI notes to chord symbols
+
+Supports both block-chord and arpeggiated MIDI styles via a configurable
+time-window chord grouping algorithm.
 """
+import logging
 from mido import MidiFile, tempo2bpm
 from typing import List, Optional, Tuple, Dict
 from pydantic import BaseModel
 from collections import defaultdict
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Configurable defaults (all in fractions of a beat)
+# ---------------------------------------------------------------------------
+# Notes whose onsets fall within this many beats of each other are grouped
+# into a single chord.  1.0 = one full beat; works well for arpeggiated
+# passages like Bach's Prelude in C (BWV 846).
+DEFAULT_CHORD_WINDOW_BEATS: float = 1.0
+# Minimum number of distinct pitch-classes required to call a group a "chord".
+MIN_NOTES_FOR_CHORD: int = 2
 
 
 class ChordData(BaseModel):
@@ -119,23 +135,33 @@ def identify_chord(notes: List[int]) -> Tuple[str, str]:
     return (root_name, "")
 
 
-def parse_midi_file(file_path: str) -> ParsedSong:
+def parse_midi_file(
+    file_path: str,
+    chord_window_beats: float = DEFAULT_CHORD_WINDOW_BEATS,
+) -> ParsedSong:
     """
     Parse a MIDI file and extract chord progressions.
-    
+
     Args:
-        file_path: Path to MIDI file
-        
+        file_path: Path to MIDI file.
+        chord_window_beats: Size of the grouping window in beats.
+            Notes whose onsets fall within this window are treated as
+            belonging to the same chord.  Larger values help arpeggiated
+            music (e.g. Bach BWV 846); smaller values preserve detail in
+            block-chord arrangements.
+
     Returns:
-        ParsedSong with all extracted data
+        ParsedSong with all extracted data.
     """
     midi = MidiFile(file_path)
-    
-    # Get tempo and time signature from first track
-    tempo = 120  # Default
+
+    # ------------------------------------------------------------------
+    # Extract tempo and time-signature from the first track that has them
+    # ------------------------------------------------------------------
+    tempo = 120  # Default BPM
     time_sig_num = 4
     time_sig_denom = 4
-    
+
     for track in midi.tracks:
         for msg in track:
             if msg.type == 'set_tempo':
@@ -143,107 +169,145 @@ def parse_midi_file(file_path: str) -> ParsedSong:
             elif msg.type == 'time_signature':
                 time_sig_num = msg.numerator
                 time_sig_denom = msg.denominator
-    
+
     time_signature = f"{time_sig_num}/{time_sig_denom}"
-    
-    # Find the track with the most simultaneous notes (likely the chord track)
-    chord_track = None
-    max_polyphony = 0
-    
+
+    # ------------------------------------------------------------------
+    # Choose the best track for chord extraction
+    # ------------------------------------------------------------------
+    # Primary strategy: track with the most total note-on events (works
+    # for both block-chord AND arpeggiated files).
+    # Fallback: first track that contains any notes.
+    # ------------------------------------------------------------------
+    best_track = None
+    best_note_count = 0
+
     for track in midi.tracks:
-        active_notes = []
-        max_active = 0
-        
-        for msg in track:
-            if msg.type == 'note_on' and msg.velocity > 0:
-                active_notes.append(msg.note)
-                max_active = max(max_active, len(active_notes))
-            elif msg.type == 'note_off' or (msg.type == 'note_on' and msg.velocity == 0):
-                if msg.note in active_notes:
-                    active_notes.remove(msg.note)
-        
-        if max_active > max_polyphony:
-            max_polyphony = max_active
-            chord_track = track
-    
-    if not chord_track:
-        # No suitable track found, use first track with notes
+        note_count = sum(
+            1 for msg in track
+            if msg.type == 'note_on' and msg.velocity > 0
+        )
+        if note_count > best_note_count:
+            best_note_count = note_count
+            best_track = track
+
+    if best_track is None:
         for track in midi.tracks:
-            has_notes = any(msg.type in ['note_on', 'note_off'] for msg in track)
-            if has_notes:
-                chord_track = track
+            if any(msg.type in ('note_on', 'note_off') for msg in track):
+                best_track = track
                 break
-    
-    # Extract chords from the selected track
-    chords_data = extract_chords_from_track(chord_track, midi.ticks_per_beat, time_sig_num)
-    
-    # Calculate total measures
-    if chords_data:
-        total_measures = max(chord.measure_number for chord in chords_data)
-    else:
-        total_measures = 0
-    
+
+    if best_track is None:
+        logger.warning("MIDI file contains no note events — returning empty song")
+        return ParsedSong(
+            title=None,
+            tempo=tempo,
+            time_signature=time_signature,
+            total_measures=0,
+            chords=[],
+        )
+
+    # ------------------------------------------------------------------
+    # Extract chords using the windowed algorithm
+    # ------------------------------------------------------------------
+    chords_data = extract_chords_from_track(
+        best_track,
+        midi.ticks_per_beat,
+        time_sig_num,
+        chord_window_beats=chord_window_beats,
+    )
+
+    if not chords_data:
+        logger.warning(
+            "MIDI chord extraction produced 0 chords. "
+            "Track had %d note-on events. "
+            "Consider adjusting chord_window_beats (current: %.2f).",
+            best_note_count,
+            chord_window_beats,
+        )
+
+    total_measures = max((c.measure_number for c in chords_data), default=0)
+
     return ParsedSong(
-        title=None,  # MIDI files usually don't have metadata
+        title=None,  # MIDI files rarely carry a title meta-event
         tempo=tempo,
         time_signature=time_signature,
         total_measures=total_measures,
-        chords=chords_data
+        chords=chords_data,
     )
 
 
-def extract_chords_from_track(track, ticks_per_beat: int, beats_per_measure: int) -> List[ChordData]:
-    """Extract chord data from a MIDI track."""
-    
-    chords = []
-    active_notes = []
+# -----------------------------------------------------------------------
+# Core chord-extraction algorithm (time-window grouping)
+# -----------------------------------------------------------------------
+def extract_chords_from_track(
+    track,
+    ticks_per_beat: int,
+    beats_per_measure: int,
+    *,
+    chord_window_beats: float = DEFAULT_CHORD_WINDOW_BEATS,
+) -> List[ChordData]:
+    """Extract chord data from a MIDI track using time-window grouping.
+
+    Instead of requiring notes to arrive at the *exact* same tick, this
+    algorithm collects every ``note_on`` whose onset falls within a
+    sliding window of ``chord_window_beats`` beats.  When the window
+    closes (i.e. a new note arrives *outside* the current window), the
+    accumulated notes are identified as a chord and emitted.
+
+    This handles both block-chord voicings (Corcovado-style) and
+    arpeggiated passages (Bach BWV 846-style).
+    """
+    window_ticks = int(ticks_per_beat * chord_window_beats)
+
+    # Collect every (onset_tick, midi_note) pair first so we can reason
+    # about timing cleanly.
+    note_events: List[Tuple[int, int]] = []
     current_time = 0
-    last_chord_time = 0
-    chord_threshold = ticks_per_beat / 8  # Minimum time to consider as a chord
-    
     for msg in track:
         current_time += msg.time
-        
         if msg.type == 'note_on' and msg.velocity > 0:
-            # If we have active notes and enough time has passed, save the chord
-            if active_notes and (current_time - last_chord_time) > chord_threshold:
-                if len(active_notes) >= 2:  # At least 2 notes for a chord
-                    root, chord_type = identify_chord(active_notes[:])
-                    if root:
-                        # Calculate measure and beat
-                        beats_elapsed = current_time / ticks_per_beat
-                        measure_number = int(beats_elapsed / beats_per_measure) + 1
-                        beat_position = (beats_elapsed % beats_per_measure) + 1
-                        
-                        chords.append(ChordData(
-                            measure_number=measure_number,
-                            beat_position=round(beat_position, 2),
-                            chord_symbol=f"{root}{chord_type}",
-                            midi_notes=active_notes[:]
-                        ))
-                
-                active_notes = []
-                last_chord_time = current_time
-            
-            active_notes.append(msg.note)
-        
-        elif msg.type == 'note_off' or (msg.type == 'note_on' and msg.velocity == 0):
-            if msg.note in active_notes:
-                active_notes.remove(msg.note)
-    
-    # Don't forget the last chord
-    if active_notes and len(active_notes) >= 2:
-        root, chord_type = identify_chord(active_notes)
-        if root:
-            beats_elapsed = current_time / ticks_per_beat
-            measure_number = int(beats_elapsed / beats_per_measure) + 1
-            beat_position = (beats_elapsed % beats_per_measure) + 1
-            
-            chords.append(ChordData(
-                measure_number=measure_number,
-                beat_position=round(beat_position, 2),
-                chord_symbol=f"{root}{chord_type}",
-                midi_notes=active_notes
-            ))
-    
+            note_events.append((current_time, msg.note))
+
+    if not note_events:
+        return []
+
+    # ------------------------------------------------------------------
+    # Group notes whose onsets fall within the same window
+    # ------------------------------------------------------------------
+    chords: List[ChordData] = []
+    window_start = note_events[0][0]
+    window_notes: List[int] = []
+
+    def _flush_window(window_start_tick: int) -> None:
+        """Emit a chord from the current window if enough notes exist."""
+        if len(window_notes) < MIN_NOTES_FOR_CHORD:
+            return
+        root, chord_type = identify_chord(window_notes[:])
+        if not root:
+            return
+        beats_elapsed = window_start_tick / ticks_per_beat
+        measure_number = int(beats_elapsed / beats_per_measure) + 1
+        beat_position = (beats_elapsed % beats_per_measure) + 1
+        chords.append(ChordData(
+            measure_number=measure_number,
+            beat_position=round(beat_position, 2),
+            chord_symbol=f"{root}{chord_type}",
+            midi_notes=window_notes[:],
+        ))
+
+    for onset, note in note_events:
+        if onset - window_start >= window_ticks and window_notes:
+            # Current note is outside the window — flush accumulated notes
+            _flush_window(window_start)
+            window_notes = []
+            window_start = onset
+        elif not window_notes:
+            window_start = onset
+
+        window_notes.append(note)
+
+    # Flush the final window
+    _flush_window(window_start)
+
     return chords
