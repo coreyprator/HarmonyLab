@@ -2,7 +2,7 @@
 HarmonyLab Harmonic Analysis Service
 Uses music21 for Roman numeral analysis, key detection, and pattern recognition.
 """
-from music21 import roman, key, harmony, stream
+from music21 import roman, key, harmony, stream, chord
 from typing import List, Dict, Optional
 import logging
 
@@ -57,7 +57,11 @@ class HarmonicAnalyzer:
             s = stream.Stream()
             for symbol in chords[:16]:  # Use first 16 chords
                 try:
-                    c = harmony.ChordSymbol(symbol)
+                    normalized = self._normalize_chord_symbol(symbol)
+                    cs = harmony.ChordSymbol(normalized)
+                    # Convert to plain Chord — ChordSymbol objects confuse
+                    # the Krumhansl-Schmuckler algorithm in music21.
+                    c = chord.Chord(cs.pitches)
                     s.append(c)
                 except Exception:
                     continue
