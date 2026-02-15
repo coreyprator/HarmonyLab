@@ -1,0 +1,171 @@
+{
+  "uat_version": "2.2",
+  "generated_by": "cc",
+  "generated_at": "2026-02-15T21:05:00Z",
+  "handoff_id": "HO-P1Q2",
+  "project": {
+    "name": "HarmonyLab",
+    "emoji": "🔵",
+    "version": "1.8.1",
+    "app_url": "https://harmonylab.rentyourcio.com",
+    "health_url": "https://harmonylab-57478301787.us-central1.run.app/health",
+    "deployed_revision": "harmonylab-00077-fvs"
+  },
+  "context": {
+    "summary": "Replaced the MIDI chord extraction algorithm with a time-window grouping approach so arpeggiated passages (e.g., Bach BWV 846) produce chords instead of silently returning zero results. Also changed track selection heuristic from 'highest simultaneous polyphony' to 'most total note-on events'.",
+    "root_cause": "extract_chords_from_track() cleared its note buffer on every new note_on event; arpeggiated music never accumulated >= 2 notes, producing zero chords.",
+    "files_modified": [
+      "app/services/midi_parser.py",
+      "main.py"
+    ],
+    "commit": "54bbe82",
+    "risk_areas": [
+      "Chord extraction for block-chord songs like Corcovado (regression risk from algorithm rewrite)",
+      "Track selection change could pick a different track than before for multi-track MIDI files",
+      "Time-window size (1.0 beat default) may group notes too aggressively for fast passages",
+      "Chord identification accuracy for partial arpeggiated fragments"
+    ]
+  },
+  "sections": [
+    {
+      "id": "section-1",
+      "title": "MIDI Import Fix Verification",
+      "tests": [
+        {
+          "id": "HL01-01",
+          "title": "Health check shows v1.8.1",
+          "description": "Open the backend health endpoint in a browser or use curl: GET https://harmonylab-57478301787.us-central1.run.app/health",
+          "expected": "JSON response contains: \"version\": \"1.8.1\", \"status\": \"healthy\", \"database\": \"connected\", \"service\": \"harmonylab\"",
+          "category": "fix_verification",
+          "priority": "critical",
+          "requires_midi_file": false,
+          "test_data": "URL: https://harmonylab-57478301787.us-central1.run.app/health"
+        },
+        {
+          "id": "HL01-02",
+          "title": "Bach Prelude exists with chords",
+          "description": "Query the songs API to confirm the Bach Prelude was imported: GET https://harmonylab-57478301787.us-central1.run.app/api/v1/songs — locate the entry titled 'Prelude I in C major BWV 846' (song_id 32). Then navigate to the song in the UI at https://harmonylab.rentyourcio.com and select the Bach Prelude.",
+          "expected": "Song appears in the songs list with title 'Prelude I in C major BWV 846', composer 'J.S. Bach', genre 'Classical'. The song detail view shows chords — it must NOT say 'No chords found'.",
+          "category": "fix_verification",
+          "priority": "critical",
+          "requires_midi_file": false,
+          "test_data": "Song ID: 32. API URL: https://harmonylab-57478301787.us-central1.run.app/api/v1/songs/32"
+        },
+        {
+          "id": "HL01-03",
+          "title": "Bach Prelude chord count is 80",
+          "description": "Use the API to verify chord data: GET the song's sections, then measures, then chords. Alternatively, use the Swagger docs at https://harmonylab-57478301787.us-central1.run.app/docs to query sections for song 32, then count total chords across all measures.",
+          "expected": "Total chord count for song 32 is exactly 80 chords across 20 measures. The chords should include recognizable symbols like CMaj, Gsus4, Dm, G7, etc.",
+          "category": "fix_verification",
+          "priority": "critical",
+          "requires_midi_file": false,
+          "test_data": "Song ID: 32. Use Swagger UI: https://harmonylab-57478301787.us-central1.run.app/docs — call GET /api/v1/songs/32/sections to get section IDs, then GET /api/v1/measures/section/{section_id} to list measures, then GET /api/v1/chords/measure/{measure_id} for each."
+        },
+        {
+          "id": "HL01-04",
+          "title": "Bach chord symbols are musically reasonable",
+          "description": "Examine the first 5-8 chord symbols for the Bach Prelude using the Swagger API or database. The piece opens in C major; the extracted chords should reflect that tonality.",
+          "expected": "First few chords include C-related symbols (CMaj, C, etc.). No garbled or empty chord symbols. Symbols use standard notation (e.g., 'CMaj', 'Dm7', 'G7' — not numeric codes or blanks).",
+          "category": "fix_verification",
+          "priority": "high",
+          "requires_midi_file": false,
+          "test_data": "Expected first 5: CMaj, Gsus4, CMaj, Gdim7, C (from handoff verification). Query via Swagger: GET /api/v1/chords/measure/{first_measure_id}"
+        },
+        {
+          "id": "HL01-05",
+          "title": "MIDI preview endpoint returns chords for arpeggiated file",
+          "description": "Upload any arpeggiated MIDI file (or the Bach Prelude MIDI if available) to the preview endpoint: POST https://harmonylab-57478301787.us-central1.run.app/api/v1/imports/midi/preview with form field 'file'. Use the Swagger UI for easy testing.",
+          "expected": "Response JSON includes 'chord_count' > 0 and 'chords_preview' array with at least one chord entry containing 'measure', 'beat', and 'symbol' fields.",
+          "category": "fix_verification",
+          "priority": "high",
+          "requires_midi_file": true,
+          "test_data": "Use any .mid file. Swagger UI: https://harmonylab-57478301787.us-central1.run.app/docs — POST /api/v1/imports/midi/preview"
+        }
+      ]
+    },
+    {
+      "id": "section-2",
+      "title": "Regression — Existing Song Data",
+      "tests": [
+        {
+          "id": "HL01-06",
+          "title": "Corcovado still has 45 chords",
+          "description": "Query the Corcovado song (song_id 23) via the API. Navigate through sections → measures → chords and count the total, or view the song in the UI.",
+          "expected": "Corcovado (song_id 23) has exactly 45 chords. No chords are missing, duplicated, or changed from the pre-fix state.",
+          "category": "regression",
+          "priority": "critical",
+          "requires_midi_file": false,
+          "test_data": "Song ID: 23. API: GET https://harmonylab-57478301787.us-central1.run.app/api/v1/songs/23/sections"
+        },
+        {
+          "id": "HL01-07",
+          "title": "Corcovado chord display renders correctly",
+          "description": "Open the HarmonyLab UI at https://harmonylab.rentyourcio.com. Navigate to the Corcovado song. View the chord progression display.",
+          "expected": "Chord symbols are visible and properly formatted (e.g., Am6, Ab, Gm7, C9, FMaj9). Roman numerals display if analysis has been run. No layout breakage or missing data.",
+          "category": "regression",
+          "priority": "high",
+          "requires_midi_file": false,
+          "test_data": "URL: https://harmonylab.rentyourcio.com — select Corcovado from song list"
+        },
+        {
+          "id": "HL01-08",
+          "title": "Corcovado audio playback still works",
+          "description": "Open the Corcovado song in the UI. Press the play button (if visible) to trigger Tone.js chord playback.",
+          "expected": "Audio plays without errors. Chord progression sounds through the browser's audio system. No JavaScript console errors related to Tone.js or audio context.",
+          "category": "regression",
+          "priority": "high",
+          "requires_midi_file": false,
+          "test_data": "URL: https://harmonylab.rentyourcio.com — Corcovado song detail page"
+        },
+        {
+          "id": "HL01-09",
+          "title": "Quiz functionality works with Corcovado",
+          "description": "Use the Swagger API to generate a quiz for Corcovado: POST /api/v1/quiz/generate with body {\"song_id\": 23, \"user_id\": \"test-user\"}. Verify the quiz generates questions based on Corcovado's chords.",
+          "expected": "API returns a quiz with 'attempt_id', 'total_questions' > 0, and 'questions' array. Each question has 'context_chords', 'options' (4 choices), and 'position'. No 500 errors.",
+          "category": "regression",
+          "priority": "medium",
+          "requires_midi_file": false,
+          "test_data": "Swagger UI: https://harmonylab-57478301787.us-central1.run.app/docs — POST /api/v1/quiz/generate with {\"song_id\": 23, \"user_id\": \"test-user\"}"
+        }
+      ]
+    },
+    {
+      "id": "section-3",
+      "title": "UI & Navigation",
+      "tests": [
+        {
+          "id": "HL01-10",
+          "title": "Song list shows both songs",
+          "description": "Open the HarmonyLab UI at https://harmonylab.rentyourcio.com. Navigate to the song list view.",
+          "expected": "Both 'Corcovado' and 'Prelude I in C major BWV 846' appear in the song list. Both are clickable to view details.",
+          "category": "regression",
+          "priority": "high",
+          "requires_midi_file": false,
+          "test_data": "URL: https://harmonylab.rentyourcio.com"
+        },
+        {
+          "id": "HL01-11",
+          "title": "Harmonic analysis available for Bach Prelude",
+          "description": "Request harmonic analysis for the Bach Prelude via the API: GET https://harmonylab-57478301787.us-central1.run.app/api/v1/analysis/songs/32. If analysis hasn't been run, trigger it with POST /api/v1/analysis/songs/32.",
+          "expected": "Analysis returns a JSON response with 'detected_key' (should be 'C major' or similar), 'confidence' score, and 'chords' array with Roman numeral annotations. No 500 error.",
+          "category": "exploratory",
+          "priority": "medium",
+          "requires_midi_file": false,
+          "test_data": "API: GET/POST https://harmonylab-57478301787.us-central1.run.app/api/v1/analysis/songs/32"
+        },
+        {
+          "id": "HL01-12",
+          "title": "API Swagger docs load correctly",
+          "description": "Open the Swagger API documentation at https://harmonylab-57478301787.us-central1.run.app/docs in a browser.",
+          "expected": "Swagger UI loads showing all API endpoints. The page title or header shows 'Harmony Lab API' version '1.8.1'. All endpoint groups are expandable.",
+          "category": "regression",
+          "priority": "medium",
+          "requires_midi_file": false,
+          "test_data": "URL: https://harmonylab-57478301787.us-central1.run.app/docs"
+        }
+      ]
+    }
+  ],
+  "test_data_notes": "Two songs exist in the database: Corcovado (ID 23, 45 chords, block-chord MIDI import) and Bach Prelude BWV 846 (ID 32, 80 chords, arpeggiated MIDI import from this fix). For MIDI upload tests (HL01-05), any .mid file can be used — download 'Prelude I in C major BWV 846' from a MIDI archive site or use any standard MIDI file. The frontend is served at harmonylab.rentyourcio.com; the backend API is at harmonylab-57478301787.us-central1.run.app.",
+  "cc_observations": "1) The Bach Prelude was imported using a programmatically generated MIDI file, not the original MIDI file that triggered the bug. Testing with the original file (if available) would be a stronger verification. 2) Beat-level chord grouping produces beat-by-beat chord symbols (e.g., CMaj on beat 1, Gsus4 on beat 2) rather than one chord per measure. This is technically accurate but produces more granular output than a human would write. Future improvement opportunity. 3) The frontend is a separate Cloud Run service (harmonylab-frontend). If the frontend doesn't render songs or chords, the issue is frontend-side, not related to this backend fix. Use the Swagger UI or direct API calls as definitive verification. 4) The harmonylab.rentyourcio.com domain routes to the frontend service, not the backend. Backend API tests should use the direct Cloud Run URL or the Swagger docs."
+}
