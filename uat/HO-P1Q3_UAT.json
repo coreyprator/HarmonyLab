@@ -1,0 +1,163 @@
+{
+  "uat_version": "2.2",
+  "generated_by": "cc",
+  "handoff_id": "HO-P1Q3",
+  "project": {
+    "name": "HarmonyLab",
+    "emoji": "🎵",
+    "version": "1.8.2",
+    "app_url": "https://harmonylab.rentyourcio.com",
+    "health_url": "https://harmonylab-57478301787.us-central1.run.app/health",
+    "deployed_revision": "harmonylab-00079-m7k"
+  },
+  "context": {
+    "summary": "Analysis quality fixes: rotation-based chord identification eliminates false positives (Gsus4, Gdim7), ChordSymbol-to-Chord conversion fixes music21 key detection (B minor → C major), 2-beat window improves arpeggio capture.",
+    "root_cause": "Three independent bugs: (1) identify_chord() assumed lowest note = root, causing wrong chord names for inversions; (2) music21's key analyzer produces incorrect results with ChordSymbol objects vs plain Chord objects; (3) 1-beat chord window captured only 2 pitch classes per beat in arpeggiated music.",
+    "files_modified": [
+      "app/services/midi_parser.py",
+      "app/services/analysis_service.py",
+      "main.py"
+    ],
+    "commits": ["0132605", "6bf4330"],
+    "risk_areas": [
+      "Chord naming changes could affect existing analysis displays for songs imported after v1.8.1",
+      "Window size change from 1 to 2 beats may reduce chord granularity for fast-changing jazz progressions"
+    ]
+  },
+  "sections": [
+    {
+      "id": "section-1",
+      "title": "Finding 1 — Key Detection Fix",
+      "tests": [
+        {
+          "id": "HL02-01",
+          "title": "BWV 846 key is C major",
+          "description": "Call the analysis endpoint for Bach BWV 846 (song_id 33) with refresh=true and verify the detected key.",
+          "expected": "detected_key = 'C major', confidence > 0.9",
+          "category": "fix_verification",
+          "priority": "P0",
+          "test_data": "GET /api/v1/analysis/songs/33?refresh=true"
+        },
+        {
+          "id": "HL02-02",
+          "title": "BWV 846 Roman numerals are diatonic to C",
+          "description": "Verify the first 8 chord analyses show Roman numerals consistent with C major: I, ii, V, etc.",
+          "expected": "chords[0].roman = 'IMaj', chords[2].roman = 'iim7', chords[4].roman = 'VMaj' or chords[5].roman = 'V7'",
+          "category": "fix_verification",
+          "priority": "P0",
+          "test_data": "GET /api/v1/analysis/songs/33?refresh=true → check chords array"
+        }
+      ]
+    },
+    {
+      "id": "section-2",
+      "title": "Finding 2 — Chord Naming Fix",
+      "tests": [
+        {
+          "id": "HL02-03",
+          "title": "BWV 846 first 8 chords are musically correct",
+          "description": "Query the Chords table for BWV 846 (song_id 33) and verify the first 8 chord symbols are musically reasonable for the Prelude in C.",
+          "expected": "First 8 chords include: CMaj, CMaj, Dm7, Dm7, GMaj, G7, CMaj, CMaj — no Gsus4, Gdim7, or other false positives",
+          "category": "fix_verification",
+          "priority": "P0",
+          "test_data": "SELECT m.measure_number, c.beat_position, c.chord_symbol FROM Chords c JOIN Measures m ON c.measure_id=m.id JOIN Sections s ON m.section_id=s.id WHERE s.song_id=33 ORDER BY m.measure_number, c.beat_position"
+        },
+        {
+          "id": "HL02-04",
+          "title": "No Gsus4 or Gdim7 in BWV 846",
+          "description": "Verify that the false-positive chord names 'Gsus4' and 'Gdim7' no longer appear anywhere in the BWV 846 chord data.",
+          "expected": "Zero rows returned",
+          "category": "fix_verification",
+          "priority": "P1",
+          "test_data": "SELECT * FROM Chords c JOIN Measures m ON c.measure_id=m.id JOIN Sections s ON m.section_id=s.id WHERE s.song_id=33 AND c.chord_symbol IN ('Gsus4','Gdim7')"
+        },
+        {
+          "id": "HL02-05",
+          "title": "Chord inversions handled correctly",
+          "description": "Verify that chords with bass notes different from the root are identified by their correct root, not by the bass note. E.g. Am with C bass should be 'Am', not 'CMaj'.",
+          "expected": "Measures with Am chords (e.g. M5, M12) show 'Am' not 'C' or 'CMaj'",
+          "category": "fix_verification",
+          "priority": "P1",
+          "test_data": "Check measures 5, 12 in song_id 33"
+        }
+      ]
+    },
+    {
+      "id": "section-3",
+      "title": "Finding 3 & 4 — Corcovado Count & Measure Numbering",
+      "tests": [
+        {
+          "id": "HL02-06",
+          "title": "Corcovado chord count is 45",
+          "description": "Verify Corcovado (song_id 23) has exactly 45 chords. The v1.8.1 UAT report of 47 was a miscount; the actual DB count is 45.",
+          "expected": "COUNT = 45",
+          "category": "fix_verification",
+          "priority": "P1",
+          "test_data": "SELECT COUNT(*) FROM Chords c JOIN Measures m ON c.measure_id=m.id JOIN Sections s ON m.section_id=s.id WHERE s.song_id=23"
+        },
+        {
+          "id": "HL02-07",
+          "title": "Corcovado has no duplicate chords",
+          "description": "Verify no duplicate chord entries exist for Corcovado at the same measure/beat position.",
+          "expected": "Zero rows returned (no duplicates)",
+          "category": "fix_verification",
+          "priority": "P1",
+          "test_data": "SELECT m.measure_number, c.beat_position, COUNT(*) as cnt FROM Chords c JOIN Measures m ON c.measure_id=m.id JOIN Sections s ON m.section_id=s.id WHERE s.song_id=23 GROUP BY m.measure_number, c.beat_position HAVING COUNT(*) > 1"
+        },
+        {
+          "id": "HL02-08",
+          "title": "BWV 846 measures numbered sequentially 1-20",
+          "description": "Verify Bach BWV 846 (song_id 33) has measures numbered 1 through 20 sequentially within a single section, not restarting at 1.",
+          "expected": "20 measures, numbers 1-20, all in one section named 'Main'",
+          "category": "fix_verification",
+          "priority": "P1",
+          "test_data": "SELECT s.name, m.measure_number FROM Measures m JOIN Sections s ON m.section_id=s.id WHERE s.song_id=33 ORDER BY m.measure_number"
+        }
+      ]
+    },
+    {
+      "id": "section-4",
+      "title": "Regression — Existing Data & Service Health",
+      "tests": [
+        {
+          "id": "HL02-09",
+          "title": "Health endpoint returns v1.8.2",
+          "description": "Hit the health endpoint and verify the service version is 1.8.2 and database is connected.",
+          "expected": "version = '1.8.2', status = 'healthy', database = 'connected'",
+          "category": "regression",
+          "priority": "P0",
+          "test_data": "GET /health"
+        },
+        {
+          "id": "HL02-10",
+          "title": "Corcovado analysis key unchanged",
+          "description": "Verify Corcovado key detection still returns the expected key (A minor) and is not affected by the analysis changes.",
+          "expected": "detected_key contains 'minor' — Corcovado is a bossa nova in A minor",
+          "category": "regression",
+          "priority": "P0",
+          "test_data": "GET /api/v1/analysis/songs/23?refresh=true"
+        },
+        {
+          "id": "HL02-11",
+          "title": "Corcovado chord symbols unchanged",
+          "description": "Verify the first 8 Corcovado chords are the same as before the fix: Am6, Ab, Gm7, C9, FMaj9, Bb13, Em7, Am7.",
+          "expected": "First 8 chord symbols match: Am6, Ab, Gm7, C9, FMaj9, Bb13, Em7, Am7",
+          "category": "regression",
+          "priority": "P1",
+          "test_data": "SELECT TOP 8 c.chord_symbol FROM Chords c JOIN Measures m ON c.measure_id=m.id JOIN Sections s ON m.section_id=s.id WHERE s.song_id=23 ORDER BY m.measure_number, c.beat_position"
+        },
+        {
+          "id": "HL02-12",
+          "title": "Songs list includes BWV 846",
+          "description": "Verify the songs list endpoint includes Bach BWV 846 as an active song with correct metadata.",
+          "expected": "Song 'BWV846_test' appears in the list with time_signature '4/4'",
+          "category": "regression",
+          "priority": "P1",
+          "test_data": "GET /api/v1/songs or direct DB query"
+        }
+      ]
+    }
+  ],
+  "test_data_notes": "Bach BWV 846 is song_id 33 (re-imported with v1.8.2 chord identification). Corcovado is song_id 23 (imported with pre-v1.8.1 code, data unchanged). All SQL queries run against HarmonyLab database on Cloud SQL instance flashcards-db (35.224.242.223).",
+  "cc_observations": "Finding 3 (Corcovado count 47) was a UAT miscount — DB consistently shows 45 chords with zero duplicates. Finding 4 (measure numbering) was not reproduced — measures run 1-20 sequentially in a single 'Main' section. Both are documented as no-code-change findings. The primary code fixes target Findings 1 and 2: rotation-based chord identification and ChordSymbol-to-Chord conversion for key detection."
+}
