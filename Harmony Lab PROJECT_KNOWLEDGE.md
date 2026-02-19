@@ -1,6 +1,7 @@
 # PROJECT_KNOWLEDGE.md -- HarmonyLab
 
 **Generated**: 2026-02-15
+**Updated**: 2026-02-18 — Sprint "Etymython Integration + MetaPM Dashboard Rework" close-out
 **Method**: Full project read-through of every source file, config, schema, workflow, and documentation file.
 **Purpose**: Single-file knowledge recovery for any AI agent resuming work on this project.
 
@@ -15,7 +16,8 @@
 | Repository | https://github.com/coreyprator/harmonylab | `CLAUDE.md` line 65 |
 | Local Path | `G:\My Drive\Code\Python\harmonylab` | `CLAUDE.md` line 66 |
 | Methodology | [coreyprator/project-methodology](https://github.com/coreyprator/project-methodology) v3.14 | `CLAUDE.md` line 67 |
-| Current Version | 1.8.0 | `main.py` line 17 |
+| Current Version | v1.8.2 | `main.py` line 17 (updated 2026-02-18) |
+| Latest Revision | harmonylab-00092-xyz | Sprint_CloseOut_2026-02-18.md |
 | Production URL | https://harmonylab.rentyourcio.com | `PROJECT_STATUS.md` line 5 |
 | API Docs | https://harmonylab.rentyourcio.com/docs | `PROJECT_STATUS.md` line 189 |
 | CLAUDE.md Last Updated | 2026-02-07 | `CLAUDE.md` line 269 |
@@ -488,18 +490,23 @@ Source: `app/api/routes/progress.py` lines 143-148.
 | No manual chord editing UI | Medium | `PROJECT_STATUS.md` line 106 |
 | MusicXML import not implemented | Low | `app/api/routes/imports.py` lines 186-201 (returns 501) |
 
-### From Handoff Investigation (v1.3.0 era)
-| Issue | Detail | Source |
-|-------|--------|--------|
-| Audio playback | ✅ Working | Implemented with Tone.js. Initially documented as "never implemented" based on stale handoff data — corrected 2026-02-15 per project lead testing. |
-| Quiz system | ✅ Working | Both backend API and frontend UI are functional. Initially documented as "no frontend" — corrected 2026-02-15. |
-| Roman numeral formatting | ✅ Fixed | `_format_jazz_roman()` in analysis_service.py successfully converts figured bass to jazz notation. Initially documented as broken — corrected 2026-02-15. |
-| Frontend directory untracked | Frontend files were at some point present but not committed to git. | Handoff investigation report |
+### From Sprint 2026-02-18 Investigation
+| Item | Status | Detail |
+|------|--------|--------|
+| Analysis quality UAT | **Conditional Pass** | Roman numerals work, chord symbols pass, confidence scores need improvement |
+| MIDI import P0 | ✅ **Resolved** | Arpeggio grouping fix; BWV 846 imports correctly with chords |
+| Songs imported | 2 | Corcovado + Bach BWV 846 (Prelude in C major) |
+| Audio playback | ✅ Working | Confirmed 2026-02-15 (corrected stale handoff data) |
+| Quiz system | ✅ Working | Backend + frontend UI functional |
+| Roman numeral formatting | ✅ Fixed | jazz Roman numerals working |
 
 ### Active Bugs
 | Bug | Severity | Description |
 |-----|----------|-------------|
-| MIDI import produces no chords | **P0 — High** | MIDI files import successfully (song record created) but zero chords are extracted. Tested with Bach Prelude I in C major (BWV 846) on 2026-02-15. Chord extraction or storage failing silently. Likely cause: arpeggiated passages not grouped into chords by the analysis engine. **Tracked in MetaPM. Separate CC task issued for fix.** |
+| branch/CI mismatch | P2 | Active development on `master`; CI triggers on `main`. Manual deploys required. |
+| Chord voicing playback inconsistent | Medium | Some chord voicings play incorrectly but audio playback is confirmed Working. |
+
+> **MIDI P0 RESOLVED (2026-02-18):** MIDI import bug caused by arpeggio patterns — fixed by grouping arpeggiated notes into chords. BWV 846 now imports with correct chords. 2 songs confirmed imported: Corcovado + BWV 846.
 
 ### Architectural Gaps
 | Gap | Description |
@@ -603,13 +610,22 @@ Source: `CLAUDE.md` lines 228-258.
 | Phase 5 | Progress Tracking | Backend complete, no frontend |
 | Phase 6 | UI Polish & Mobile | Not started |
 | Phase 7 | Deployment | Complete (Cloud Run live) |
-| Phase 8 | Data Population | **1 song imported** (Corcovado — used for feature development and testing). 37 jazz standards planned for import. MIDI import currently broken (P0) — fix required before population can continue. |
+| Phase 8 | Data Population | **2 songs imported:** Corcovado (used for feature dev) + BWV 846 (used for MIDI P0 fix). MIDI P0 resolved 2026-02-18. 35 more jazz standards planned for import. |
 
 ### Re-scoped Plan (from handoff architectural decisions)
 After v1.3.0 UAT failures, roadmap was re-scoped:
 - v1.3.0 = Stability + analysis (no quiz UI, no progress dashboard, no audio)
 - v1.4.0 = Quiz + progress (planned)
 - v1.5.0 = Audio playback (planned)
+- v1.8.2 = Analysis quality UAT (conditional pass), MIDI P0 resolved (deployed 2026-02-18)
+
+### What's Next (per Roadmap_Status_Report_2026-02-18.md)
+| ID | Feature | Priority |
+|----|---------|----------|
+| HL-014 | Jazz standard data import (35 more songs) | P1 — MIDI P0 resolved; ready for bulk import |
+| HL-003 | Show intervals on chord display | P2 |
+| HL-004 | Next-chord progression quiz UI | P2 |
+| HL-005 | Audio playback (Tone.js integration) | P2 |
 
 Source: Handoff architectural decisions file in `handoffs/inbox/`.
 
