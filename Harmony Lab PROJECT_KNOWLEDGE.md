@@ -630,7 +630,7 @@ After v1.3.0 UAT failures, roadmap was re-scoped:
 Source: Handoff architectural decisions file in `handoffs/inbox/`.
 
 ### Target Song Repertoire
-37 jazz standards listed in `HarmonyLab-Kickoff.md`. 0 currently imported per `PROJECT_STATUS.md` line 178.
+37 jazz standards listed in `HarmonyLab-Kickoff.md`. **2 currently imported** (Corcovado + BWV 846). MIDI P0 resolved — ready for bulk import of remaining 35 via HL-014.
 
 ---
 
