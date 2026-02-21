@@ -1,7 +1,7 @@
 # PROJECT_KNOWLEDGE.md -- HarmonyLab
 
 **Generated**: 2026-02-15
-**Updated**: 2026-02-18 — Sprint "Etymython Integration + MetaPM Dashboard Rework" close-out
+**Updated**: 2026-02-20 — Sprint "Audit + Bug Fixes" close-out (HL-007, HL-010, HL-011, HL-013, HL-014 audit, HL-018 audit)
 **Method**: Full project read-through of every source file, config, schema, workflow, and documentation file.
 **Purpose**: Single-file knowledge recovery for any AI agent resuming work on this project.
 
@@ -17,7 +17,7 @@
 | Local Path | `G:\My Drive\Code\Python\harmonylab` | `CLAUDE.md` line 66 |
 | Methodology | [coreyprator/project-methodology](https://github.com/coreyprator/project-methodology) v3.14 | `CLAUDE.md` line 67 |
 | Current Version | v1.8.2 | `main.py` line 17 (updated 2026-02-18) |
-| Latest Revision | harmonylab-00092-xyz | Sprint_CloseOut_2026-02-18.md |
+| Latest Revision | harmonylab-frontend-00057-kgs (frontend) | Sprint Closeout 2026-02-20 |
 | Production URL | https://harmonylab.rentyourcio.com | `PROJECT_STATUS.md` line 5 |
 | API Docs | https://harmonylab.rentyourcio.com/docs | `PROJECT_STATUS.md` line 189 |
 | CLAUDE.md Last Updated | 2026-02-07 | `CLAUDE.md` line 269 |
@@ -347,10 +347,10 @@ Source: `CLAUDE.md` lines 106-109.
 - **Deploy**: `gcloud run deploy` with `--set-secrets` flag injecting 4 database secrets as environment variables. Source: lines 46-53.
 - **Note**: Only deploys backend. Frontend deployment is manual or via separate process. NOT DOCUMENTED -- needs investigation whether frontend has its own CI/CD.
 
-### ⚠️ Branch Mismatch Warning
-Active development is on `master` branch. GitHub Actions CI/CD workflow triggers on push to `main`.
-This means CI/CD never fires automatically on push. Must reconcile: either rename branch to `main`
-or update the workflow trigger to `master`. Until resolved, every deploy is effectively manual.
+### ✅ Branch RESOLVED (2026-02-20, HL-007)
+Active development branch is now `main`. `origin/master` deleted. GitHub default branch set to `main`.
+CI/CD workflow (`.github/workflows/deploy.yml`) already triggered on `main` — no change needed.
+Local branch renamed, tracking `origin/main`. `CLAUDE.md` updated: `git push origin master` -> `git push origin main`.
 
 ### Container (`Dockerfile`)
 - Base image: `python:3.12-slim-bookworm`
@@ -503,10 +503,14 @@ Source: `app/api/routes/progress.py` lines 143-148.
 ### Active Bugs
 | Bug | Severity | Description |
 |-----|----------|-------------|
-| branch/CI mismatch | P2 | Active development on `master`; CI triggers on `main`. Manual deploys required. |
 | Chord voicing playback inconsistent | Medium | Some chord voicings play incorrectly but audio playback is confirmed Working. |
 
-> **MIDI P0 RESOLVED (2026-02-18):** MIDI import bug caused by arpeggio patterns — fixed by grouping arpeggiated notes into chords. BWV 846 now imports with correct chords. 2 songs confirmed imported: Corcovado + BWV 846.
+> **HL-007 RESOLVED (2026-02-20):** Branch renamed master->main. origin/master deleted. GitHub default = main.
+> **HL-010 RESOLVED (2026-02-20):** song.html now defaults to Analysis view.
+> **HL-011 RESOLVED (2026-02-20):** All 5 HTML pages now fetch version from backend API dynamically. No more hardcoded version mismatch.
+> **HL-013 DOCUMENTED (2026-02-20):** MIDI files are temp-only (tempfile.NamedTemporaryFile, deleted after parse). Only chord data in Cloud SQL. No GCS used. No persistence issue for Cloud Run.
+> **HL-014 AUDIT (2026-02-20):** MuseScore import NOT IMPLEMENTED. Upload UI missing, no .mscz parsing, MusicXML returns 501. music21 is installed for analysis only.
+> **HL-018 AUDIT (2026-02-20):** Batch import NOT IMPLEMENTED. No batch UI or endpoint. Depends on HL-014.
 
 ### Architectural Gaps
 | Gap | Description |
