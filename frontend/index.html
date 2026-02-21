@@ -18,7 +18,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v1.8.2</div>
+        <div class="nav-version">v1.8.3</div>
     </nav>
 
     <header>
@@ -38,62 +38,126 @@
                 <option value="Blues">Blues</option>
                 <option value="Pop">Pop</option>
             </select>
-            <button id="add-song-btn" class="btn btn-primary" onclick="openAddSongModal()">+ Add Song</button>
+            <button class="btn btn-primary" onclick="openImportModal()">+ Import Score</button>
+            <button class="btn" onclick="openBatchModal()">Batch Import</button>
+            <button class="btn" onclick="seedJazzStandards()">Seed Standards</button>
         </div>
 
-        <!-- Add Song Modal (MIDI Import) -->
-        <div id="add-song-modal" class="modal" style="display:none">
+        <!-- HL-014: Universal Score Import Modal -->
+        <div id="import-modal" class="modal" style="display:none">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h3>Import Song from MIDI</h3>
-                    <button class="modal-close" onclick="closeAddSongModal()">&times;</button>
+                    <h3>Import Score File</h3>
+                    <button class="modal-close" onclick="closeImportModal()">&times;</button>
                 </div>
                 <div class="modal-body">
-                    <div id="add-panel-midi">
+                    <div class="form-group">
+                        <label>Score File (.mid &nbsp;.mscz &nbsp;.mscx &nbsp;.musicxml)</label>
+                        <input type="file" id="score-file"
+                               accept=".mid,.midi,.mscz,.mscx,.musicxml,.xml,.mxl"
+                               onchange="onScoreFileSelected()">
+                    </div>
+
+                    <div id="score-loading" style="display:none">
+                        <p class="loading">Parsing file...</p>
+                    </div>
+
+                    <div id="score-preview" style="display:none">
+                        <div class="midi-info">
+                            <div class="midi-stat"><strong>Format:</strong> <span id="score-format"></span></div>
+                            <div class="midi-stat"><strong>Detected Title:</strong> <span id="score-detected-title"></span></div>
+                            <div class="midi-stat"><strong>Key:</strong> <span id="score-key"></span></div>
+                            <div class="midi-stat"><strong>Time Signature:</strong> <span id="score-time-sig"></span></div>
+                            <div class="midi-stat"><strong>Tempo:</strong> <span id="score-tempo"></span></div>
+                            <div class="midi-stat"><strong>Chords Found:</strong> <span id="score-chord-count"></span></div>
+                        </div>
+                        <div id="score-no-chords-warn" style="display:none;color:#f59e0b;margin:8px 0;font-size:0.9rem;">
+                            No chord symbols detected. The song will be imported with empty measures — add analysis manually on the song page.
+                        </div>
+                        <div class="midi-chords-preview">
+                            <label>Chord Preview (first 20)</label>
+                            <div id="score-chords-grid" class="midi-chords-grid"></div>
+                        </div>
+                        <hr style="margin:12px 0;border-color:#444">
                         <div class="form-group">
-                            <label>MIDI File (.mid, .midi)</label>
-                            <input type="file" id="midi-file" accept=".mid,.midi" onchange="onMidiFileSelected()">
+                            <label>Title (override)</label>
+                            <input type="text" id="score-title" placeholder="Leave blank to use detected title">
                         </div>
-                        <div id="midi-preview" style="display:none">
-                            <div class="midi-info">
-                                <div class="midi-stat"><strong>Detected Title:</strong> <span id="midi-detected-title"></span></div>
-                                <div class="midi-stat"><strong>Tempo:</strong> <span id="midi-tempo"></span> BPM</div>
-                                <div class="midi-stat"><strong>Time Signature:</strong> <span id="midi-time-sig"></span></div>
-                                <div class="midi-stat"><strong>Measures:</strong> <span id="midi-measures"></span></div>
-                                <div class="midi-stat"><strong>Chords Found:</strong> <span id="midi-chord-count"></span></div>
-                            </div>
-                            <div class="midi-chords-preview">
-                                <label>Chord Preview (first 20)</label>
-                                <div id="midi-chords-grid" class="midi-chords-grid"></div>
-                            </div>
-                            <hr style="margin:12px 0;border-color:#444">
-                            <div class="form-group">
-                                <label>Title (override)</label>
-                                <input type="text" id="midi-title" placeholder="Leave blank to use detected title">
-                            </div>
-                            <div class="form-group">
-                                <label>Composer</label>
-                                <input type="text" id="midi-composer" placeholder="e.g. Miles Davis">
-                            </div>
-                            <div class="form-group">
-                                <label>Genre</label>
-                                <select id="midi-genre">
-                                    <option value="">Select genre...</option>
-                                    <option value="Jazz">Jazz</option>
-                                    <option value="Bossa Nova">Bossa Nova</option>
-                                    <option value="Blues">Blues</option>
-                                    <option value="Pop">Pop</option>
-                                </select>
-                            </div>
+                        <div class="form-group">
+                            <label>Composer</label>
+                            <input type="text" id="score-composer" placeholder="e.g. Miles Davis">
                         </div>
-                        <div id="midi-loading" style="display:none">
-                            <p class="loading">Parsing MIDI file...</p>
+                        <div class="form-group">
+                            <label>Genre</label>
+                            <select id="score-genre">
+                                <option value="">Select genre...</option>
+                                <option value="Jazz">Jazz</option>
+                                <option value="Bossa Nova">Bossa Nova</option>
+                                <option value="Blues">Blues</option>
+                                <option value="Pop">Pop</option>
+                            </select>
                         </div>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button class="btn" onclick="closeAddSongModal()">Cancel</button>
-                    <button class="btn btn-primary" id="btn-import-midi" onclick="submitMidiImport()" style="display:none">Import Song</button>
+                    <button class="btn" onclick="closeImportModal()">Cancel</button>
+                    <button class="btn btn-primary" id="btn-import-score"
+                            onclick="submitScoreImport()" style="display:none">Import Song</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- HL-018: Batch Import Modal -->
+        <div id="batch-modal" class="modal" style="display:none">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Batch Import from ZIP</h3>
+                    <button class="modal-close" onclick="closeBatchModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p style="color:var(--text-muted);margin-bottom:16px;font-size:0.9rem;">
+                        Upload a ZIP file containing any mix of .mscz, .mscx, .musicxml, or .mid files.
+                        Files are processed sequentially and saved to the database.
+                    </p>
+                    <div class="form-group">
+                        <label>ZIP Archive</label>
+                        <input type="file" id="batch-file" accept=".zip">
+                    </div>
+                    <div class="form-group">
+                        <label>Composer (applied to all)</label>
+                        <input type="text" id="batch-composer" placeholder="Optional">
+                    </div>
+                    <div class="form-group">
+                        <label>Genre (applied to all)</label>
+                        <select id="batch-genre">
+                            <option value="">Select genre...</option>
+                            <option value="Jazz">Jazz</option>
+                            <option value="Bossa Nova">Bossa Nova</option>
+                            <option value="Blues">Blues</option>
+                            <option value="Pop">Pop</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                            <input type="checkbox" id="batch-skip-dupes" checked>
+                            Skip duplicate songs (same title + key already in database)
+                        </label>
+                    </div>
+
+                    <div id="batch-loading" style="display:none">
+                        <p class="loading">Importing files...</p>
+                    </div>
+
+                    <div id="batch-results" style="display:none">
+                        <hr style="margin:12px 0;border-color:#444">
+                        <div id="batch-summary" style="font-weight:600;margin-bottom:10px;"></div>
+                        <div id="batch-files-list" style="max-height:200px;overflow-y:auto;font-size:0.85rem;"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn" onclick="closeBatchModal()">Close</button>
+                    <button class="btn btn-primary" id="btn-batch-import"
+                            onclick="submitBatchImport()">Import ZIP</button>
                 </div>
             </div>
         </div>
@@ -108,12 +172,15 @@
             ? 'http://localhost:8080'
             : 'https://harmonylab-wmrla7fhwa-uc.a.run.app';
 
+        // -----------------------------------------------------------------------
+        // Song list
+        // -----------------------------------------------------------------------
+
         async function loadSongs() {
             try {
                 const genre = document.getElementById('genre-filter').value;
                 let url = `${API_BASE}/api/v1/songs/?limit=100`;
                 if (genre) url += `&genre=${encodeURIComponent(genre)}`;
-
                 const res = await fetch(url);
                 const songs = await res.json();
                 renderSongs(songs);
@@ -129,7 +196,6 @@
                 container.innerHTML = '<p class="empty">No songs found.</p>';
                 return;
             }
-
             container.innerHTML = songs.map(s => `
                 <a href="song.html?id=${s.id}" class="song-card">
                     <div class="song-title">${escHtml(s.title)}</div>
@@ -149,140 +215,248 @@
             return d.innerHTML;
         }
 
-        // Search filter
         document.getElementById('search').addEventListener('input', (e) => {
             const q = e.target.value.toLowerCase();
             document.querySelectorAll('.song-card').forEach(card => {
-                const text = card.textContent.toLowerCase();
-                card.style.display = text.includes(q) ? '' : 'none';
+                card.style.display = card.textContent.toLowerCase().includes(q) ? '' : 'none';
             });
         });
 
         document.getElementById('genre-filter').addEventListener('change', loadSongs);
 
-        // Add Song Modal
-        function openAddSongModal() {
-            midiPreviewData = null;
-            midiSelectedFile = null;
-            document.getElementById('midi-file').value = '';
-            document.getElementById('midi-preview').style.display = 'none';
-            document.getElementById('midi-loading').style.display = 'none';
-            document.getElementById('btn-import-midi').style.display = 'none';
-            document.getElementById('add-song-modal').style.display = 'flex';
+        // -----------------------------------------------------------------------
+        // HL-014: Universal Score Import Modal
+        // -----------------------------------------------------------------------
+
+        let scorePreviewData = null;
+        let scoreSelectedFile = null;
+
+        function openImportModal() {
+            scorePreviewData = null;
+            scoreSelectedFile = null;
+            document.getElementById('score-file').value = '';
+            document.getElementById('score-preview').style.display = 'none';
+            document.getElementById('score-loading').style.display = 'none';
+            document.getElementById('btn-import-score').style.display = 'none';
+            document.getElementById('import-modal').style.display = 'flex';
         }
 
-        function closeAddSongModal() {
-            document.getElementById('add-song-modal').style.display = 'none';
-            midiPreviewData = null;
-            midiSelectedFile = null;
-            document.getElementById('midi-file').value = '';
-            document.getElementById('midi-preview').style.display = 'none';
-            document.getElementById('midi-loading').style.display = 'none';
+        function closeImportModal() {
+            document.getElementById('import-modal').style.display = 'none';
+            scorePreviewData = null;
+            scoreSelectedFile = null;
         }
 
-        // MIDI Import
-        let midiPreviewData = null;
-        let midiSelectedFile = null;
-
-        async function onMidiFileSelected() {
-            const fileInput = document.getElementById('midi-file');
+        async function onScoreFileSelected() {
+            const fileInput = document.getElementById('score-file');
             const file = fileInput.files[0];
             if (!file) return;
 
-            midiSelectedFile = file;
-            document.getElementById('midi-preview').style.display = 'none';
-            document.getElementById('midi-loading').style.display = '';
+            scoreSelectedFile = file;
+            document.getElementById('score-preview').style.display = 'none';
+            document.getElementById('score-loading').style.display = '';
+            document.getElementById('btn-import-score').style.display = 'none';
 
             const formData = new FormData();
             formData.append('file', file);
 
             try {
-                const res = await fetch(`${API_BASE}/api/v1/imports/midi/preview`, {
+                const res = await fetch(`${API_BASE}/api/v1/imports/score/preview`, {
                     method: 'POST',
-                    body: formData
+                    body: formData,
                 });
 
                 if (!res.ok) {
                     const err = await res.json();
-                    throw new Error(err.detail || 'Failed to parse MIDI');
+                    throw new Error(err.detail || 'Failed to parse file');
                 }
 
-                midiPreviewData = await res.json();
+                scorePreviewData = await res.json();
 
-                document.getElementById('midi-detected-title').textContent = midiPreviewData.title || '(none)';
-                document.getElementById('midi-tempo').textContent = midiPreviewData.tempo || '?';
-                document.getElementById('midi-time-sig').textContent = midiPreviewData.time_signature || '?';
-                document.getElementById('midi-measures').textContent = midiPreviewData.total_measures || 0;
-                document.getElementById('midi-chord-count').textContent = midiPreviewData.chord_count || 0;
+                document.getElementById('score-format').textContent = scorePreviewData.format || '?';
+                document.getElementById('score-detected-title').textContent = scorePreviewData.title || '(none)';
+                document.getElementById('score-key').textContent = scorePreviewData.key || '(unknown)';
+                document.getElementById('score-time-sig').textContent = scorePreviewData.time_signature || '?';
+                document.getElementById('score-tempo').textContent =
+                    scorePreviewData.tempo ? scorePreviewData.tempo + ' BPM' : '?';
+                document.getElementById('score-chord-count').textContent = scorePreviewData.chord_count || 0;
 
-                // Render chord preview grid
-                const grid = document.getElementById('midi-chords-grid');
-                const chords = midiPreviewData.chords_preview || [];
-                grid.innerHTML = chords.map(c =>
-                    `<span class="midi-chord-chip">m${c.measure}:${c.symbol}</span>`
-                ).join('');
+                const noChordWarn = document.getElementById('score-no-chords-warn');
+                noChordWarn.style.display = scorePreviewData.has_chord_symbols ? 'none' : '';
 
-                // Pre-fill title
-                document.getElementById('midi-title').value = midiPreviewData.title || '';
+                const grid = document.getElementById('score-chords-grid');
+                const chords = scorePreviewData.chords_preview || [];
+                grid.innerHTML = chords.length
+                    ? chords.map(c => `<span class="midi-chord-chip">m${c.measure}:${c.symbol}</span>`).join('')
+                    : '<span style="color:var(--text-muted)">No chord symbols found in file</span>';
 
-                document.getElementById('midi-preview').style.display = '';
-                document.getElementById('btn-import-midi').style.display = '';
+                document.getElementById('score-title').value = scorePreviewData.title || '';
+
+                document.getElementById('score-preview').style.display = '';
+                document.getElementById('btn-import-score').style.display = '';
             } catch (err) {
-                alert('Error parsing MIDI: ' + err.message);
+                alert('Error parsing file: ' + err.message);
             } finally {
-                document.getElementById('midi-loading').style.display = 'none';
+                document.getElementById('score-loading').style.display = 'none';
             }
         }
 
-        async function submitMidiImport() {
-            if (!midiSelectedFile) {
-                alert('Please select a MIDI file first');
+        async function submitScoreImport() {
+            if (!scoreSelectedFile) {
+                alert('Please select a file first');
                 return;
             }
 
             const formData = new FormData();
-            formData.append('file', midiSelectedFile);
+            formData.append('file', scoreSelectedFile);
 
-            const title = document.getElementById('midi-title').value.trim();
-            const composer = document.getElementById('midi-composer').value.trim();
-            const genre = document.getElementById('midi-genre').value;
+            const title = document.getElementById('score-title').value.trim();
+            const composer = document.getElementById('score-composer').value.trim();
+            const genre = document.getElementById('score-genre').value;
 
-            let url = `${API_BASE}/api/v1/imports/midi/import`;
             const params = new URLSearchParams();
             if (title) params.set('title', title);
             if (composer) params.set('composer', composer);
             if (genre) params.set('genre', genre);
-            if (params.toString()) url += '?' + params.toString();
+
+            const url = `${API_BASE}/api/v1/imports/score/import` + (params.toString() ? '?' + params.toString() : '');
 
             try {
-                document.getElementById('btn-import-midi').disabled = true;
-                document.getElementById('btn-import-midi').textContent = 'Importing...';
+                const btn = document.getElementById('btn-import-score');
+                btn.disabled = true;
+                btn.textContent = 'Importing...';
 
-                const res = await fetch(url, {
-                    method: 'POST',
-                    body: formData
-                });
-
+                const res = await fetch(url, { method: 'POST', body: formData });
                 if (!res.ok) {
                     const err = await res.json();
-                    throw new Error(err.detail || 'Failed to import MIDI');
+                    throw new Error(err.detail || 'Failed to import');
                 }
 
                 const result = await res.json();
-                closeAddSongModal();
+                closeImportModal();
                 window.location.href = `song.html?id=${result.song_id}`;
             } catch (err) {
-                alert('Error importing MIDI: ' + err.message);
+                alert('Error importing: ' + err.message);
             } finally {
-                document.getElementById('btn-import-midi').disabled = false;
-                document.getElementById('btn-import-midi').textContent = 'Import Song';
+                const btn = document.getElementById('btn-import-score');
+                btn.disabled = false;
+                btn.textContent = 'Import Song';
             }
         }
 
-        // Close modal on backdrop click
-        document.getElementById('add-song-modal').addEventListener('click', (e) => {
-            if (e.target === e.currentTarget) closeAddSongModal();
+        document.getElementById('import-modal').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) closeImportModal();
         });
+
+        // -----------------------------------------------------------------------
+        // HL-018: Batch Import Modal
+        // -----------------------------------------------------------------------
+
+        function openBatchModal() {
+            document.getElementById('batch-file').value = '';
+            document.getElementById('batch-composer').value = '';
+            document.getElementById('batch-genre').value = '';
+            document.getElementById('batch-skip-dupes').checked = true;
+            document.getElementById('batch-loading').style.display = 'none';
+            document.getElementById('batch-results').style.display = 'none';
+            document.getElementById('btn-batch-import').disabled = false;
+            document.getElementById('btn-batch-import').textContent = 'Import ZIP';
+            document.getElementById('batch-modal').style.display = 'flex';
+        }
+
+        function closeBatchModal() {
+            document.getElementById('batch-modal').style.display = 'none';
+        }
+
+        async function submitBatchImport() {
+            const fileInput = document.getElementById('batch-file');
+            const file = fileInput.files[0];
+            if (!file) {
+                alert('Please select a ZIP file');
+                return;
+            }
+
+            const composer = document.getElementById('batch-composer').value.trim();
+            const genre = document.getElementById('batch-genre').value;
+            const skipDupes = document.getElementById('batch-skip-dupes').checked;
+
+            const params = new URLSearchParams({ skip_duplicates: skipDupes });
+            if (composer) params.set('composer', composer);
+            if (genre) params.set('genre', genre);
+
+            const url = `${API_BASE}/api/v1/imports/batch?${params.toString()}`;
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const btn = document.getElementById('btn-batch-import');
+            try {
+                btn.disabled = true;
+                btn.textContent = 'Importing...';
+                document.getElementById('batch-loading').style.display = '';
+                document.getElementById('batch-results').style.display = 'none';
+
+                const res = await fetch(url, { method: 'POST', body: formData });
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || 'Batch import failed');
+                }
+
+                const result = await res.json();
+                document.getElementById('batch-summary').textContent = result.summary || '';
+
+                const statusColors = { imported: '#22c55e', skipped: '#f59e0b', failed: '#ef4444' };
+                const filesList = (result.files || []).map(f => {
+                    const color = statusColors[f.status] || '#aaa';
+                    const detail = f.status === 'imported'
+                        ? ` — ${escHtml(f.title)} (${f.chords} chords)`
+                        : f.reason ? ` — ${escHtml(f.reason)}` : f.error ? ` — ${escHtml(f.error)}` : '';
+                    return `<div style="margin:3px 0;">
+                        <span style="color:${color};font-weight:600;">[${f.status}]</span>
+                        ${escHtml(f.filename)}${detail}
+                    </div>`;
+                }).join('');
+
+                document.getElementById('batch-files-list').innerHTML = filesList || '(no files processed)';
+                document.getElementById('batch-results').style.display = '';
+
+                // Reload song list if anything was imported
+                if (result.imported > 0) loadSongs();
+
+            } catch (err) {
+                alert('Batch import error: ' + err.message);
+            } finally {
+                document.getElementById('batch-loading').style.display = 'none';
+                btn.disabled = false;
+                btn.textContent = 'Import ZIP';
+            }
+        }
+
+        document.getElementById('batch-modal').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) closeBatchModal();
+        });
+
+        // -----------------------------------------------------------------------
+        // HL-008: Seed Jazz Standards
+        // -----------------------------------------------------------------------
+
+        async function seedJazzStandards() {
+            if (!confirm('Seed 15 jazz standards into the database? (Duplicates are skipped by default.)')) return;
+
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/imports/seed-standards?skip_duplicates=true`, {
+                    method: 'POST',
+                });
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || 'Seeding failed');
+                }
+                const result = await res.json();
+                alert(result.summary || 'Seeding complete');
+                loadSongs();
+            } catch (err) {
+                alert('Error seeding standards: ' + err.message);
+            }
+        }
     </script>
     <script src="js/auth.js"></script>
     <script>
@@ -293,7 +467,6 @@
                 window.location.href = '/login.html';
                 return;
             }
-            // Authenticated - show page and load content
             document.body.style.display = '';
             window.auth.updateAuthUI();
             loadSongs();
