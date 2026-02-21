@@ -1,7 +1,7 @@
 # PROJECT_KNOWLEDGE.md -- HarmonyLab
 
 **Generated**: 2026-02-15
-**Updated**: 2026-02-21 — Sprint "Import Pipeline" close-out (HL-014, HL-018, HL-008, HL-009 confirmed)
+**Updated**: 2026-02-21 — Sprint "Rework v1.8.4" close-out (IMP-01, CHD-02, IMP-03, P3, P4, P5)
 **Method**: Full project read-through of every source file, config, schema, workflow, and documentation file.
 **Purpose**: Single-file knowledge recovery for any AI agent resuming work on this project.
 
@@ -16,8 +16,8 @@
 | Repository | https://github.com/coreyprator/harmonylab | `CLAUDE.md` line 65 |
 | Local Path | `G:\My Drive\Code\Python\harmonylab` | `CLAUDE.md` line 66 |
 | Methodology | [coreyprator/project-methodology](https://github.com/coreyprator/project-methodology) v3.14 | `CLAUDE.md` line 67 |
-| Current Version | v1.8.3 | `main.py` line 17 (updated 2026-02-21) |
-| Latest Revision | harmonylab-00084-4mz (backend), harmonylab-frontend-00058-wp7 (frontend) | Sprint Closeout 2026-02-21 |
+| Current Version | v1.8.4 | `main.py` line 17 (updated 2026-02-21) |
+| Latest Revision | harmonylab-00087-fw9 (backend), harmonylab-frontend-00059-ctf (frontend) | Sprint Closeout 2026-02-21 |
 | Production URL | https://harmonylab.rentyourcio.com | `PROJECT_STATUS.md` line 5 |
 | API Docs | https://harmonylab.rentyourcio.com/docs | `PROJECT_STATUS.md` line 189 |
 | CLAUDE.md Last Updated | 2026-02-07 | `CLAUDE.md` line 269 |
@@ -639,6 +639,8 @@ After v1.3.0 UAT failures, roadmap was re-scoped:
 - v1.4.0 = Quiz + progress (planned)
 - v1.5.0 = Audio playback (planned)
 - v1.8.2 = Analysis quality UAT (conditional pass), MIDI P0 resolved (deployed 2026-02-18)
+- v1.8.3 = Import pipeline: MuseScore/MusicXML/MIDI universal import, batch ZIP import, 15 jazz standards seeded (deployed 2026-02-21)
+- v1.8.4 = Rework sprint: MIDI crash fix (auth.js 5xx handling), chord modal + extensions + bass note, import diagnostic, showToast(), health component field (deployed 2026-02-21)
 
 ### What's Next (updated 2026-02-21)
 | ID | Feature | Priority |
@@ -653,7 +655,7 @@ After v1.3.0 UAT failures, roadmap was re-scoped:
 Source: Handoff architectural decisions file in `handoffs/inbox/`.
 
 ### Target Song Repertoire
-37 jazz standards listed in `HarmonyLab-Kickoff.md`. **17 currently in DB** (2026-02-21): 2 legacy MIDI + 15 seeded jazz standards. 22 more from the original target list yet to be added. Batch import via ZIP is now available for any additional file uploads.
+37 jazz standards listed in `HarmonyLab-Kickoff.md`. **20 currently in DB** (2026-02-21 post v1.8.4 UAT): 15 seeded jazz standards + others imported during testing. Batch import via ZIP is now available for any additional file uploads.
 
 ---
 
