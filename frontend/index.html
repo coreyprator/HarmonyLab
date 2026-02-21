@@ -18,7 +18,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v1.8.3</div>
+        <div class="nav-version">v1.8.4</div>
     </nav>
 
     <header>
@@ -295,7 +295,7 @@
                 document.getElementById('score-preview').style.display = '';
                 document.getElementById('btn-import-score').style.display = '';
             } catch (err) {
-                alert('Error parsing file: ' + err.message);
+                showToast('Error parsing file: ' + err.message);
             } finally {
                 document.getElementById('score-loading').style.display = 'none';
             }
@@ -303,7 +303,7 @@
 
         async function submitScoreImport() {
             if (!scoreSelectedFile) {
-                alert('Please select a file first');
+                showToast('Please select a file first', 'info');
                 return;
             }
 
@@ -336,7 +336,7 @@
                 closeImportModal();
                 window.location.href = `song.html?id=${result.song_id}`;
             } catch (err) {
-                alert('Error importing: ' + err.message);
+                showToast('Error importing: ' + err.message);
             } finally {
                 const btn = document.getElementById('btn-import-score');
                 btn.disabled = false;
@@ -372,7 +372,7 @@
             const fileInput = document.getElementById('batch-file');
             const file = fileInput.files[0];
             if (!file) {
-                alert('Please select a ZIP file');
+                showToast('Please select a ZIP file', 'info');
                 return;
             }
 
@@ -423,7 +423,7 @@
                 if (result.imported > 0) loadSongs();
 
             } catch (err) {
-                alert('Batch import error: ' + err.message);
+                showToast('Batch import error: ' + err.message);
             } finally {
                 document.getElementById('batch-loading').style.display = 'none';
                 btn.disabled = false;
@@ -451,10 +451,10 @@
                     throw new Error(err.detail || 'Seeding failed');
                 }
                 const result = await res.json();
-                alert(result.summary || 'Seeding complete');
+                showToast(result.summary || 'Seeding complete', 'success');
                 loadSongs();
             } catch (err) {
-                alert('Error seeding standards: ' + err.message);
+                showToast('Error seeding standards: ' + err.message);
             }
         }
     </script>

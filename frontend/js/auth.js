@@ -231,11 +231,25 @@ class Auth {
                 return refreshed;
             }
 
-            // Other error
+            // 5xx or other transient error — don't clear auth if local token is still valid.
+            // This prevents logout when the backend restarts (e.g., after a cold start
+            // triggered by a heavy import operation).
+            if (!this._isExpired(token)) {
+                console.warn('Auth check got', response.status, '— trusting non-expired local token');
+                this.accessToken = token;
+                return true;
+            }
+
             this.clearAuth();
             return false;
         } catch (error) {
+            // Network error — trust local token if not expired rather than forcing logout
             console.error('Auth check error:', error);
+            if (!this._isExpired(token)) {
+                console.warn('Auth check network error — trusting non-expired local token');
+                this.accessToken = token;
+                return true;
+            }
             return false;
         }
     }
@@ -346,3 +360,35 @@ document.addEventListener('DOMContentLoaded', () => {
         window.auth.updateAuthUI();
     }
 });
+
+// HL-v1.8.4: Global toast notification system
+window.showToast = function(message, type = 'error') {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.style.cssText = [
+            'position:fixed', 'bottom:20px', 'right:20px', 'z-index:9999',
+            'display:flex', 'flex-direction:column', 'gap:8px',
+            'max-width:360px', 'pointer-events:none'
+        ].join(';');
+        document.body.appendChild(container);
+    }
+
+    const toast = document.createElement('div');
+    const bg = type === 'error' ? '#c0392b' : type === 'success' ? '#27ae60' : '#2980b9';
+    toast.style.cssText = [
+        'background:' + bg, 'color:#fff', 'padding:12px 16px',
+        'border-radius:6px', 'font-size:0.9rem', 'line-height:1.4',
+        'box-shadow:0 2px 8px rgba(0,0,0,0.3)', 'pointer-events:auto',
+        'opacity:1', 'transition:opacity 0.3s'
+    ].join(';');
+    toast.textContent = message;
+
+    container.appendChild(toast);
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 320);
+    }, 4000);
+};
+

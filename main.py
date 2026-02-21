@@ -14,7 +14,7 @@ from app.api.routes import songs, sections, vocabulary, measures, chords, progre
 
 logger = logging.getLogger(__name__)
 
-VERSION = "1.8.3"
+VERSION = "1.8.4"
 
 app = FastAPI(
     title="Harmony Lab API",
@@ -77,6 +77,7 @@ async def health_check():
         "status": "healthy" if db_ok else "degraded",
         "database": "connected" if db_ok else "disconnected",
         "service": "harmonylab",
+        "component": "backend",
         "version": VERSION
     }
 
