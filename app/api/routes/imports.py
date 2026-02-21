@@ -253,12 +253,13 @@ async def import_score(
             detail=f"Unsupported format '{ext}'. Supported: {', '.join(sorted(SUPPORTED_EXTENSIONS))}"
         )
 
-    content = await file.read()
-    with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
-        tmp.write(content)
-        tmp_path = tmp.name
-
+    tmp_path = None
     try:
+        content = await file.read()
+        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+
         parsed = parse_music_file(tmp_path, file.filename)
         source_type = {
             '.mscz': 'MuseScore', '.mscx': 'MuseScore',
@@ -268,9 +269,14 @@ async def import_score(
 
         db = DatabaseConnection(settings)
         result = _save_score_to_db(db, parsed, title, composer, genre, file.filename, source_type)
+
         chord_warning = ""
         if result["chords_created"] == 0:
-            chord_warning = " Note: no chord symbols were found in this file. Open the song and add analysis manually."
+            chord_warning = (
+                " No chord symbols found in this file — open the song and add analysis manually."
+            )
+
+        measures_with_chords = len(set(c.measure_number for c in parsed.chords)) if parsed.chords else 0
 
         return {
             "success": True,
@@ -280,14 +286,22 @@ async def import_score(
             "measures_created": result["measures_created"],
             "chords_created": result["chords_created"],
             "message": f"Imported '{result['title']}' ({result['chords_created']} chords){chord_warning}",
+            "diagnostic": {
+                "measures_with_chords": measures_with_chords,
+                "chords_derived": result["chords_created"],
+                "key_detected": parsed.key,
+                "time_signature": parsed.time_signature,
+            },
         }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Error importing file %s", file.filename)
         raise HTTPException(status_code=500, detail=f"Import failed: {e}")
     finally:
-        if os.path.exists(tmp_path):
+        if tmp_path and os.path.exists(tmp_path):
             os.unlink(tmp_path)
 
 
