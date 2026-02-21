@@ -1,7 +1,7 @@
 # PROJECT_KNOWLEDGE.md -- HarmonyLab
 
 **Generated**: 2026-02-15
-**Updated**: 2026-02-20 — Sprint "Audit + Bug Fixes" close-out (HL-007, HL-010, HL-011, HL-013, HL-014 audit, HL-018 audit)
+**Updated**: 2026-02-21 — Sprint "Import Pipeline" close-out (HL-014, HL-018, HL-008, HL-009 confirmed)
 **Method**: Full project read-through of every source file, config, schema, workflow, and documentation file.
 **Purpose**: Single-file knowledge recovery for any AI agent resuming work on this project.
 
@@ -16,8 +16,8 @@
 | Repository | https://github.com/coreyprator/harmonylab | `CLAUDE.md` line 65 |
 | Local Path | `G:\My Drive\Code\Python\harmonylab` | `CLAUDE.md` line 66 |
 | Methodology | [coreyprator/project-methodology](https://github.com/coreyprator/project-methodology) v3.14 | `CLAUDE.md` line 67 |
-| Current Version | v1.8.2 | `main.py` line 17 (updated 2026-02-18) |
-| Latest Revision | harmonylab-frontend-00057-kgs (frontend) | Sprint Closeout 2026-02-20 |
+| Current Version | v1.8.3 | `main.py` line 17 (updated 2026-02-21) |
+| Latest Revision | harmonylab-00084-4mz (backend), harmonylab-frontend-00058-wp7 (frontend) | Sprint Closeout 2026-02-21 |
 | Production URL | https://harmonylab.rentyourcio.com | `PROJECT_STATUS.md` line 5 |
 | API Docs | https://harmonylab.rentyourcio.com/docs | `PROJECT_STATUS.md` line 189 |
 | CLAUDE.md Last Updated | 2026-02-07 | `CLAUDE.md` line 269 |
@@ -238,10 +238,12 @@ All routes registered in `main.py` lines 85-94. Total: 36+ endpoints per `PROJEC
 ### Imports (`app/api/routes/imports.py`, prefix: `/api/v1/imports`)
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/midi/preview` | Upload and parse MIDI file, return preview (no DB save) |
-| POST | `/midi/import` | Import MIDI file and save to database |
-| POST | `/musicxml/preview` | **501 Not Implemented** -- placeholder |
-| POST | `/musicxml/import` | **501 Not Implemented** -- placeholder |
+| POST | `/midi/preview` | Legacy: Upload and parse MIDI file, return preview (no DB save) |
+| POST | `/midi/import` | Legacy: Import MIDI file and save to database |
+| POST | `/score/preview` | **HL-014**: Universal format preview (.mscz .mscx .musicxml .mid) — returns title/key/tempo/chords |
+| POST | `/score/import` | **HL-014**: Universal format import — saves to Cloud SQL |
+| POST | `/batch` | **HL-018**: ZIP batch import — accepts ZIP of any supported formats, skips duplicates |
+| POST | `/seed-standards` | **HL-008**: Seed 15 jazz standards directly (no file upload); safe to call multiple times |
 
 ### Analysis (`app/api/routes/analysis.py`, prefix: `/api/v1/analysis`)
 | Method | Path | Description |
@@ -255,6 +257,19 @@ All routes registered in `main.py` lines 85-94. Total: 36+ endpoints per `PROJEC
 ---
 
 ## 7. Services
+
+### Universal Score Parser (`app/services/score_parser.py`) *(added 2026-02-21)*
+
+Unified parser for all supported music file formats. Key components:
+
+- **`ParsedScore` dataclass**: title, key, time_signature, tempo, chords (list of `ScoreChord`).
+- **`ScoreChord` dataclass**: measure_number, beat_position, chord_symbol, chord_order.
+- **`parse_music_file(file_path, filename)`**: Dispatches by extension.
+  - `.mscz` → unzip with `zipfile`, extract `.mscx`, parse XML with `xml.etree.ElementTree`
+  - `.mscx` → parse XML directly. Extracts `<Harmony>/<name>` elements. Maps numeric root (14=C…25=B) via `MSCZ_ROOT_TO_NOTE`.
+  - `.musicxml/.xml/.mxl` → `music21.converter.parse()`, extracts `harmony.ChordSymbol` objects
+  - `.mid/.midi` → delegates to existing `app.services.midi_parser.parse_midi_file()`
+- **Key maps**: `_SHARP_KEYS` (0=C…7=C#), `_FLAT_KEYS` (-1=F…-7=Cb), `MSCZ_ROOT_TO_NOTE` (14=C…25=B)
 
 ### MIDI Parser (`app/services/midi_parser.py`)
 
@@ -488,7 +503,7 @@ Source: `app/api/routes/progress.py` lines 143-148.
 | Chord voicing playback incorrect | Medium | `PROJECT_STATUS.md` line 104 |
 | MIDI parser includes melody notes in chord detection | Low | `PROJECT_STATUS.md` line 105 |
 | No manual chord editing UI | Medium | `PROJECT_STATUS.md` line 106 |
-| MusicXML import not implemented | Low | `app/api/routes/imports.py` lines 186-201 (returns 501) |
+| MusicXML import not implemented | Low | **RESOLVED 2026-02-21 (HL-014)**: Universal /score/preview + /score/import endpoints now handle all formats |
 
 ### From Sprint 2026-02-18 Investigation
 | Item | Status | Detail |
@@ -505,12 +520,14 @@ Source: `app/api/routes/progress.py` lines 143-148.
 |-----|----------|-------------|
 | Chord voicing playback inconsistent | Medium | Some chord voicings play incorrectly but audio playback is confirmed Working. |
 
+> **HL-014 RESOLVED (2026-02-21):** Universal score parser (score_parser.py). /score/preview + /score/import endpoints. Supports .mscz, .mscx, .musicxml, .mid. Old /musicxml/* 501 stubs removed.
+> **HL-018 RESOLVED (2026-02-21):** /batch endpoint accepts ZIP of any supported formats, duplicate detection, per-file error logging.
+> **HL-008 RESOLVED (2026-02-21):** 15 jazz standards seeded via /seed-standards. All in DB and query-able. Songs: Autumn Leaves, All The Things You Are, Blue Bossa, Fly Me To The Moon, Take The A Train, Misty, Summertime, Satin Doll, So What, Wave, Maiden Voyage, Watermelon Man, Round Midnight, Footprints, There Will Never Be Another You.
+> **HL-009 CONFIRMED (2026-02-21):** Chord dropdown editing already implemented in song.html. No change needed.
 > **HL-007 RESOLVED (2026-02-20):** Branch renamed master->main. origin/master deleted. GitHub default = main.
 > **HL-010 RESOLVED (2026-02-20):** song.html now defaults to Analysis view.
 > **HL-011 RESOLVED (2026-02-20):** All 5 HTML pages now fetch version from backend API dynamically. No more hardcoded version mismatch.
 > **HL-013 DOCUMENTED (2026-02-20):** MIDI files are temp-only (tempfile.NamedTemporaryFile, deleted after parse). Only chord data in Cloud SQL. No GCS used. No persistence issue for Cloud Run.
-> **HL-014 AUDIT (2026-02-20):** MuseScore import NOT IMPLEMENTED. Upload UI missing, no .mscz parsing, MusicXML returns 501. music21 is installed for analysis only.
-> **HL-018 AUDIT (2026-02-20):** Batch import NOT IMPLEMENTED. No batch UI or endpoint. Depends on HL-014.
 
 ### Architectural Gaps
 | Gap | Description |
@@ -608,13 +625,13 @@ Source: `CLAUDE.md` lines 228-258.
 |-------|------|--------|
 | Phase 0 | Foundation | Complete |
 | Phase 1 | Core CRUD & Database | Complete (Sprint 1) |
-| Phase 2 | File Import (MIDI/MusicXML) | MIDI complete, MusicXML not implemented |
+| Phase 2 | File Import (MIDI/MusicXML) | **COMPLETE** (2026-02-21) — MIDI + MusicXML + MuseScore all supported via /score/* endpoints |
 | Phase 3 | Playback System (Tone.js) | Not started -- design exists but no code |
 | Phase 4 | Quiz System | Backend complete, no frontend |
 | Phase 5 | Progress Tracking | Backend complete, no frontend |
 | Phase 6 | UI Polish & Mobile | Not started |
 | Phase 7 | Deployment | Complete (Cloud Run live) |
-| Phase 8 | Data Population | **2 songs imported:** Corcovado (used for feature dev) + BWV 846 (used for MIDI P0 fix). MIDI P0 resolved 2026-02-18. 35 more jazz standards planned for import. |
+| Phase 8 | Data Population | **17 songs in DB** (2026-02-21): 2 legacy MIDI (Corcovado, BWV846_test) + 15 jazz standards seeded via /seed-standards (Autumn Leaves, All The Things You Are, Blue Bossa, Fly Me To The Moon, Take The A Train, Misty, Summertime, Satin Doll, So What, Wave, Maiden Voyage, Watermelon Man, Round Midnight, Footprints, There Will Never Be Another You). Batch import via ZIP now available for additional songs. |
 
 ### Re-scoped Plan (from handoff architectural decisions)
 After v1.3.0 UAT failures, roadmap was re-scoped:
@@ -623,18 +640,20 @@ After v1.3.0 UAT failures, roadmap was re-scoped:
 - v1.5.0 = Audio playback (planned)
 - v1.8.2 = Analysis quality UAT (conditional pass), MIDI P0 resolved (deployed 2026-02-18)
 
-### What's Next (per Roadmap_Status_Report_2026-02-18.md)
+### What's Next (updated 2026-02-21)
 | ID | Feature | Priority |
 |----|---------|----------|
-| HL-014 | Jazz standard data import (35 more songs) | P1 — MIDI P0 resolved; ready for bulk import |
 | HL-003 | Show intervals on chord display | P2 |
 | HL-004 | Next-chord progression quiz UI | P2 |
 | HL-005 | Audio playback (Tone.js integration) | P2 |
+| HL-015 | Annotated MuseScore export | P3 |
+| HL-016 | Melody analysis | P3 |
+| HL-017 | Rhythm analysis | P3 |
 
 Source: Handoff architectural decisions file in `handoffs/inbox/`.
 
 ### Target Song Repertoire
-37 jazz standards listed in `HarmonyLab-Kickoff.md`. **2 currently imported** (Corcovado + BWV 846). MIDI P0 resolved — ready for bulk import of remaining 35 via HL-014.
+37 jazz standards listed in `HarmonyLab-Kickoff.md`. **17 currently in DB** (2026-02-21): 2 legacy MIDI + 15 seeded jazz standards. 22 more from the original target list yet to be added. Batch import via ZIP is now available for any additional file uploads.
 
 ---
 
@@ -664,6 +683,7 @@ Source: Handoff architectural decisions file in `handoffs/inbox/`.
 | `config/settings.py` | Configuration | Secret Manager integration, OAuth settings |
 | `app/db/connection.py` | Database layer | Database and DatabaseConnection classes |
 | `app/models/__init__.py` | Data models | All Pydantic models |
+| `app/services/score_parser.py` | Universal parser | .mscz/.mscx (ET XML), .musicxml (music21), .mid (mido delegate). ParsedScore + ScoreChord dataclasses |
 | `app/services/midi_parser.py` | MIDI parser | mido-based chord detection |
 | `app/services/analysis_service.py` | Analysis | music21 harmonic analysis |
 | `app/services/auth_service.py` | Auth service | JWT token management |
