@@ -99,7 +99,7 @@
                 Sign in to access quizzes and track your progress
             </p>
 
-            <p class="login-version">v1.8.0</p>
+            <p class="login-version" id="login-version">v1.8.2</p>
         </div>
     </div>
 
@@ -131,6 +131,13 @@
                 localStorage.setItem('harmonylab_token', params.get('token'));
                 window.location.href = '/index.html';
             }
+
+            // HL-011: fetch version from backend, don't hardcode
+            try {
+                const r = await fetch('https://harmonylab-wmrla7fhwa-uc.a.run.app/');
+                const d = await r.json();
+                if (d.version) document.getElementById('login-version').textContent = 'v' + d.version;
+            } catch (e) {}
         });
     </script>
 </body>

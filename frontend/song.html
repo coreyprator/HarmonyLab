@@ -20,7 +20,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v1.8.0</div>
+        <div class="nav-version">v1.8.2</div>
     </nav>
 
     <header>
@@ -40,8 +40,8 @@
         <!-- View Toggle + Analysis Controls -->
         <div class="controls-bar">
             <div class="view-toggle">
-                <label><input type="radio" name="view" value="chords" checked> Chords</label>
-                <label><input type="radio" name="view" value="analysis"> Analysis</label>
+                <label><input type="radio" name="view" value="chords"> Chords</label>
+                <label><input type="radio" name="view" value="analysis" checked> Analysis</label>
             </div>
 
             <div class="analysis-controls" id="analysis-controls" style="display:none">
@@ -225,7 +225,7 @@
         const params = new URLSearchParams(window.location.search);
         const songId = params.get('id');
 
-        let currentView = 'chords';
+        let currentView = 'analysis';
         let songData = null;
         let analysisData = null;
         let allChords = [];
@@ -245,6 +245,8 @@
             await loadSongChords();
             // Pre-load analysis to show detected key in header
             await loadAnalysisForHeader();
+            // Default to Analysis view (HL-010)
+            switchView('analysis');
         }
 
         async function loadAnalysisForHeader() {

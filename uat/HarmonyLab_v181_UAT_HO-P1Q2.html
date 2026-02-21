@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔵 HarmonyLab v1.8.1 — UAT HO-P1Q2</title>
+    <style>
+        :root {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-card: #1e293b;
+            --bg-input: #0f172a;
+            --accent: #3b82f6;
+            --accent-success: #22c55e;
+            --accent-danger: #ef4444;
+            --accent-warning: #f59e0b;
+            --accent-skip: #8b5cf6;
+            --text-primary: #e2e8f0;
+            --text-muted: #94a3b8;
+            --border-color: #334155;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 20px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        /* Header */
+        header {
+            background: linear-gradient(135deg, #1d4ed8, #3b82f6);
+            padding: 24px 28px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            color: white;
+        }
+        header h1 { font-size: 1.4rem; font-weight: 700; margin-bottom: 4px; }
+        header .subtitle { font-size: 0.9rem; opacity: 0.85; margin-bottom: 14px; }
+        .meta-row { display: flex; gap: 10px; flex-wrap: wrap; font-size: 0.8rem; }
+        .meta-tag {
+            background: rgba(0,0,0,0.25);
+            padding: 5px 12px;
+            border-radius: 6px;
+            font-family: monospace;
+        }
+
+        /* Context box */
+        .context-box {
+            background: var(--bg-secondary);
+            border-left: 4px solid var(--accent);
+            padding: 16px 20px;
+            border-radius: 0 8px 8px 0;
+            margin-bottom: 20px;
+            font-size: 0.88rem;
+        }
+        .context-box h3 { color: #60a5fa; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+        .context-box p { margin-bottom: 8px; color: var(--text-muted); }
+        .context-box code { background: var(--bg-input); padding: 2px 6px; border-radius: 3px; font-size: 0.82rem; }
+        .risk-list { margin-top: 8px; padding-left: 18px; color: var(--accent-warning); font-size: 0.82rem; }
+        .risk-list li { margin-bottom: 2px; }
+
+        /* URL bar */
+        .url-bar {
+            background: var(--bg-secondary);
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 0.85rem;
+            border: 1px solid var(--border-color);
+        }
+        .url-bar a { color: #60a5fa; text-decoration: none; font-family: monospace; }
+        .url-bar .label { color: var(--text-muted); margin-right: 8px; }
+
+        /* Sections */
+        .section {
+            background: var(--bg-card);
+            border-radius: 10px;
+            margin-bottom: 16px;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+        }
+        .section-header {
+            background: rgba(59, 130, 246, 0.1);
+            padding: 14px 20px;
+            font-weight: 700;
+            font-size: 0.95rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .section-header .count { color: var(--text-muted); font-weight: 400; font-size: 0.82rem; margin-left: 8px; }
+
+        /* Test items */
+        .test-item {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-color);
+            transition: background 0.15s;
+        }
+        .test-item:last-child { border-bottom: none; }
+        .test-item.passed { border-left: 4px solid var(--accent-success); }
+        .test-item.failed { border-left: 4px solid var(--accent-danger); }
+        .test-item.skipped { border-left: 4px solid var(--accent-skip); }
+
+        .test-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 8px; }
+        .test-id {
+            font-family: monospace;
+            font-size: 0.75rem;
+            color: var(--accent);
+            background: rgba(59, 130, 246, 0.1);
+            padding: 2px 8px;
+            border-radius: 4px;
+            white-space: nowrap;
+        }
+        .test-priority {
+            font-size: 0.7rem;
+            padding: 2px 8px;
+            border-radius: 4px;
+            text-transform: uppercase;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+        }
+        .priority-critical { background: rgba(239, 68, 68, 0.15); color: #fca5a5; }
+        .priority-high { background: rgba(245, 158, 11, 0.15); color: #fcd34d; }
+        .priority-medium { background: rgba(139, 92, 246, 0.15); color: #c4b5fd; }
+
+        .test-title { font-weight: 600; font-size: 0.95rem; margin-bottom: 6px; }
+        .test-desc { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 6px; }
+        .test-expected { font-size: 0.83rem; color: #86efac; margin-bottom: 10px; }
+        .test-expected::before { content: "✓ Expected: "; font-weight: 600; }
+
+        /* Buttons */
+        .btn-group { display: flex; gap: 6px; margin-bottom: 10px; }
+        .btn {
+            padding: 6px 16px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--bg-input);
+            color: var(--text-muted);
+            font-size: 0.82rem;
+            cursor: pointer;
+            transition: all 0.15s;
+            font-weight: 500;
+        }
+        .btn:hover { border-color: var(--text-muted); }
+        .btn.active-pass { background: rgba(34, 197, 94, 0.15); color: #86efac; border-color: var(--accent-success); }
+        .btn.active-fail { background: rgba(239, 68, 68, 0.15); color: #fca5a5; border-color: var(--accent-danger); }
+        .btn.active-skip { background: rgba(139, 92, 246, 0.15); color: #c4b5fd; border-color: var(--accent-skip); }
+
+        /* Notes */
+        .notes-input {
+            width: 100%;
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-primary);
+            padding: 8px 12px;
+            font-size: 0.83rem;
+            font-family: inherit;
+            resize: vertical;
+            min-height: 36px;
+            transition: border-color 0.15s;
+        }
+        .notes-input:focus { outline: none; border-color: var(--accent); }
+        .notes-input.has-content { border-color: #3b82f6; }
+        .notes-label { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px; }
+
+        /* Summary */
+        .summary-bar {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 20px 24px;
+            margin: 24px 0 16px;
+            position: sticky;
+            bottom: 12px;
+            z-index: 10;
+            backdrop-filter: blur(8px);
+        }
+        .summary-stats { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 14px; font-size: 0.9rem; }
+        .stat { font-weight: 600; }
+        .stat-pass { color: var(--accent-success); }
+        .stat-fail { color: var(--accent-danger); }
+        .stat-skip { color: var(--accent-skip); }
+        .stat-total { color: var(--text-muted); }
+
+        .summary-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .btn-action {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .btn-copy { background: var(--accent); color: white; }
+        .btn-copy:hover { background: #2563eb; }
+        .btn-submit { background: #7c3aed; color: white; }
+        .btn-submit:hover { background: #6d28d9; }
+        .btn-approve { background: var(--accent-success); color: #042f2e; }
+        .btn-approve:hover { background: #16a34a; }
+        .btn-reject { background: var(--accent-danger); color: white; }
+        .btn-reject:hover { background: #dc2626; }
+
+        /* CC observations */
+        .cc-notes {
+            background: var(--bg-secondary);
+            border: 1px dashed var(--border-color);
+            border-radius: 8px;
+            padding: 14px 18px;
+            margin-top: 20px;
+            font-size: 0.82rem;
+            color: var(--text-muted);
+        }
+        .cc-notes h4 { color: var(--accent-warning); margin-bottom: 6px; font-size: 0.8rem; text-transform: uppercase; }
+
+        /* General notes */
+        .general-notes {
+            margin-top: 16px;
+            padding: 16px 20px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+        .general-notes h3 { font-size: 0.9rem; margin-bottom: 8px; }
+        .general-notes textarea {
+            width: 100%;
+            min-height: 80px;
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-primary);
+            padding: 10px 12px;
+            font-size: 0.85rem;
+            font-family: inherit;
+            resize: vertical;
+        }
+        .general-notes textarea:focus { outline: none; border-color: var(--accent); }
+
+        /* Decision */
+        .decision-row { display: flex; gap: 8px; margin-top: 8px; }
+
+        /* Status message */
+        .status-msg {
+            margin-top: 10px;
+            padding: 10px 14px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            display: none;
+        }
+        .status-msg.success { display: block; background: rgba(34,197,94,0.1); color: #86efac; border: 1px solid rgba(34,197,94,0.3); }
+        .status-msg.error { display: block; background: rgba(239,68,68,0.1); color: #fca5a5; border: 1px solid rgba(239,68,68,0.3); }
+
+        @media (max-width: 640px) {
+            body { padding: 12px; }
+            header { padding: 16px; }
+            .test-top { flex-direction: column; gap: 6px; }
+            .meta-row { flex-direction: column; gap: 6px; }
+            .summary-actions { flex-direction: column; }
+            .btn-action { text-align: center; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🔵 HarmonyLab v1.8.1 — UAT</h1>
+        <div class="subtitle">MIDI Import Chord Extraction Fix — HO-P1Q2</div>
+        <div class="meta-row">
+            <span class="meta-tag">Handoff: HO-P1Q2</span>
+            <span class="meta-tag">Commit: 54bbe82</span>
+            <span class="meta-tag">Revision: harmonylab-00077-fvs</span>
+            <span class="meta-tag" id="uat-date"></span>
+        </div>
+    </header>
+
+    <div class="url-bar">
+        <span class="label">🌐 Frontend:</span>
+        <a href="https://harmonylab.rentyourcio.com" target="_blank">harmonylab.rentyourcio.com</a>
+        <span style="margin: 0 10px; color: var(--border-color);">|</span>
+        <span class="label">⚙️ API/Swagger:</span>
+        <a href="https://harmonylab-57478301787.us-central1.run.app/docs" target="_blank">Swagger UI</a>
+    </div>
+
+    <div class="context-box">
+        <h3>What Changed</h3>
+        <p><strong>Root cause:</strong> <code>extract_chords_from_track()</code> cleared its note buffer on every new note_on event. Arpeggiated music never accumulated ≥2 simultaneous notes, so zero chords were emitted.</p>
+        <p><strong>Fix:</strong> Time-window grouping algorithm that collects all notes within 1 beat. Also changed track selection from "highest simultaneous polyphony" to "most total note-on events."</p>
+        <p><strong>Files:</strong> <code>app/services/midi_parser.py</code>, <code>main.py</code></p>
+        <h3 style="margin-top: 12px;">Risk Areas</h3>
+        <ul class="risk-list">
+            <li>Chord extraction for block-chord songs like Corcovado (regression from algorithm rewrite)</li>
+            <li>Track selection change could pick different track for multi-track MIDI files</li>
+            <li>Time-window (1 beat) may group notes too aggressively for fast passages</li>
+        </ul>
+    </div>
+
+    <!-- Section 1: Fix Verification -->
+    <div class="section">
+        <div class="section-header">
+            1. Fix Verification — Bach Prelude
+            <span class="count">5 tests</span>
+        </div>
+
+        <div class="test-item" data-id="HL01-01">
+            <div class="test-top">
+                <div><span class="test-id">HL01-01</span> <span class="test-priority priority-critical">Critical</span></div>
+            </div>
+            <div class="test-title">Bach Prelude shows chords in UI (not "No chords found")</div>
+            <div class="test-desc">Open <a href="https://harmonylab.rentyourcio.com" target="_blank" style="color:#60a5fa">harmonylab.rentyourcio.com</a>. Select "Prelude I in C major BWV 846" from the song list. View the chord progression display.</div>
+            <div class="test-expected">Chords are displayed — the message "No chords found" does NOT appear. Chord symbols are visible (e.g., CMaj, Dm, G7).</div>
+            <div class="btn-group">
+                <button class="btn" onclick="setResult(this, 'passed')">✓ Pass</button>
+                <button class="btn" onclick="setResult(this, 'failed')">✗ Fail</button>
+                <button class="btn" onclick="setResult(this, 'skipped')">— Skip</button>
+            </div>
+            <div class="notes-label">📝 Notes</div>
+            <textarea class="notes-input" placeholder="Observations, issues, new requirements..." oninput="updateNotes(this)"></textarea>
+        </div>
+
+        <div class="test-item" data-id="HL01-02">
+            <div class="test-top">
+                <div><span class="test-id">HL01-02</span> <span class="test-priority priority-high">High</span></div>
+            </div>
+            <div class="test-title">Bach chord symbols are musically reasonable</div>
+            <div class="test-desc">While viewing the Bach Prelude, examine the first several chord symbols. The piece opens in C major.</div>
+            <div class="test-expected">First chords include C-related harmony (CMaj, Dm7, G7, etc.). No garbled symbols, blank entries, or numeric codes. Handoff reported first 5 as: CMaj, Gsus4, CMaj, Gdim7, C.</div>
+            <div class="btn-group">
+                <button class="btn" onclick="setResult(this, 'passed')">✓ Pass</button>
+                <button class="btn" onclick="setResult(this, 'failed')">✗ Fail</button>
+                <button class="btn" onclick="setResult(this, 'skipped')">— Skip</button>
+            </div>
+            <div class="notes-label">📝 Notes</div>
+            <textarea class="notes-input" placeholder="Do the chord names look right? Any jazz notation issues?" oninput="updateNotes(this)"></textarea>
+        </div>
+
+        <div class="test-item" data-id="HL01-03">
+            <div class="test-top">
+                <div><span class="test-id">HL01-03</span> <span class="test-priority priority-high">High</span></div>
+            </div>
+            <div class="test-title">Bach Prelude audio playback works</div>
+            <div class="test-desc">With the Bach Prelude selected, press the play button to trigger Tone.js chord playback.</div>
+            <div class="test-expected">Audio plays through the browser. Chords sound like recognizable harmony in C major. No JavaScript console errors.</div>
+            <div class="btn-group">
+                <button class="btn" onclick="setResult(this, 'passed')">✓ Pass</button>
+                <button class="btn" onclick="setResult(this, 'failed')">✗ Fail</button>
+                <button class="btn" onclick="setResult(this, 'skipped')">— Skip</button>
+            </div>
+            <div class="notes-label">📝 Notes</div>
+            <textarea class="notes-input" placeholder="Does it sound right? Timing issues? Missing notes?" oninput="updateNotes(this)"></textarea>
+        </div>
+
+        <div class="test-item" data-id="HL01-04">
+            <div class="test-top">
+                <div><span class="test-id">HL01-04</span> <span class="test-priority priority-high">High</span></div>
+            </div>
+            <div class="test-title">Bach Prelude has ~80 chords (API verification)</div>
+            <div class="test-desc">Open <a href="https://harmonylab-57478301787.us-central1.run.app/docs" target="_blank" style="color:#60a5fa">Swagger UI</a>. Call GET /api/v1/songs/32/sections to get section IDs, then GET /api/v1/measures/section/{section_id} to list measures and count total chords.</div>
+            <div class="test-expected">Total chord count is approximately 80 across all measures. Handoff reported exactly 80 chords across 20 measures.</div>
+            <div class="btn-group">
+                <button class="btn" onclick="setResult(this, 'passed')">✓ Pass</button>
+                <button class="btn" onclick="setResult(this, 'failed')">✗ Fail</button>
+                <button class="btn" onclick="setResult(this, 'skipped')">— Skip</button>
+            </div>
+            <div class="notes-label">📝 Notes</div>
+            <textarea class="notes-input" placeholder="Actual count? Any missing measures?" oninput="updateNotes(this)"></textarea>
+        </div>
+
+        <div class="test-item" data-id="HL01-05">
+            <div class="test-top">
+                <div><span class="test-id">HL01-05</span> <span class="test-priority priority-medium">Medium</span></div>
+            </div>
+            <div class="test-title">Harmonic analysis available for Bach Prelude</div>
+            <div class="test-desc">In Swagger, call GET /api/v1/analysis/songs/32. If analysis hasn't been run, trigger it with POST /api/v1/analysis/songs/32.</div>
+            <div class="test-expected">Response includes detected key (C major or similar), confidence score, and chord annotations with Roman numerals. No 500 error.</div>
+            <div class="btn-group">
+                <button class="btn" onclick="setResult(this, 'passed')">✓ Pass</button>
+                <button class="btn" onclick="setResult(this, 'failed')">✗ Fail</button>
+                <button class="btn" onclick="setResult(this, 'skipped')">— Skip</button>
+            </div>
+            <div class="notes-label">📝 Notes</div>
+            <textarea class="notes-input" placeholder="What key was detected? Confidence level?" oninput="updateNotes(this)"></textarea>
+        </div>
+    </div>
+
+    <!-- Section 2: Regression -->
+    <div class="section">
+        <div class="section-header">
+            2. Regression — Corcovado (Must Not Break)
+            <span class="count">3 tests</span>
+        </div>
+
+        <div class="test-item" data-id="HL01-06">
+            <div class="test-top">
+                <div><span class="test-id">HL01-06</span> <span class="test-priority priority-critical">Critical</span></div>
+            </div>
+            <div class="test-title">Corcovado still shows chords and plays correctly</div>
+            <div class="test-desc">Open <a href="https://harmonylab.rentyourcio.com" target="_blank" style="color:#60a5fa">harmonylab.rentyourcio.com</a>. Select Corcovado. View chord display, then press play for audio.</div>
+            <div class="test-expected">Chords display correctly (Am6, Ab, Gm7, C9, FMaj9, etc.). Audio playback works through Tone.js. No changes from prior behavior.</div>
+            <div class="btn-group">
+                <button class="btn" onclick="setResult(this, 'passed')">✓ Pass</button>
+                <button class="btn" onclick="setResult(this, 'failed')">✗ Fail</button>
+                <button class="btn" onclick="setResult(this, 'skipped')">— Skip</button>
+            </div>
+            <div class="notes-label">📝 Notes</div>
+            <textarea class="notes-input" placeholder="Does it look/sound the same as before the fix?" oninput="updateNotes(this)"></textarea>
+        </div>
+
+        <div class="test-item" data-id="HL01-07">
+            <div class="test-top">
+                <div><span class="test-id">HL01-07</span> <span class="test-priority priority-high">High</span></div>
+            </div>
+            <div class="test-title">Corcovado chord count still 45 (API check)</div>
+            <div class="test-desc">In <a href="https://harmonylab-57478301787.us-central1.run.app/docs" target="_blank" style="color:#60a5fa">Swagger UI</a>, call GET /api/v1/songs/23/sections and count total chords across all measures.</div>
+            <div class="test-expected">Exactly 45 chords. No chords missing, duplicated, or changed.</div>
+            <div class="btn-group">
+                <button class="btn" onclick="setResult(this, 'passed')">✓ Pass</button>
+                <button class="btn" onclick="setResult(this, 'failed')">✗ Fail</button>
+                <button class="btn" onclick="setResult(this, 'skipped')">— Skip</button>
+            </div>
+            <div class="notes-label">📝 Notes</div>
+            <textarea class="notes-input" placeholder="Actual count?" oninput="updateNotes(this)"></textarea>
+        </div>
+
+        <div class="test-item" data-id="HL01-08">
+            <div class="test-top">
+                <div><span class="test-id">HL01-08</span> <span class="test-priority priority-medium">Medium</span></div>
+            </div>
+            <div class="test-title">Quiz still works with Corcovado</div>
+            <div class="test-desc">Navigate to the quiz feature in the UI. Start a quiz using Corcovado as the source song.</div>
+            <div class="test-expected">Quiz generates questions about Corcovado's chord progression. Questions have 4 options each. Can submit answers without errors.</div>
+            <div class="btn-group">
+                <button class="btn" onclick="setResult(this, 'passed')">✓ Pass</button>
+                <button class="btn" onclick="setResult(this, 'failed')">✗ Fail</button>
+                <button class="btn" onclick="setResult(this, 'skipped')">— Skip</button>
+            </div>
+            <div class="notes-label">📝 Notes</div>
+            <textarea class="notes-input" placeholder="Did the quiz load? Question quality?" oninput="updateNotes(this)"></textarea>
+        </div>
+    </div>
+
+    <!-- Section 3: Infrastructure -->
+    <div class="section">
+        <div class="section-header">
+            3. Infrastructure
+            <span class="count">2 tests</span>
+        </div>
+
+        <div class="test-item" data-id="HL01-09">
+            <div class="test-top">
+                <div><span class="test-id">HL01-09</span> <span class="test-priority priority-critical">Critical</span></div>
+            </div>
+            <div class="test-title">Health check returns v1.8.1</div>
+            <div class="test-desc">Open <a href="https://harmonylab-57478301787.us-central1.run.app/health" target="_blank" style="color:#60a5fa">health endpoint</a> in browser.</div>
+            <div class="test-expected">JSON shows version "1.8.1", status "healthy", database "connected".</div>
+            <div class="btn-group">
+                <button class="btn" onclick="setResult(this, 'passed')">✓ Pass</button>
+                <button class="btn" onclick="setResult(this, 'failed')">✗ Fail</button>
+                <button class="btn" onclick="setResult(this, 'skipped')">— Skip</button>
+            </div>
+            <div class="notes-label">📝 Notes</div>
+            <textarea class="notes-input" placeholder="Paste health JSON here" oninput="updateNotes(this)"></textarea>
+        </div>
+
+        <div class="test-item" data-id="HL01-10">
+            <div class="test-top">
+                <div><span class="test-id">HL01-10</span> <span class="test-priority priority-high">High</span></div>
+            </div>
+            <div class="test-title">Song list shows both Corcovado and Bach Prelude</div>
+            <div class="test-desc">Open <a href="https://harmonylab.rentyourcio.com" target="_blank" style="color:#60a5fa">harmonylab.rentyourcio.com</a>. View the song list.</div>
+            <div class="test-expected">Both "Corcovado" and "Prelude I in C major BWV 846" appear. Both are clickable.</div>
+            <div class="btn-group">
+                <button class="btn" onclick="setResult(this, 'passed')">✓ Pass</button>
+                <button class="btn" onclick="setResult(this, 'failed')">✗ Fail</button>
+                <button class="btn" onclick="setResult(this, 'skipped')">— Skip</button>
+            </div>
+            <div class="notes-label">📝 Notes</div>
+            <textarea class="notes-input" placeholder="Any display issues?" oninput="updateNotes(this)"></textarea>
+        </div>
+    </div>
+
+    <!-- General Notes -->
+    <div class="general-notes">
+        <h3>General Notes & New Requirements</h3>
+        <textarea id="general-notes" placeholder="Overall observations, feature ideas, UX feedback, things to explore next..."></textarea>
+    </div>
+
+    <!-- CC Observations -->
+    <div class="cc-notes">
+        <h4>⚠️ CC Observations (for tester awareness)</h4>
+        <p>1. Bach Prelude was imported using a programmatically generated MIDI file, not the original file that triggered the bug. Testing with the original file would be stronger verification.</p>
+        <p>2. Beat-level chord grouping produces per-beat symbols (e.g., CMaj on beat 1, Gsus4 on beat 2) — more granular than a human would write. Future refinement opportunity.</p>
+        <p>3. Frontend (harmonylab.rentyourcio.com) is a separate Cloud Run service from the backend. If the frontend doesn't render chords, it may be a frontend issue, not related to this backend fix. Use Swagger as definitive API verification.</p>
+    </div>
+
+    <!-- Summary Bar -->
+    <div class="summary-bar">
+        <div class="summary-stats">
+            <span class="stat stat-pass" id="stat-pass">✓ 0 passed</span>
+            <span class="stat stat-fail" id="stat-fail">✗ 0 failed</span>
+            <span class="stat stat-skip" id="stat-skip">— 0 skipped</span>
+            <span class="stat stat-total" id="stat-total">10 remaining</span>
+            <span class="stat" id="stat-notes" style="color: #60a5fa;">📝 0 notes</span>
+        </div>
+        <div class="decision-row" style="margin-bottom: 10px;">
+            <button class="btn-action btn-approve" onclick="setDecision('APPROVED')">✓ Approved</button>
+            <button class="btn-action btn-reject" onclick="setDecision('NEEDS FIXES')">✗ Needs Fixes</button>
+            <button class="btn-action" style="background: var(--accent-warning); color: #1a1a2e;" onclick="setDecision('CONDITIONAL')">⚠ Conditional</button>
+        </div>
+        <div class="summary-actions">
+            <button class="btn-action btn-copy" onclick="copyResults()">📋 Copy Results</button>
+            <button class="btn-action btn-submit" onclick="submitToMetaPM()">📤 Submit to MetaPM</button>
+        </div>
+        <div id="status-msg" class="status-msg"></div>
+    </div>
+
+    <script>
+        // Set date
+        document.getElementById('uat-date').textContent = new Date().toLocaleDateString('en-US', {
+            year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+        });
+
+        let decision = '';
+        const results = {};
+
+        function setResult(btn, status) {
+            const item = btn.closest('.test-item');
+            const id = item.dataset.id;
+            // Clear previous
+            item.querySelectorAll('.btn').forEach(b => b.classList.remove('active-pass', 'active-fail', 'active-skip'));
+            item.classList.remove('passed', 'failed', 'skipped');
+            // Set new
+            btn.classList.add(status === 'passed' ? 'active-pass' : status === 'failed' ? 'active-fail' : 'active-skip');
+            item.classList.add(status);
+            results[id] = status;
+            updateSummary();
+        }
+
+        function updateNotes(textarea) {
+            textarea.classList.toggle('has-content', textarea.value.trim() !== '');
+            updateSummary();
+        }
+
+        function updateSummary() {
+            const vals = Object.values(results);
+            const passed = vals.filter(v => v === 'passed').length;
+            const failed = vals.filter(v => v === 'failed').length;
+            const skipped = vals.filter(v => v === 'skipped').length;
+            const remaining = 10 - passed - failed - skipped;
+            const notes = document.querySelectorAll('.notes-input.has-content').length;
+
+            document.getElementById('stat-pass').textContent = `✓ ${passed} passed`;
+            document.getElementById('stat-fail').textContent = `✗ ${failed} failed`;
+            document.getElementById('stat-skip').textContent = `— ${skipped} skipped`;
+            document.getElementById('stat-total').textContent = `${remaining} remaining`;
+            document.getElementById('stat-notes').textContent = `📝 ${notes} notes`;
+        }
+
+        function setDecision(d) {
+            decision = d;
+            document.querySelectorAll('.decision-row .btn-action').forEach(b => b.style.opacity = '0.4');
+            event.target.style.opacity = '1';
+        }
+
+        function buildResultsText() {
+            const items = document.querySelectorAll('.test-item');
+            const lines = [];
+            const date = new Date().toLocaleString();
+            const vals = Object.values(results);
+            const passed = vals.filter(v => v === 'passed').length;
+            const failed = vals.filter(v => v === 'failed').length;
+            const skipped = vals.filter(v => v === 'skipped').length;
+
+            lines.push(`[HarmonyLab] 🔵 v1.8.1 UAT Results — HO-P1Q2`);
+            lines.push(`${'='.repeat(58)}`);
+            lines.push(`Date: ${date}`);
+            lines.push(`Version: 1.8.1`);
+            lines.push(`Commit: 54bbe82`);
+            lines.push(`Revision: harmonylab-00077-fvs`);
+            lines.push(`Decision: ${decision || 'PENDING'}`);
+            lines.push(`Summary: ${passed} passed, ${failed} failed, ${skipped} skipped`);
+            lines.push(`${'='.repeat(58)}`);
+
+            let currentSection = '';
+            items.forEach(item => {
+                const section = item.closest('.section');
+                const sectionTitle = section.querySelector('.section-header').textContent.trim().split('\n')[0];
+                if (sectionTitle !== currentSection) {
+                    currentSection = sectionTitle;
+                    lines.push(`\n${sectionTitle}`);
+                    lines.push('-'.repeat(44));
+                }
+                const id = item.dataset.id;
+                const title = item.querySelector('.test-title').textContent;
+                const status = results[id] || 'pending';
+                const icon = status === 'passed' ? '✓' : status === 'failed' ? '✗' : status === 'skipped' ? '—' : '○';
+                lines.push(`  ${icon} [${id}] ${title}`);
+                const notes = item.querySelector('.notes-input').value.trim();
+                if (notes) lines.push(`      📝 ${notes}`);
+            });
+
+            const general = document.getElementById('general-notes').value.trim();
+            if (general) {
+                lines.push(`\nGeneral Notes`);
+                lines.push('-'.repeat(44));
+                lines.push(general);
+            }
+
+            return lines.join('\n');
+        }
+
+        function copyResults() {
+            const text = buildResultsText();
+            navigator.clipboard.writeText(text).then(() => {
+                showStatus('Copied to clipboard!', 'success');
+            }).catch(() => {
+                // Fallback
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                showStatus('Copied to clipboard!', 'success');
+            });
+        }
+
+        async function submitToMetaPM() {
+            const text = buildResultsText();
+            const vals = Object.values(results);
+            const passed = vals.filter(v => v === 'passed').length;
+            const failed = vals.filter(v => v === 'failed').length;
+
+            const payload = {
+                project: 'HarmonyLab',
+                version: 'v1.8.1',
+                handoff_id: 'HO-P1Q2',
+                status: failed === 0 && passed > 0 ? 'passed' : 'failed',
+                results_text: text,
+                total_tests: 10,
+                passed: passed,
+                failed: failed,
+                decision: decision || 'PENDING'
+            };
+
+            try {
+                showStatus('Submitting...', 'success');
+                const resp = await fetch('https://metapm.rentyourcio.com/mcp/uat/submit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (!resp.ok) {
+                    const err = await resp.text();
+                    showStatus(`Error: HTTP ${resp.status}: ${err}`, 'error');
+                    return;
+                }
+                const data = await resp.json();
+                const url = data.handoff_url || data.url || JSON.stringify(data);
+                showStatus(`Submitted! ${url}`, 'success');
+            } catch (e) {
+                showStatus(`Network error: ${e.message}`, 'error');
+            }
+        }
+
+        function showStatus(msg, type) {
+            const el = document.getElementById('status-msg');
+            el.textContent = msg;
+            el.className = `status-msg ${type}`;
+        }
+    </script>
+</body>
+</html>
