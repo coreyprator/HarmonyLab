@@ -325,6 +325,19 @@ class Auth {
 // Create global auth instance
 window.auth = new Auth();
 
+// HL-011: Fetch version from backend and update nav on all pages
+(async () => {
+    try {
+        const r = await fetch('https://harmonylab-wmrla7fhwa-uc.a.run.app/');
+        const d = await r.json();
+        if (d.version) {
+            document.querySelectorAll('.nav-version').forEach(el => {
+                el.textContent = 'v' + d.version;
+            });
+        }
+    } catch (e) {}
+})();
+
 // Update UI on load
 document.addEventListener('DOMContentLoaded', () => {
     if (window.auth.isAuthenticated()) {
