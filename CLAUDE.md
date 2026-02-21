@@ -161,7 +161,7 @@ Before sending a completion handoff, ALL items must be checked:
 **Git (MANDATORY)**:
 - [ ] All changes staged: `git add [files]`
 - [ ] Committed: `git commit -m "type: description (vX.X.X)"`
-- [ ] Pushed: `git push origin master`
+- [ ] Pushed: `git push origin main`
 
 **Deployment (MANDATORY)**:
 - [ ] Backend deployed: `gcloud run deploy harmonylab --source . --region us-central1`
