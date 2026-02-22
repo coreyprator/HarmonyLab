@@ -4,8 +4,10 @@ Harmony Lab FastAPI Application
 Main entry point for the Harmony Lab API server.
 """
 import logging
-from fastapi import FastAPI
+import traceback
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
 from config.settings import settings
 
@@ -14,7 +16,7 @@ from app.api.routes import songs, sections, vocabulary, measures, chords, progre
 
 logger = logging.getLogger(__name__)
 
-VERSION = "1.8.4"
+VERSION = "1.8.5"
 
 app = FastAPI(
     title="Harmony Lab API",
@@ -22,6 +24,21 @@ app = FastAPI(
     version=VERSION,
     debug=settings.debug,
 )
+
+# Standard C: Global exception handler — catches unhandled exceptions, returns structured JSON
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    error_detail = str(exc)
+    traceback_str = traceback.format_exc()
+    logger.error(f"Unhandled exception on {request.method} {request.url}: {error_detail}\n{traceback_str}")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "Internal Server Error",
+            "detail": error_detail,
+            "path": str(request.url.path)
+        }
+    )
 
 # CORS middleware
 app.add_middleware(

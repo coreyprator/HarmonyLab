@@ -186,7 +186,12 @@
 
         async function loadSongs() {
             try {
-                const res = await fetch(`${API_BASE}/api/v1/songs/?limit=100`);
+                const url = `${API_BASE}/api/v1/songs/?limit=100`;
+                const res = await fetch(url);
+                if (!res.ok) {
+                    await window.logFetchError(res, 'GET', url);
+                    throw new Error(`Failed to load songs: HTTP ${res.status}`);
+                }
                 songs = await res.json();
 
                 const select = document.getElementById('song-select');
@@ -260,6 +265,7 @@
                 );
 
                 if (!res.ok) {
+                    await window.logFetchError(res, 'POST', `${API_BASE}/api/v1/quiz/generate`);
                     const errData = await res.json().catch(() => ({}));
                     throw new Error(errData.detail || 'Failed to generate quiz');
                 }
