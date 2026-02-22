@@ -361,7 +361,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// HL-v1.8.4: Global toast notification system
+// HL-v1.8.5: Global toast notification system — Standard B: 10s for errors, close button
 window.showToast = function(message, type = 'error') {
     let container = document.getElementById('toast-container');
     if (!container) {
@@ -370,7 +370,7 @@ window.showToast = function(message, type = 'error') {
         container.style.cssText = [
             'position:fixed', 'bottom:20px', 'right:20px', 'z-index:9999',
             'display:flex', 'flex-direction:column', 'gap:8px',
-            'max-width:360px', 'pointer-events:none'
+            'max-width:400px', 'pointer-events:none'
         ].join(';');
         document.body.appendChild(container);
     }
@@ -381,14 +381,50 @@ window.showToast = function(message, type = 'error') {
         'background:' + bg, 'color:#fff', 'padding:12px 16px',
         'border-radius:6px', 'font-size:0.9rem', 'line-height:1.4',
         'box-shadow:0 2px 8px rgba(0,0,0,0.3)', 'pointer-events:auto',
-        'opacity:1', 'transition:opacity 0.3s'
+        'opacity:1', 'transition:opacity 0.3s',
+        'display:flex', 'align-items:flex-start', 'gap:10px'
     ].join(';');
-    toast.textContent = message;
+
+    const msgSpan = document.createElement('span');
+    msgSpan.style.cssText = 'flex:1;';
+    msgSpan.textContent = message;
+
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '\u00d7';
+    closeBtn.title = 'Dismiss';
+    closeBtn.style.cssText = [
+        'background:none', 'border:none', 'color:#fff', 'cursor:pointer',
+        'font-size:18px', 'line-height:1', 'padding:0', 'flex-shrink:0', 'opacity:0.8'
+    ].join(';');
+    closeBtn.onclick = () => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 320); };
+
+    toast.appendChild(msgSpan);
+    toast.appendChild(closeBtn);
+
+    // Standard B: errors stay 10 seconds; other types stay 4 seconds
+    const duration = type === 'error' ? 10000 : 4000;
+    if (type === 'error') console.error('[HarmonyLab Error]', message);
 
     container.appendChild(toast);
     setTimeout(() => {
         toast.style.opacity = '0';
         setTimeout(() => toast.remove(), 320);
-    }, 4000);
+    }, duration);
 };
 
+// Standard A: Helper to log full API error response body to console
+// Usage: await window.logFetchError(response, 'GET', url);
+window.logFetchError = async function(response, method, url) {
+    let errorBody = '';
+    try {
+        const clone = response.clone();
+        errorBody = JSON.stringify(await clone.json());
+    } catch {
+        try { errorBody = await response.clone().text(); } catch { errorBody = '(unreadable)'; }
+    }
+    console.error(`[API Error] ${method || 'GET'} ${url}`, {
+        status: response.status,
+        statusText: response.statusText,
+        body: errorBody
+    });
+};

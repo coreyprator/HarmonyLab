@@ -182,6 +182,10 @@
                 let url = `${API_BASE}/api/v1/songs/?limit=100`;
                 if (genre) url += `&genre=${encodeURIComponent(genre)}`;
                 const res = await fetch(url);
+                if (!res.ok) {
+                    await window.logFetchError(res, 'GET', url);
+                    throw new Error(`Failed to load songs: HTTP ${res.status}`);
+                }
                 const songs = await res.json();
                 renderSongs(songs);
             } catch (err) {
@@ -267,6 +271,7 @@
                 });
 
                 if (!res.ok) {
+                    await window.logFetchError(res, 'POST', `${API_BASE}/api/v1/imports/score/preview`);
                     const err = await res.json();
                     throw new Error(err.detail || 'Failed to parse file');
                 }
@@ -328,6 +333,7 @@
 
                 const res = await fetch(url, { method: 'POST', body: formData });
                 if (!res.ok) {
+                    await window.logFetchError(res, 'POST', url);
                     const err = await res.json();
                     throw new Error(err.detail || 'Failed to import');
                 }
