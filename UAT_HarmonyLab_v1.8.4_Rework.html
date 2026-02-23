@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HarmonyLab v1.8.4 — UAT: Rework Sprint</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#0f1117;color:#c9d1d9;padding:20px;max-width:900px;margin:0 auto}
+h1{font-size:1.5rem;color:#58a6ff;margin-bottom:4px}
+.subtitle{color:#8b949e;font-size:0.85rem;margin-bottom:20px}
+.summary-bar{display:flex;gap:12px;margin-bottom:20px;padding:12px;background:#161b22;border-radius:8px;border:1px solid #30363d}
+.stat{text-align:center;flex:1}
+.stat .num{font-size:1.8rem;font-weight:700}
+.stat .label{font-size:0.7rem;color:#8b949e;text-transform:uppercase}
+.pass-num{color:#3fb950}.fail-num{color:#f85149}.skip-num{color:#d29922}.pending-num{color:#8b949e}
+.section{margin-bottom:24px}
+.section-title{font-size:1.1rem;font-weight:600;color:#58a6ff;padding:8px 12px;background:#161b22;border-radius:6px 6px 0 0;border:1px solid #30363d;border-bottom:none}
+.test{padding:12px;border:1px solid #30363d;border-top:none;background:#0d1117}
+.test:last-child{border-radius:0 0 6px 6px}
+.test-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.test-id{font-family:'Consolas',monospace;font-size:0.8rem;color:#8b949e}
+.test-name{font-weight:500;flex:1;margin-left:8px;font-size:0.9rem}
+.badge{font-size:0.65rem;padding:2px 6px;border-radius:3px;font-weight:600;margin-left:6px}
+.badge-new{background:#1f3a2a;color:#3fb950}.badge-fix{background:#3a1f1f;color:#f85149}.badge-reg{background:#1f2a3a;color:#58a6ff}
+.radio-group{display:flex;gap:16px;margin:6px 0}
+.radio-group label{display:flex;align-items:center;gap:4px;font-size:0.85rem;cursor:pointer}
+.radio-group input[type="radio"]{cursor:pointer}
+.notes-input{width:100%;padding:6px 8px;background:#161b22;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-size:0.8rem;margin-top:6px;resize:vertical;min-height:28px}
+.btn-row{display:flex;gap:12px;margin-top:20px;flex-wrap:wrap}
+.btn{padding:10px 20px;border:none;border-radius:6px;font-size:0.9rem;font-weight:600;cursor:pointer;transition:all 0.2s}
+.btn-primary{background:#238636;color:#fff}.btn-primary:hover{background:#2ea043}
+.btn-secondary{background:#30363d;color:#c9d1d9}.btn-secondary:hover{background:#3d444d}
+.btn-danger{background:#da3633;color:#fff}.btn-danger:hover{background:#f85149}
+#output{margin-top:16px;padding:12px;background:#161b22;border:1px solid #30363d;border-radius:6px;font-family:monospace;font-size:0.75rem;white-space:pre-wrap;display:none;max-height:300px;overflow-y:auto}
+</style>
+</head>
+<body>
+<h1>🔵 HarmonyLab v1.8.4 — UAT: Rework Sprint</h1>
+<div class="subtitle">MIDI import fix • Chord editing dropdowns • Error logging • Health versioning • Analysis diagnostics<br>
+BE Rev: harmonylab-00087-fw9 | FE Rev: harmonylab-frontend-00059-ctf | Date: <span id="date"></span></div>
+
+<div class="summary-bar">
+<div class="stat"><div class="num pass-num" id="pass-count">0</div><div class="label">Pass</div></div>
+<div class="stat"><div class="num fail-num" id="fail-count">0</div><div class="label">Fail</div></div>
+<div class="stat"><div class="num skip-num" id="skip-count">0</div><div class="label">Skip</div></div>
+<div class="stat"><div class="num pending-num" id="pending-count">17</div><div class="label">Pending</div></div>
+</div>
+
+<div id="tests-container">
+
+<!-- SMOKE -->
+<div class="section">
+<div class="section-title">1. Smoke</div>
+<div class="test" data-id="SM-01" data-reqs="HL-014">
+<div class="test-header">
+<span class="test-id">[SM-01]</span>
+<span class="test-name">Health: v1.8.4, BE shows "component":"backend", FE shows "component":"frontend"</span>
+<span class="badge badge-fix">P4</span>
+</div>
+<div class="radio-group">
+<label><input type="radio" name="SM-01" value="pass" onchange="tally()"> ✅ Pass</label>
+<label><input type="radio" name="SM-01" value="fail" onchange="tally()"> ❌ Fail</label>
+<label><input type="radio" name="SM-01" value="skip" onchange="tally()"> ⏭ Skip</label>
+</div>
+<textarea class="notes-input" placeholder="Notes..." id="notes-SM-01"></textarea>
+</div>
+<div class="test" data-id="SM-02" data-reqs="">
+<div class="test-header">
+<span class="test-id">[SM-02]</span>
+<span class="test-name">App loads, login works, song list visible</span>
+</div>
+<div class="radio-group">
+<label><input type="radio" name="SM-02" value="pass" onchange="tally()"> ✅ Pass</label>
+<label><input type="radio" name="SM-02" value="fail" onchange="tally()"> ❌ Fail</label>
+<label><input type="radio" name="SM-02" value="skip" onchange="tally()"> ⏭ Skip</label>
+</div>
+<textarea class="notes-input" placeholder="Notes..." id="notes-SM-02"></textarea>
+</div>
+</div>
+
+<!-- P0: MIDI IMPORT FIX -->
+<div class="section">
+<div class="section-title">2. P0: MIDI Import — No Crash / No Logout</div>
+<div class="test" data-id="IMP-01" data-reqs="HL-014">
+<div class="test-header">
+<span class="test-id">[IMP-01]</span>
+<span class="test-name">Import a .mid file → song created, app stays logged in (no crash/logout)</span>
+<span class="badge badge-fix">FIX</span>
+</div>
+<div class="radio-group">
+<label><input type="radio" name="IMP-01" value="pass" onchange="tally()"> ✅ Pass</label>
+<label><input type="radio" name="IMP-01" value="fail" onchange="tally()"> ❌ Fail</label>
+<label><input type="radio" name="IMP-01" value="skip" onchange="tally()"> ⏭ Skip</label>
+</div>
+<textarea class="notes-input" placeholder="Notes: Did the app stay logged in? Any error toast?" id="notes-IMP-01"></textarea>
+</div>
+<div class="test" data-id="IMP-02" data-reqs="HL-014">
+<div class="test-header">
+<span class="test-id">[IMP-02]</span>
+<span class="test-name">Import a .mid file → song appears in list (chords OK or empty measures with message)</span>
+<span class="badge badge-new">NEW</span>
+</div>
+<div class="radio-group">
+<label><input type="radio" name="IMP-02" value="pass" onchange="tally()"> ✅ Pass</label>
+<label><input type="radio" name="IMP-02" value="fail" onchange="tally()"> ❌ Fail</label>
+<label><input type="radio" name="IMP-02" value="skip" onchange="tally()"> ⏭ Skip</label>
+</div>
+<textarea class="notes-input" placeholder="Notes..." id="notes-IMP-02"></textarea>
+</div>
+<div class="test" data-id="IMP-03" data-reqs="HL-014">
+<div class="test-header">
+<span class="test-id">[IMP-03]</span>
+<span class="test-name">Import .musicxml/.mscz → song appears with chords derived from notes</span>
+</div>
+<div class="radio-group">
+<label><input type="radio" name="IMP-03" value="pass" onchange="tally()"> ✅ Pass</label>
+<label><input type="radio" name="IMP-03" value="fail" onchange="tally()"> ❌ Fail</label>
+<label><input type="radio" name="IMP-03" value="skip" onchange="tally()"> ⏭ Skip</label>
+</div>
+<textarea class="notes-input" placeholder="Notes: Test with Corcovado.mxl (should get 46 chords)" id="notes-IMP-03"></textarea>
+</div>
+<div class="test" data-id="IMP-04" data-reqs="HL-014">
+<div class="test-header">
+<span class="test-id">[IMP-04]</span>
+<span class="test-name">Bad file (.pdf) → clear error message, app stable</span>
+</div>
+<div class="radio-group">
+<label><input type="radio" name="IMP-04" value="pass" onchange="tally()"> ✅ Pass</label>
+<label><input type="radio" name="IMP-04" value="fail" onchange="tally()"> ❌ Fail</label>
+<label><input type="radio" name="IMP-04" value="skip" onchange="tally()"> ⏭ Skip</label>
+</div>
+<textarea class="notes-input" placeholder="Notes..." id="notes-IMP-04"></textarea>
+</div>
+</div>
+
+<!-- P1: CHORD EDITING DROPDOWNS -->
+<div class="section">
+<div class="section-title">3. P1: Chord Editing — Structured Dropdowns</div>
+<div class="test" data-id="CHD-01" data-reqs="HL-009">
+<div class="test-header">
+<span class="test-id">[CHD-01]</span>
+<span class="test-name">Click a chord in Analysis → edit modal opens with DROPDOWNS (not free text)</span>
+<span class="badge badge-fix">FIX</span>
+</div>
+<div class="radio-group">
+<label><input type="radio" name="CHD-01" value="pass" onchange="tally()"> ✅ Pass</label>
+<label><input type="radio" name="CHD-01" value="fail" onchange="tally()"> ❌ Fail</label>
+<label><input type="radio" name="CHD-01" value="skip" onchange="tally()"> ⏭ Skip</label>
+</div>
+<textarea class="notes-input" placeholder="Notes: Do you see Root, Quality, Extension, Bass dropdowns?" id="notes-CHD-01"></textarea>
+</div>
+<div class="test" data-id="CHD-02" data-reqs="HL-009">
+<div class="test-header">
+<span class="test-id">[CHD-02]</span>
+<span class="test-name">Select Root=D, Quality=min7 → preview shows "Dm7"</span>
+<span class="badge badge-fix">FIX</span>
+</div>
+<div class="radio-group">
+<label><input type="radio" name="CHD-02" value="pass" onchange="tally()"> ✅ Pass</label>
+<label><input type="radio" name="CHD-02" value="fail" onchange="tally()"> ❌ Fail</label>
+<label><input type="radio" name="CHD-02" value="skip" onchange="tally()"> ⏭ Skip</label>
+</div>
+<textarea class="notes-input" placeholder="Notes..." id="notes-CHD-02"></textarea>
+</div>
+<div class="test" data-id="CHD-03" data-reqs="HL-009">
+<div class="test-header">
+<span class="test-id">[CHD-03]</span>
+<span class="test-name">Save edited chord → reload page → chord persists as "Dm7"</span>
+<span class="badge badge-fix">FIX</span>
+</div>
+<div class="radio-group">
+<label><input type="radio" name="CHD-03" value="pass" onchange="tally()"> ✅ Pass</label>
+<label><input type="radio" name="CHD-03" value="fail" onchange="tally()"> ❌ Fail</label>
+<label><input type="radio" name="CHD-03" value="skip" onchange="tally()"> ⏭ Skip</label>
+</div>
+<textarea class="notes-input" placeholder="Notes..." id="notes-CHD-03"></textarea>
+</div>
+<div class="test" data-id="CHD-04" data-reqs="HL-009">
+<div class="test-header">
+<span class="test-id">[CHD-04]</span>
+<span class="test-name">Slash chord: Root=C, Quality=maj7, Bass=E → displays "Cmaj7/E", persists</span>
+<span class="badge badge-new">NEW</span>
+</div>
+<div class="radio-group">
+<label><input type="radio" name="CHD-04" value="pass" onchange="tally()"> ✅ Pass</label>
+<label><input type="radio" name="CHD-04" value="fail" onchange="tally()"> ❌ Fail</label>
+<label><input type="radio" name="CHD-04" value="skip" onchange="tally()"> ⏭ Skip</label>
+</div>
+<textarea class="notes-input" placeholder="Notes..." id="notes-CHD-04"></textarea>
+</div>
+<div class="test" data-id="CHD-05" data-reqs="HL-009">
+<div class="test-header">
+<span class="test-id">[CHD-05]</span>
+<span class="test-name">Extension dropdown: b9, #9, #11, 13, b13, add9, add11 all available</span>
+<span class="badge badge-new">NEW</span>
+</div>
+<div class="radio-group">
+<label><input type="radio" name="CHD-05" value="pass" onchange="tally()"> ✅ Pass</label>
+<label><input type="radio" name="CHD-05" value="fail" onchange="tally()"> ❌ Fail</label>
+<label><input type="radio" name="CHD-05" value="skip" onchange="tally()"> ⏭ Skip</label>
+</div>
+<textarea class="notes-input" placeholder="Notes: List which extensions are available" id="notes-CHD-05"></textarea>
+</div>
+</div>
+
+<!-- P2: ANALYSIS DIAGNOSTICS -->
+<div class="section">
+<div class="section-title">4. P2: Import Analysis Diagnostics</div>
+<div class="test" data-id="DIAG-01" data-reqs="HL-014">
+<div class="test-header">
+<span class="test-id">[DIAG-01]</span>
+<span class="test-name">Import response includes diagnostic: measures_with_chords, chords_derived, key_detected</span>
+<span class="badge badge-new">NEW</span>
+</div>
+<div class="radio-group">
+<label><input type="radio" name="DIAG-01" value="pass" onchange="tally()"> ✅ Pass</label>
+<label><input type="radio" name="DIAG-01" value="fail" onchange="tally()"> ❌ Fail</label>
+<label><input type="radio" name="DIAG-01" value="skip" onchange="tally()"> ⏭ Skip</label>
+</div>
+<textarea class="notes-input" placeholder="Notes: What diagnostic fields do you see?" id="notes-DIAG-01"></textarea>
+</div>
+<div class="test" data-id="DIAG-02" data-reqs="HL-014">
+<div class="test-header">
+<span class="test-id">[DIAG-02]</span>
+<span class="test-name">Import "Almost Like Being in Love" (.mscz) → chords derived > 0 OR diagnostic explains why 0</span>
+<span class="badge badge-fix">ANALYSIS BUG</span>
+</div>
+<div class="radio-group">
+<label><input type="radio" name="DIAG-02" value="pass" onchange="tally()"> ✅ Pass</label>
+<label><input type="radio" name="DIAG-02" value="fail" onchange="tally()"> ❌ Fail</label>
+<label><input type="radio" name="DIAG-02" value="skip" onchange="tally()"> ⏭ Skip</label>
+</div>
+<textarea class="notes-input" placeholder="Notes: How many chords derived? If 0, what does the diagnostic say?" id="notes-DIAG-02"></textarea>
+</div>
+</div>
+
+<!-- P3: ERROR TOASTS -->
+<div class="section">
+<div class="section-title">5. P3: Error Toasts (replacing alerts)</div>
+<div class="test" data-id="ERR-01" data-reqs="">
+<div class="test-header">
+<span class="test-id">[ERR-01]</span>
+<span class="test-name">Errors show as toast notifications, not browser alert() dialogs</span>
+<span class="badge badge-new">NEW</span>
+</div>
+<div class="radio-group">
+<label><input type="radio" name="ERR-01" value="pass" onchange="tally()"> ✅ Pass</label>
+<label><input type="radio" name="ERR-01" value="fail" onchange="tally()"> ❌ Fail</label>
+<label><input type="radio" name="ERR-01" value="skip" onchange="tally()"> ⏭ Skip</label>
+</div>
+<textarea class="notes-input" placeholder="Notes: Trigger an error (e.g., import bad file) and verify toast appears" id="notes-ERR-01"></textarea>
+</div>
+</div>
+
+<!-- JAZZ STANDARDS + BATCH -->
+<div class="section">
+<div class="section-title">6. Jazz Standards & Batch Import (Regression)</div>
+<div class="test" data-id="STD-01" data-reqs="HL-008">
+<div class="test-header">
+<span class="test-id">[STD-01]</span>
+<span class="test-name">Jazz standards visible in song list (Autumn Leaves, etc.)</span>
+<span class="badge badge-reg">REG</span>
+</div>
+<div class="radio-group">
+<label><input type="radio" name="STD-01" value="pass" onchange="tally()"> ✅ Pass</label>
+<label><input type="radio" name="STD-01" value="fail" onchange="tally()"> ❌ Fail</label>
+<label><input type="radio" name="STD-01" value="skip" onchange="tally()"> ⏭ Skip</label>
+</div>
+<textarea class="notes-input" placeholder="Notes..." id="notes-STD-01"></textarea>
+</div>
+<div class="test" data-id="BAT-01" data-reqs="HL-018">
+<div class="test-header">
+<span class="test-id">[BAT-01]</span>
+<span class="test-name">Batch import button visible, handles duplicates gracefully</span>
+<span class="badge badge-reg">REG</span>
+</div>
+<div class="radio-group">
+<label><input type="radio" name="BAT-01" value="pass" onchange="tally()"> ✅ Pass</label>
+<label><input type="radio" name="BAT-01" value="fail" onchange="tally()"> ❌ Fail</label>
+<label><input type="radio" name="BAT-01" value="skip" onchange="tally()"> ⏭ Skip</label>
+</div>
+<textarea class="notes-input" placeholder="Notes..." id="notes-BAT-01"></textarea>
+</div>
+</div>
+
+<!-- REGRESSION -->
+<div class="section">
+<div class="section-title">7. Regression</div>
+<div class="test" data-id="REG-01" data-reqs="">
+<div class="test-header">
+<span class="test-id">[REG-01]</span>
+<span class="test-name">Existing songs work: analysis view + quiz mode</span>
+<span class="badge badge-reg">REG</span>
+</div>
+<div class="radio-group">
+<label><input type="radio" name="REG-01" value="pass" onchange="tally()"> ✅ Pass</label>
+<label><input type="radio" name="REG-01" value="fail" onchange="tally()"> ❌ Fail</label>
+<label><input type="radio" name="REG-01" value="skip" onchange="tally()"> ⏭ Skip</label>
+</div>
+<textarea class="notes-input" placeholder="Notes..." id="notes-REG-01"></textarea>
+</div>
+<div class="test" data-id="REG-02" data-reqs="">
+<div class="test-header">
+<span class="test-id">[REG-02]</span>
+<span class="test-name">Analysis is default view (not quiz)</span>
+<span class="badge badge-reg">REG</span>
+</div>
+<div class="radio-group">
+<label><input type="radio" name="REG-02" value="pass" onchange="tally()"> ✅ Pass</label>
+<label><input type="radio" name="REG-02" value="fail" onchange="tally()"> ❌ Fail</label>
+<label><input type="radio" name="REG-02" value="skip" onchange="tally()"> ⏭ Skip</label>
+</div>
+<textarea class="notes-input" placeholder="Notes..." id="notes-REG-02"></textarea>
+</div>
+</div>
+
+</div>
+
+<div class="btn-row">
+<button class="btn btn-primary" onclick="copyResults()">📋 Copy Results</button>
+<button class="btn btn-secondary" onclick="submitToMetaPM()">📮 Submit to MetaPM</button>
+</div>
+<div id="output"></div>
+
+<script>
+document.getElementById('date').textContent = new Date().toLocaleString();
+
+function tally(){
+ let p=0,f=0,s=0,t=document.querySelectorAll('.test').length;
+ document.querySelectorAll('input[type=radio]:checked').forEach(r=>{
+  if(r.value==='pass')p++;else if(r.value==='fail')f++;else s++;
+ });
+ document.getElementById('pass-count').textContent=p;
+ document.getElementById('fail-count').textContent=f;
+ document.getElementById('skip-count').textContent=s;
+ document.getElementById('pending-count').textContent=t-p-f-s;
+}
+
+function gatherResults(){
+ const lines=[];
+ lines.push('[HarmonyLab] v1.8.4 — UAT: Rework Sprint (MIDI Fix + Chord Dropdowns + Diagnostics)');
+ lines.push('============================================================');
+ lines.push('Date: '+new Date().toLocaleString());
+ lines.push('Version: 1.8.4');
+ lines.push('BE Rev: harmonylab-00087-fw9 | FE Rev: harmonylab-frontend-00059-ctf');
+ lines.push('Requirements: HL-008, HL-009, HL-014, HL-018');
+ let p=0,f=0,s=0;
+ document.querySelectorAll('input[type=radio]:checked').forEach(r=>{
+  if(r.value==='pass')p++;else if(r.value==='fail')f++;else s++;
+ });
+ lines.push('Summary: '+p+' passed, '+f+' failed, '+s+' skipped');
+ lines.push('============================================================');
+ let currentSection='';
+ document.querySelectorAll('.test').forEach(t=>{
+  const sec=t.closest('.section');
+  const secTitle=sec.querySelector('.section-title').textContent;
+  if(secTitle!==currentSection){lines.push('\n'+secTitle+'\n'+'--------------------------------------------------');currentSection=secTitle;}
+  const id=t.dataset.id;
+  const name=t.querySelector('.test-name').textContent;
+  const checked=t.querySelector('input[type=radio]:checked');
+  const result=checked?checked.value:'pending';
+  const icon=result==='pass'?'✓ PASS':result==='fail'?'✗ FAIL':result==='skip'?'○ SKIP':'? PENDING';
+  const notes=document.getElementById('notes-'+id)?.value||'';
+  lines.push('  ['+id+'] '+icon+': '+name);
+  if(notes)lines.push('         📝 '+notes);
+ });
+ lines.push('\nOVERALL: '+(f>0?'PENDING':'PENDING'));
+ return lines.join('\n');
+}
+
+function copyResults(){
+ const txt=gatherResults();
+ navigator.clipboard.writeText(txt).then(()=>{
+  const o=document.getElementById('output');o.style.display='block';o.textContent='✅ Copied to clipboard!\n\n'+txt;
+ });
+}
+
+function submitToMetaPM(){
+ const txt=gatherResults();
+ let p=0,f=0,s=0;
+ document.querySelectorAll('input[type=radio]:checked').forEach(r=>{
+  if(r.value==='pass')p++;else if(r.value==='fail')f++;else s++;
+ });
+ const payload={
+  project_name:'HarmonyLab',version:'1.8.4',
+  feature_description:'UAT Rework: MIDI import crash fix, chord editing dropdowns, analysis diagnostics, error toasts, health versioning',
+  linked_requirements:'HL-008, HL-009, HL-014, HL-018',
+  test_results_summary:p+' passed, '+f+' failed, '+s+' skipped out of 17',
+  test_results_detail:txt,
+  notes:'Rework of v1.8.3 UAT failures.'
+ };
+ fetch('https://metapm.rentyourcio.com/api/uat/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+ .then(r=>r.json()).then(d=>{
+  const o=document.getElementById('output');o.style.display='block';
+  o.textContent='✅ Submitted to MetaPM!\n'+JSON.stringify(d,null,2);
+ }).catch(e=>{
+  const o=document.getElementById('output');o.style.display='block';
+  o.textContent='❌ Submit failed: '+e.message+'\n\nResults copied below:\n\n'+txt;
+  navigator.clipboard.writeText(txt);
+ });
+}
+</script>
+</body>
+</html>

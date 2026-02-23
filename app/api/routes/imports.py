@@ -272,9 +272,17 @@ async def import_score(
 
         chord_warning = ""
         if result["chords_created"] == 0:
-            chord_warning = (
-                " No chord symbols found in this file — open the song and add analysis manually."
-            )
+            if ext in ('.mscz', '.mscx'):
+                chord_warning = (
+                    " MuseScore format partially supported: metadata imported, but no explicit "
+                    "chord symbols (Harmony elements) found. If this score has written chord "
+                    "symbols, ensure they are visible in MuseScore. Alternatively, export as "
+                    ".mid from MuseScore for note-based chord analysis."
+                )
+            else:
+                chord_warning = (
+                    " No chord symbols found in this file — open the song and add analysis manually."
+                )
 
         measures_with_chords = len(set(c.measure_number for c in parsed.chords)) if parsed.chords else 0
 

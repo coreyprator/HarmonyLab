@@ -20,7 +20,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v1.8.4</div>
+        <div class="nav-version">v1.8.6</div>
     </nav>
 
     <header>
@@ -200,9 +200,77 @@
             </div>
             <div class="modal-body">
                 <div class="form-group">
-                    <label>Chord Symbol</label>
-                    <input type="text" id="modal-symbol" readonly class="input-readonly">
+                    <label>Root</label>
+                    <select id="modal-root" onchange="updateAnalysisChordPreview()">
+                        <option value="C">C</option><option value="C#">C#</option><option value="Db">Db</option>
+                        <option value="D">D</option><option value="D#">D#</option><option value="Eb">Eb</option>
+                        <option value="E">E</option>
+                        <option value="F">F</option><option value="F#">F#</option><option value="Gb">Gb</option>
+                        <option value="G">G</option><option value="G#">G#</option><option value="Ab">Ab</option>
+                        <option value="A">A</option><option value="A#">A#</option><option value="Bb">Bb</option>
+                        <option value="B">B</option>
+                    </select>
                 </div>
+                <div class="form-group">
+                    <label>Quality</label>
+                    <select id="modal-quality" onchange="updateAnalysisChordPreview()">
+                        <option value="">Major</option>
+                        <option value="m">Minor (m)</option>
+                        <option value="7">Dom 7</option>
+                        <option value="maj7">Maj 7</option>
+                        <option value="m7">Min 7</option>
+                        <option value="dim">Dim</option>
+                        <option value="dim7">Dim 7</option>
+                        <option value="m7b5">Half-dim (m7b5)</option>
+                        <option value="aug">Aug</option>
+                        <option value="aug7">Aug 7</option>
+                        <option value="mmaj7">Min Maj 7</option>
+                        <option value="6">Maj 6</option>
+                        <option value="m6">Min 6</option>
+                        <option value="9">Dom 9</option>
+                        <option value="maj9">Maj 9</option>
+                        <option value="m9">Min 9</option>
+                        <option value="13">Dom 13</option>
+                        <option value="sus4">Sus4</option>
+                        <option value="sus2">Sus2</option>
+                        <option value="7#9">7#9</option>
+                        <option value="7b9">7b9</option>
+                        <option value="alt">Altered</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Extension <small style="font-weight:normal;color:#888">(optional)</small></label>
+                    <select id="modal-ext" onchange="updateAnalysisChordPreview()">
+                        <option value="">None</option>
+                        <option value="9">9</option>
+                        <option value="b9">b9</option>
+                        <option value="#9">#9</option>
+                        <option value="11">11</option>
+                        <option value="#11">#11</option>
+                        <option value="13">13</option>
+                        <option value="b13">b13</option>
+                        <option value="add9">add9</option>
+                        <option value="add11">add11</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Bass Note <small style="font-weight:normal;color:#888">(optional, for slash chords)</small></label>
+                    <select id="modal-bass" onchange="updateAnalysisChordPreview()">
+                        <option value="">None</option>
+                        <option value="C">C</option><option value="C#">C#</option><option value="Db">Db</option>
+                        <option value="D">D</option><option value="D#">D#</option><option value="Eb">Eb</option>
+                        <option value="E">E</option>
+                        <option value="F">F</option><option value="F#">F#</option><option value="Gb">Gb</option>
+                        <option value="G">G</option><option value="G#">G#</option><option value="Ab">Ab</option>
+                        <option value="A">A</option><option value="A#">A#</option><option value="Bb">Bb</option>
+                        <option value="B">B</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Chord Symbol Preview</label>
+                    <div id="modal-symbol-preview" style="font-size:1.4rem;font-weight:bold;padding:8px 0;"></div>
+                </div>
+                <hr style="border:none;border-top:1px solid var(--border);margin:8px 0">
                 <div class="form-group">
                     <label>Roman Numeral (auto)</label>
                     <input type="text" id="modal-roman-auto" readonly class="input-readonly">
@@ -585,7 +653,20 @@
             const ac = analysisData.chords.find(c => c.index === chordIndex);
             if (!ac) return;
 
-            document.getElementById('modal-symbol').value = ac.symbol;
+            // Populate chord symbol dropdowns
+            const parsed = parseChordSymbol(ac.symbol);
+            const modalRoot = document.getElementById('modal-root');
+            modalRoot.value = parsed.root;
+            if (modalRoot.value !== parsed.root) modalRoot.value = 'C';
+
+            const modalQual = document.getElementById('modal-quality');
+            modalQual.value = parsed.quality;
+            if (modalQual.value !== parsed.quality) modalQual.value = '';
+
+            document.getElementById('modal-ext').value = parsed.extension || '';
+            document.getElementById('modal-bass').value = parsed.bass || '';
+            updateAnalysisChordPreview();
+
             document.getElementById('modal-roman-auto').value = ac.roman;
             document.getElementById('modal-roman').value = ac.is_override ? ac.roman : '';
             document.getElementById('modal-function').value = '';
@@ -598,6 +679,16 @@
                 ac.is_pivot ? '' : 'none';
 
             document.getElementById('chord-modal').style.display = 'flex';
+        }
+
+        function updateAnalysisChordPreview() {
+            const root = document.getElementById('modal-root').value;
+            const quality = document.getElementById('modal-quality').value;
+            const ext = document.getElementById('modal-ext').value;
+            const bass = document.getElementById('modal-bass').value;
+            let symbol = root + quality + ext;
+            if (bass) symbol += '/' + bass;
+            document.getElementById('modal-symbol-preview').textContent = symbol;
         }
 
         // ==========================================
@@ -756,6 +847,14 @@
         async function saveOverride() {
             if (editingChordIndex === null) return;
 
+            // Compose new chord symbol from dropdowns
+            const root = document.getElementById('modal-root').value;
+            const quality = document.getElementById('modal-quality').value;
+            const ext = document.getElementById('modal-ext').value;
+            const bass = document.getElementById('modal-bass').value;
+            let newSymbol = root + quality + ext;
+            if (bass) newSymbol += '/' + bass;
+
             const payload = {
                 roman: document.getElementById('modal-roman').value || null,
                 function: document.getElementById('modal-function').value || null,
@@ -766,6 +865,30 @@
             };
 
             try {
+                // Update chord symbol in DB if changed
+                const chordInfo = allChords[editingChordIndex];
+                if (chordInfo && newSymbol !== chordInfo.symbol) {
+                    const chordPayload = {
+                        measure_id: chordInfo.measure_id,
+                        beat_position: chordInfo.beat_position,
+                        chord_symbol: newSymbol,
+                        chord_order: chordInfo.chord_order
+                    };
+                    const chordRes = await fetch(
+                        `${API_BASE}/api/v1/chords/${chordInfo.id}`,
+                        {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(chordPayload)
+                        }
+                    );
+                    if (!chordRes.ok) throw new Error('Failed to update chord symbol');
+                    chordInfo.symbol = newSymbol;
+                    chordInfo.element.querySelector('.chord-symbol').textContent = newSymbol;
+                    chordInfo.element.dataset.symbol = newSymbol;
+                }
+
+                // Save analysis override
                 const res = await fetch(
                     `${API_BASE}/api/v1/analysis/songs/${songId}/chord/${editingChordIndex}`,
                     {
@@ -780,7 +903,7 @@
                 closeChordModal();
                 await loadAnalysis(true);
             } catch (err) {
-                alert('Failed to save override: ' + err.message);
+                alert('Failed to save: ' + err.message);
             }
         }
 

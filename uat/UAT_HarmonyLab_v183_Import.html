@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🎵 HarmonyLab v1.8.3 — UAT: MuseScore Import + Jazz Standards</title>
+<style>
+  :root{--bg:#1a1a2e;--surface:#252538;--accent:#8b5cf6;--green:#22c55e;--red:#ef4444;--skip:#6b7280;--text:#e5e5e5;--border:#3a3a52}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:900px;margin:0 auto;padding:20px;background:var(--bg);color:var(--text);line-height:1.6}
+  header{background:linear-gradient(135deg,var(--accent),#6d28d9);padding:20px;border-radius:12px;margin-bottom:24px}
+  header h1{font-size:1.3rem} header p{opacity:0.9;font-size:0.85rem;margin-top:4px}
+  .meta{display:flex;gap:12px;flex-wrap:wrap;margin-top:10px;font-size:0.8rem}
+  .meta span{background:rgba(255,255,255,0.15);padding:3px 8px;border-radius:4px}
+  .url-bar{background:#0f172a;padding:10px 14px;border-radius:6px;margin-bottom:20px;font-family:monospace;font-size:0.85rem}
+  .url-bar a{color:#a78bfa;text-decoration:none} .url-bar a:hover{text-decoration:underline}
+  .prereq{background:#1e2a3f;border:2px solid var(--accent);border-radius:8px;padding:14px 18px;margin-bottom:20px;font-size:0.88rem}
+  .prereq strong{color:#c4b5fd}
+  section{background:var(--surface);border-radius:8px;padding:20px;margin-bottom:16px}
+  section h2{color:#c4b5fd;font-size:1.05rem;margin-bottom:14px;padding-bottom:6px;border-bottom:2px solid var(--accent)}
+  .test{padding:14px 0;border-bottom:1px solid var(--border)} .test:last-child{border-bottom:none}
+  .test-row{display:flex;align-items:flex-start;gap:10px} .test-body{flex:1} .test-label{font-weight:500}
+  .tag{display:inline-block;font-size:0.68rem;padding:1px 5px;border-radius:3px;margin-left:4px;vertical-align:middle}
+  .tag.new{background:rgba(139,92,246,0.25);color:#c4b5fd}
+  .tag.seed{background:rgba(234,179,8,0.25);color:#fde047}
+  .expected{color:#a78bfa;font-size:0.83rem;font-style:italic;display:block;margin-top:3px}
+  .btns{display:flex;gap:5px;flex-shrink:0}
+  .btn{padding:5px 12px;border:none;border-radius:4px;cursor:pointer;font-weight:600;font-size:0.82rem}
+  .btn-p{background:#166534;color:#bbf7d0} .btn-p:hover,.btn-p.on{background:var(--green);color:#fff}
+  .btn-f{background:#991b1b;color:#fecaca} .btn-f:hover,.btn-f.on{background:var(--red);color:#fff}
+  .btn-s{background:#374151;color:#d1d5db} .btn-s:hover,.btn-s.on{background:var(--skip);color:#fff}
+  .test.pass .test-label{color:#4ade80} .test.pass .test-label::before{content:"✓ "}
+  .test.fail .test-label{color:#f87171} .test.fail .test-label::before{content:"✗ "}
+  .test.skip .test-label{color:#9ca3af} .test.skip .test-label::before{content:"○ "}
+  .notes{margin-top:8px}
+  .notes textarea{width:100%;padding:6px 8px;background:#1e1e32;border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.85rem;resize:vertical;min-height:36px}
+  .notes textarea:focus{outline:none;border-color:var(--accent)}
+  .general{background:#1e2a3f;border:2px solid #8b5cf6;border-radius:8px;padding:18px;margin-top:20px}
+  .general h3{color:#a78bfa;margin-bottom:10px}
+  .general textarea{width:100%;min-height:70px;padding:10px;background:#1e1e32;border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.88rem;resize:vertical}
+  .summary{background:#1e1e32;border:2px solid var(--accent);border-radius:8px;padding:18px;margin-top:20px}
+  .stats{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+  .stat{padding:10px 18px;border-radius:6px;font-weight:700;text-align:center}
+  .stat.t{background:var(--accent)} .stat.p{background:var(--green)} .stat.f{background:#991b1b} .stat.s{background:var(--skip)}
+  .overall{padding:14px;border-radius:8px;text-align:center;margin-top:14px}
+  .overall.pending{background:#374151;border:2px dashed #6b7280}
+  .overall.pass{background:#166534;border:2px solid var(--green)}
+  .overall.fail{background:#991b1b;border:2px solid var(--red)}
+  .overall-btns{display:flex;gap:10px;justify-content:center;margin-top:10px}
+  .obtn{padding:8px 20px;border:none;border-radius:6px;font-size:0.95rem;font-weight:600;cursor:pointer}
+  .obtn.ok{background:var(--green);color:#fff} .obtn.no{background:#991b1b;color:#fff}
+  .export{text-align:center;margin-top:20px;display:flex;gap:10px;justify-content:center}
+  .export button{padding:10px 28px;border:none;border-radius:8px;font-size:0.95rem;font-weight:600;cursor:pointer}
+  .export .copy{background:var(--accent);color:#fff} .export .submit{background:var(--green);color:#fff}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🎵 HarmonyLab v1.8.3 — UAT: MuseScore Import + Jazz Standards</h1>
+  <p>Import pipeline built. 15 jazz standards seeded. Chord editing confirmed.</p>
+  <div class="meta">
+    <span>v1.8.3</span><span>Tester: Corey</span><span>Date: <span id="dt"></span></span>
+    <span>BE: harmonylab-00084-4mz</span><span>FE: harmonylab-frontend-00058-wp7</span>
+  </div>
+</header>
+
+<div class="url-bar">
+  🌐 <a href="https://harmonylab-57478301787.us-central1.run.app" target="_blank">HarmonyLab Backend</a> |
+  <a href="https://harmonylab-57478301787.us-central1.run.app/health" target="_blank">/health</a>
+</div>
+
+<div class="prereq">
+  <strong>Pre-test:</strong> Ctrl+F5. Confirm v1.8.3 in both BE and FE health. Login if needed.<br>
+  <strong>Test flow:</strong> Check jazz standards in song list → open one → verify analysis → try importing a file → try batch import → try chord editing.<br>
+  <strong>Note:</strong> You'll need a .mid or .musicxml test file. If you have a .mscz from MuseScore, even better.
+</div>
+
+<!-- ═══ 1. SMOKE ═══ -->
+<section>
+  <h2>1. Smoke</h2>
+  <div class="test" data-id="SM-01"><div class="test-row"><div class="test-body"><span class="test-label">v1.8.3 in backend and frontend health</span></div><div class="btns"><button class="btn btn-p" onclick="m(this,'pass')">✓</button><button class="btn btn-f" onclick="m(this,'fail')">✗</button><button class="btn btn-s" onclick="m(this,'skip')">○</button></div></div><div class="notes"><textarea></textarea></div></div>
+  <div class="test" data-id="SM-02"><div class="test-row"><div class="test-body"><span class="test-label">App loads, login works, song list visible</span></div><div class="btns"><button class="btn btn-p" onclick="m(this,'pass')">✓</button><button class="btn btn-f" onclick="m(this,'fail')">✗</button><button class="btn btn-s" onclick="m(this,'skip')">○</button></div></div><div class="notes"><textarea></textarea></div></div>
+</section>
+
+<!-- ═══ 2. HL-008: JAZZ STANDARDS ═══ -->
+<section>
+  <h2>2. HL-008: Jazz Standards (15 Seeded)</h2>
+  <div class="test" data-id="STD-01"><div class="test-row"><div class="test-body"><span class="test-label">Jazz standards visible in song list<span class="tag seed">SEED</span></span><span class="expected">→ Song list shows seeded standards: Autumn Leaves, All The Things You Are, Blue Bossa, etc. Should be 15 total.</span></div><div class="btns"><button class="btn btn-p" onclick="m(this,'pass')">✓</button><button class="btn btn-f" onclick="m(this,'fail')">✗</button><button class="btn btn-s" onclick="m(this,'skip')">○</button></div></div><div class="notes"><textarea placeholder="How many visible? List a few names."></textarea></div></div>
+  <div class="test" data-id="STD-02"><div class="test-row"><div class="test-body"><span class="test-label">Click "Autumn Leaves" → Analysis page renders with chords</span><span class="expected">→ Click a standard → Analysis page shows chord progression. Chords look musically correct (Cm7 - F7 - BbMaj7 - EbMaj7 for Autumn Leaves). Key signature shown.</span></div><div class="btns"><button class="btn btn-p" onclick="m(this,'pass')">✓</button><button class="btn btn-f" onclick="m(this,'fail')">✗</button><button class="btn btn-s" onclick="m(this,'skip')">○</button></div></div><div class="notes"><textarea placeholder="Are the chords musically correct? Key signature?"></textarea></div></div>
+  <div class="test" data-id="STD-03"><div class="test-row"><div class="test-body"><span class="test-label">Quiz mode works with seeded standards</span><span class="expected">→ Go to Quiz → a seeded standard is available. Quiz questions make sense.</span></div><div class="btns"><button class="btn btn-p" onclick="m(this,'pass')">✓</button><button class="btn btn-f" onclick="m(this,'fail')">✗</button><button class="btn btn-s" onclick="m(this,'skip')">○</button></div></div><div class="notes"><textarea></textarea></div></div>
+</section>
+
+<!-- ═══ 3. HL-014: SINGLE FILE IMPORT ═══ -->
+<section>
+  <h2>3. HL-014: Score File Import</h2>
+  <div class="test" data-id="IMP-01"><div class="test-row"><div class="test-body"><span class="test-label">"Import Score File" button visible (replaced old "Add Song" MIDI-only modal)<span class="tag new">NEW</span></span><span class="expected">→ Toolbar shows "Import Score File" (not "Add Song"). Accepts .mscz, .mscx, .musicxml, .mid.</span></div><div class="btns"><button class="btn btn-p" onclick="m(this,'pass')">✓</button><button class="btn btn-f" onclick="m(this,'fail')">✗</button><button class="btn btn-s" onclick="m(this,'skip')">○</button></div></div><div class="notes"><textarea></textarea></div></div>
+  <div class="test" data-id="IMP-02"><div class="test-row"><div class="test-body"><span class="test-label">Import a .mid file → song appears in list with chord data<span class="tag new">NEW</span></span><span class="expected">→ Upload a MIDI file. Song appears in list. Click → Analysis shows chords. This is the regression guard — MIDI should still work.</span></div><div class="btns"><button class="btn btn-p" onclick="m(this,'pass')">✓</button><button class="btn btn-f" onclick="m(this,'fail')">✗</button><button class="btn btn-s" onclick="m(this,'skip')">○</button></div></div><div class="notes"><textarea placeholder="If no .mid file available, skip this test."></textarea></div></div>
+  <div class="test" data-id="IMP-03"><div class="test-row"><div class="test-body"><span class="test-label">Import a .musicxml or .mscz file → song appears with chords<span class="tag new">NEW</span></span><span class="expected">→ This is the NEW capability. Upload a MuseScore or MusicXML file. Song parses, appears in list, has chord data in Analysis.</span></div><div class="btns"><button class="btn btn-p" onclick="m(this,'pass')">✓</button><button class="btn btn-f" onclick="m(this,'fail')">✗</button><button class="btn btn-s" onclick="m(this,'skip')">○</button></div></div><div class="notes"><textarea placeholder="What format? Did it parse? How many chords detected?"></textarea></div></div>
+  <div class="test" data-id="IMP-04"><div class="test-row"><div class="test-body"><span class="test-label">Bad file → clear error message</span><span class="expected">→ Upload a .txt or corrupt file. Should show a user-friendly error, not a crash.</span></div><div class="btns"><button class="btn btn-p" onclick="m(this,'pass')">✓</button><button class="btn btn-f" onclick="m(this,'fail')">✗</button><button class="btn btn-s" onclick="m(this,'skip')">○</button></div></div><div class="notes"><textarea></textarea></div></div>
+</section>
+
+<!-- ═══ 4. HL-018: BATCH IMPORT ═══ -->
+<section>
+  <h2>4. HL-018: Batch Import</h2>
+  <div class="test" data-id="BAT-01"><div class="test-row"><div class="test-body"><span class="test-label">"Batch Import" button visible in toolbar<span class="tag new">NEW</span></span><span class="expected">→ Separate button from single import. Click → file picker or upload zone.</span></div><div class="btns"><button class="btn btn-p" onclick="m(this,'pass')">✓</button><button class="btn btn-f" onclick="m(this,'fail')">✗</button><button class="btn btn-s" onclick="m(this,'skip')">○</button></div></div><div class="notes"><textarea></textarea></div></div>
+  <div class="test" data-id="BAT-02"><div class="test-row"><div class="test-body"><span class="test-label">Batch import handles duplicates gracefully</span><span class="expected">→ If you import a file that already exists (same song name), it should skip with a "duplicate" message, not create a second copy or crash.</span></div><div class="btns"><button class="btn btn-p" onclick="m(this,'pass')">✓</button><button class="btn btn-f" onclick="m(this,'fail')">✗</button><button class="btn btn-s" onclick="m(this,'skip')">○</button></div></div><div class="notes"><textarea></textarea></div></div>
+</section>
+
+<!-- ═══ 5. HL-009: CHORD EDITING ═══ -->
+<section>
+  <h2>5. HL-009: Chord Editing</h2>
+  <div class="test" data-id="CHD-01"><div class="test-row"><div class="test-body"><span class="test-label">Click a chord in Analysis → edit modal opens</span><span class="expected">→ Open a song's Analysis. Click any chord symbol. An edit modal/dropdown appears with root note + chord type selectors (Maj7, min7, dom7, etc.).</span></div><div class="btns"><button class="btn btn-p" onclick="m(this,'pass')">✓</button><button class="btn btn-f" onclick="m(this,'fail')">✗</button><button class="btn btn-s" onclick="m(this,'skip')">○</button></div></div><div class="notes"><textarea></textarea></div></div>
+  <div class="test" data-id="CHD-02"><div class="test-row"><div class="test-body"><span class="test-label">Edit a chord → change persists after reload</span><span class="expected">→ Change a chord (e.g., Cm7 → Cdim7). Save → chord updates in view. Reload page → change persisted.</span></div><div class="btns"><button class="btn btn-p" onclick="m(this,'pass')">✓</button><button class="btn btn-f" onclick="m(this,'fail')">✗</button><button class="btn btn-s" onclick="m(this,'skip')">○</button></div></div><div class="notes"><textarea></textarea></div></div>
+</section>
+
+<!-- ═══ 6. REGRESSION ═══ -->
+<section>
+  <h2>6. Regression</h2>
+  <div class="test" data-id="REG-01"><div class="test-row"><div class="test-body"><span class="test-label">Existing songs still work (analysis + quiz)</span><span class="expected">→ Any pre-existing song (not from this sprint) still loads, analyzes, quizzes correctly.</span></div><div class="btns"><button class="btn btn-p" onclick="m(this,'pass')">✓</button><button class="btn btn-f" onclick="m(this,'fail')">✗</button><button class="btn btn-s" onclick="m(this,'skip')">○</button></div></div><div class="notes"><textarea></textarea></div></div>
+  <div class="test" data-id="REG-02"><div class="test-row"><div class="test-body"><span class="test-label">Analysis is default view (HL-010 from audit sprint)</span></div><div class="btns"><button class="btn btn-p" onclick="m(this,'pass')">✓</button><button class="btn btn-f" onclick="m(this,'fail')">✗</button><button class="btn btn-s" onclick="m(this,'skip')">○</button></div></div><div class="notes"><textarea></textarea></div></div>
+</section>
+
+<div class="general">
+  <h3>📋 Notes</h3>
+  <textarea id="gnotes" placeholder="Quality of jazz standard chord data. Import UX. Any missing standards you want added."></textarea>
+</div>
+
+<div class="summary">
+  <h3>📊 Results</h3>
+  <div class="stats">
+    <div class="stat t">Total: <span id="tc">0</span></div>
+    <div class="stat p">Pass: <span id="pc">0</span></div>
+    <div class="stat f">Fail: <span id="fc">0</span></div>
+    <div class="stat s">Skip: <span id="sc">0</span></div>
+  </div>
+  <div class="overall pending" id="ov">
+    <h4>Overall</h4>
+    <div class="overall-btns">
+      <button class="obtn ok" onclick="setOv('pass')">✓ APPROVED</button>
+      <button class="obtn no" onclick="setOv('fail')">✗ NEEDS FIXES</button>
+    </div>
+  </div>
+</div>
+
+<div class="export">
+  <button class="copy" onclick="copyAll()">📋 Copy</button>
+  <button class="submit" id="sbtn" onclick="submitUAT()">📤 Submit</button>
+</div>
+
+<script>
+const CFG={project:'HarmonyLab',version:'1.8.3',feature:'MuseScore Import Pipeline + Jazz Standards + Chord Editing',reqs:['HL-008','HL-009','HL-014','HL-018']};
+const R={};
+document.getElementById('dt').textContent=new Date().toLocaleDateString();
+document.getElementById('tc').textContent=document.querySelectorAll('.test').length;
+function m(b,r){const t=b.closest('.test'),id=t.dataset.id;t.querySelectorAll('.btn').forEach(x=>x.classList.remove('on'));b.classList.add('on');t.className='test '+r;R[id]=r;u();}
+function u(){const v=Object.values(R);document.getElementById('pc').textContent=v.filter(x=>x==='pass').length;document.getElementById('fc').textContent=v.filter(x=>x==='fail').length;document.getElementById('sc').textContent=v.filter(x=>x==='skip').length;}
+function setOv(r){const o=document.getElementById('ov');o.className='overall '+r;o.innerHTML=r==='pass'?'<h4 style="color:#4ade80">✓ v1.8.3 APPROVED 🎵</h4>':'<h4 style="color:#f87171">✗ NEEDS FIXES</h4>';}
+function buildTxt(){
+  const tot=document.querySelectorAll('.test').length,p=Object.values(R).filter(x=>x==='pass').length,f=Object.values(R).filter(x=>x==='fail').length,s=tot-p-f;
+  let o=`[HarmonyLab] v${CFG.version} — UAT: ${CFG.feature}\n${'='.repeat(60)}\nDate: ${new Date().toLocaleString()}\nVersion: ${CFG.version}\nBE Rev: harmonylab-00084-4mz | FE Rev: harmonylab-frontend-00058-wp7\nRequirements: ${CFG.reqs.join(', ')}\nSummary: ${p} passed, ${f} failed, ${s} skipped\n${'='.repeat(60)}\n`;
+  document.querySelectorAll('section').forEach(sec=>{const h=sec.querySelector('h2');if(!h)return;o+=`\n${h.textContent}\n${'-'.repeat(50)}\n`;sec.querySelectorAll('.test').forEach(t=>{const id=t.dataset.id,lbl=t.querySelector('.test-label')?.textContent||'',st=R[id]||'pending',n=t.querySelector('textarea')?.value||'',ic={pass:'✓',fail:'✗',skip:'○',pending:'?'}[st];o+=`  [${id}] ${ic} ${st.toUpperCase()}: ${lbl}\n`;if(n.trim())o+=`         📝 ${n}\n`;});});
+  const gn=document.getElementById('gnotes').value.trim();if(gn)o+=`\nNotes\n${'-'.repeat(50)}\n${gn}\n`;
+  const ov=document.getElementById('ov');o+=ov.classList.contains('pass')?'\nOVERALL: ✓ APPROVED\n':ov.classList.contains('fail')?'\nOVERALL: ✗ NEEDS FIXES\n':'\nOVERALL: PENDING\n';
+  return o;
+}
+function copyAll(){navigator.clipboard?.writeText(buildTxt()).then(()=>alert('Copied!'));}
+async function submitUAT(){
+  const btn=document.getElementById('sbtn'),tot=document.querySelectorAll('.test').length,p=Object.values(R).filter(x=>x==='pass').length,f=Object.values(R).filter(x=>x==='fail').length;
+  if(p+f===0){alert('Mark at least one test first.');return;}
+  const det=[];document.querySelectorAll('.test').forEach(t=>{det.push({id:t.dataset.id,title:t.querySelector('.test-label')?.textContent||'',status:R[t.dataset.id]||'skip',note:t.querySelector('textarea')?.value||''});});
+  btn.disabled=true;btn.textContent='⏳...';
+  try{
+    const res=await fetch('https://metapm.rentyourcio.com/api/uat/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({project:CFG.project,version:CFG.version,feature:CFG.feature,status:f>0?'failed':'passed',total_tests:tot,passed:p,failed:f,skipped:tot-p-f,results_text:buildTxt(),results:det,linked_requirements:CFG.reqs,tested_by:'Corey'})});
+    const body=await res.text();if(!res.ok)throw new Error(`HTTP ${res.status}: ${body}`);
+    const data=JSON.parse(body);btn.textContent='✅ Submitted';btn.style.background='#166534';
+    const a=document.createElement('a');a.href=data.handoff_url;a.textContent='View →';a.target='_blank';a.style.cssText='display:block;text-align:center;margin-top:10px;color:#60a5fa;font-weight:600;';btn.parentElement.appendChild(a);
+  }catch(e){alert('Submit: '+e.message);btn.disabled=false;btn.textContent='📤 Submit';}
+}
+</script>
+</body>
+</html>
