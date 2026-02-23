@@ -1,7 +1,7 @@
 # PROJECT_KNOWLEDGE.md -- HarmonyLab
 
 **Generated**: 2026-02-15
-**Updated**: 2026-02-21 — Sprint "Rework v1.8.4" close-out (IMP-01, CHD-02, IMP-03, P3, P4, P5)
+**Updated**: 2026-02-22 — Sprint "Rework v1.8.6" close-out (CHD-01, IMP-03)
 **Method**: Full project read-through of every source file, config, schema, workflow, and documentation file.
 **Purpose**: Single-file knowledge recovery for any AI agent resuming work on this project.
 
@@ -16,8 +16,8 @@
 | Repository | https://github.com/coreyprator/harmonylab | `CLAUDE.md` line 65 |
 | Local Path | `G:\My Drive\Code\Python\harmonylab` | `CLAUDE.md` line 66 |
 | Methodology | [coreyprator/project-methodology](https://github.com/coreyprator/project-methodology) v3.14 | `CLAUDE.md` line 67 |
-| Current Version | v1.8.4 | `main.py` line 17 (updated 2026-02-21) |
-| Latest Revision | harmonylab-00087-fw9 (backend), harmonylab-frontend-00059-ctf (frontend) | Sprint Closeout 2026-02-21 |
+| Current Version | v1.8.6 | `main.py` line 17 (updated 2026-02-22) |
+| Latest Revision | harmonylab-00091-6h4 (backend), harmonylab-frontend-00060-5f5 (frontend) | Session Closeout 2026-02-22 |
 | Production URL | https://harmonylab.rentyourcio.com | `PROJECT_STATUS.md` line 5 |
 | API Docs | https://harmonylab.rentyourcio.com/docs | `PROJECT_STATUS.md` line 189 |
 | CLAUDE.md Last Updated | 2026-02-07 | `CLAUDE.md` line 269 |
@@ -258,7 +258,7 @@ All routes registered in `main.py` lines 85-94. Total: 36+ endpoints per `PROJEC
 
 ## 7. Services
 
-### Universal Score Parser (`app/services/score_parser.py`) *(added 2026-02-21)*
+### Universal Score Parser (`app/services/score_parser.py`) *(added 2026-02-21, updated 2026-02-22)*
 
 Unified parser for all supported music file formats. Key components:
 
@@ -266,10 +266,12 @@ Unified parser for all supported music file formats. Key components:
 - **`ScoreChord` dataclass**: measure_number, beat_position, chord_symbol, chord_order.
 - **`parse_music_file(file_path, filename)`**: Dispatches by extension.
   - `.mscz` → unzip with `zipfile`, extract `.mscx`, parse XML with `xml.etree.ElementTree`
-  - `.mscx` → parse XML directly. Extracts `<Harmony>/<name>` elements. Maps numeric root (14=C…25=B) via `MSCZ_ROOT_TO_NOTE`.
+  - `.mscx` → parse XML directly. Uses `measure.iter('Harmony')` to find `<Harmony>/<name>` elements at any nesting depth (MuseScore 4 wraps in `<voice>`). Maps numeric root (14=C…25=B) via `MSCZ_ROOT_TO_NOTE`.
   - `.musicxml/.xml/.mxl` → `music21.converter.parse()`, extracts `harmony.ChordSymbol` objects
   - `.mid/.midi` → delegates to existing `app.services.midi_parser.parse_midi_file()`
 - **Key maps**: `_SHARP_KEYS` (0=C…7=C#), `_FLAT_KEYS` (-1=F…-7=Cb), `MSCZ_ROOT_TO_NOTE` (14=C…25=B)
+- **Diagnostic logging** (added 2026-02-22): logs measures_scanned, measures_with_harmony, total_chords. Warns if 0 chords found (file may lack explicit Harmony elements).
+- **MuseScore 4 note** (2026-02-22): MuseScore 4 wraps content in `<voice>` elements. Fixed by using `iter()` instead of direct child iteration. If a score has no explicit chord symbols (only notation), 0 chords will be extracted — expected behavior.
 
 ### MIDI Parser (`app/services/midi_parser.py`)
 
@@ -523,6 +525,8 @@ Source: `app/api/routes/progress.py` lines 143-148.
 > **HL-014 RESOLVED (2026-02-21):** Universal score parser (score_parser.py). /score/preview + /score/import endpoints. Supports .mscz, .mscx, .musicxml, .mid. Old /musicxml/* 501 stubs removed.
 > **HL-018 RESOLVED (2026-02-21):** /batch endpoint accepts ZIP of any supported formats, duplicate detection, per-file error logging.
 > **HL-008 RESOLVED (2026-02-21):** 15 jazz standards seeded via /seed-standards. All in DB and query-able. Songs: Autumn Leaves, All The Things You Are, Blue Bossa, Fly Me To The Moon, Take The A Train, Misty, Summertime, Satin Doll, So What, Wave, Maiden Voyage, Watermelon Man, Round Midnight, Footprints, There Will Never Be Another You.
+> **CHD-01 REWORK RESOLVED (2026-02-22):** `chord-modal` (Analysis view, the default view) now has Root/Quality/Extension/Bass `<select>` dropdowns replacing the old readonly `modal-symbol` text input. `saveOverride()` PUTs chord symbol change to `/api/v1/chords/{id}` first, then saves analysis override. `parseChordSymbol()` is reused to pre-populate dropdowns on open. The `chord-edit-modal` (Chords view) is unchanged.
+> **IMP-03 RESOLVED (2026-02-22):** `.mscz` parser: changed direct child iteration to `measure.iter('Harmony')` — fixes MuseScore 4 `<voice>` nesting. Fixed operator precedence bug. Added diagnostic logging. Added specific user message for 0-chord MuseScore imports.
 > **HL-009 CONFIRMED (2026-02-21):** Chord dropdown editing already implemented in song.html. No change needed.
 > **HL-007 RESOLVED (2026-02-20):** Branch renamed master->main. origin/master deleted. GitHub default = main.
 > **HL-010 RESOLVED (2026-02-20):** song.html now defaults to Analysis view.
@@ -641,6 +645,8 @@ After v1.3.0 UAT failures, roadmap was re-scoped:
 - v1.8.2 = Analysis quality UAT (conditional pass), MIDI P0 resolved (deployed 2026-02-18)
 - v1.8.3 = Import pipeline: MuseScore/MusicXML/MIDI universal import, batch ZIP import, 15 jazz standards seeded (deployed 2026-02-21)
 - v1.8.4 = Rework sprint: MIDI crash fix (auth.js 5xx handling), chord modal + extensions + bass note, import diagnostic, showToast(), health component field (deployed 2026-02-21)
+- v1.8.5 = Error logging standardization (deployed 2026-02-22)
+- v1.8.6 = CHD-01 rework: chord dropdowns in Analysis view modal; IMP-03: .mscz MuseScore 4 voice nesting fix (deployed 2026-02-22)
 
 ### What's Next (updated 2026-02-21)
 | ID | Feature | Priority |
