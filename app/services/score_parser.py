@@ -152,17 +152,20 @@ def _parse_mscx_content(xml_content: str, default_title: str) -> ParsedScore:
 
     # --- Chord symbols ---
     # MuseScore stores chord symbols as <Harmony> elements inside measures.
+    # MuseScore 4 wraps measure content in <voice> elements, so Harmony may be
+    # a grandchild (or deeper) of Measure. Use iter() to find at any depth.
     chords: List[ScoreChord] = []
     measure_num = 0
+    measures_scanned = 0
+    measures_with_harmony = 0
 
     for measure in root.iter('Measure'):
         measure_num += 1
+        measures_scanned += 1
         chord_order = 1
+        harmony_in_measure = 0
 
-        for elem in measure:
-            if elem.tag != 'Harmony':
-                continue
-
+        for elem in measure.iter('Harmony'):
             # Chord name may be directly in <name> or structured
             name_el = elem.find('name')
             if name_el is None:
@@ -178,7 +181,7 @@ def _parse_mscx_content(xml_content: str, default_title: str) -> ParsedScore:
                     root_note = MSCZ_ROOT_TO_NOTE.get(int(root_num_text), '')
                     if root_note and not chord_name[0].isupper():
                         chord_name = root_note + chord_name
-                    elif root_note and chord_name == 'maj' or chord_name == 'min':
+                    elif root_note and (chord_name == 'maj' or chord_name == 'min'):
                         # Plain quality only, prepend root
                         chord_name = root_note + chord_name
                 except (ValueError, TypeError):
@@ -191,6 +194,22 @@ def _parse_mscx_content(xml_content: str, default_title: str) -> ParsedScore:
                 chord_order=chord_order,
             ))
             chord_order += 1
+            harmony_in_measure += 1
+
+        if harmony_in_measure > 0:
+            measures_with_harmony += 1
+            logger.debug("Measure %d: %d harmony element(s)", measure_num, harmony_in_measure)
+
+    logger.info(
+        "MuseScore parse complete: measures_scanned=%d measures_with_harmony=%d total_chords=%d",
+        measures_scanned, measures_with_harmony, len(chords)
+    )
+    if len(chords) == 0:
+        logger.warning(
+            "No chord symbols found in MuseScore file. "
+            "This file may not contain explicit chord symbols (Harmony elements). "
+            "Export as .mid from MuseScore for note-based chord analysis."
+        )
 
     logger.info("Parsed MuseScore file: title=%r key=%r time_sig=%r chords=%d",
                 title, key_str, time_sig, len(chords))
