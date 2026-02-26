@@ -400,6 +400,15 @@ curl https://harmonylab.rentyourcio.com/health
 ```
 Source: `CLAUDE.md` line 169.
 
+## CI/CD
+- GitHub Actions: `.github/workflows/deploy.yml`
+- Trigger: push to `main` or manual `workflow_dispatch`
+- Auth: Workload Identity Federation via `WIF_PROVIDER` and `WIF_SERVICE_ACCOUNT` secrets
+- Deploy method: Docker build + GAR push + Cloud Run deploy (not `--source .`)
+- Health check step: added 2026-02-26 (PM-MS1)
+- Health check URL: https://harmonylab.rentyourcio.com/health
+- **Note**: Uses WIF instead of `credentials_json`. Consider migrating to `GCP_SA_KEY` for consistency.
+
 ---
 
 ## 10. Application Startup
