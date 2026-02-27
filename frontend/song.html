@@ -20,7 +20,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v1.8.6</div>
+        <div class="nav-version">v2.0.1</div>
     </nav>
 
     <header>
@@ -42,7 +42,9 @@
             <div class="view-toggle">
                 <label><input type="radio" name="view" value="chords"> Chords</label>
                 <label><input type="radio" name="view" value="analysis" checked> Analysis</label>
+                <label><input type="radio" name="view" value="notes"> Notes</label>
             </div>
+            <button id="export-btn" class="btn btn-sm" title="Export to MuseScore with analysis annotations">Export .mscz</button>
 
             <div class="analysis-controls" id="analysis-controls" style="display:none">
                 <label>Key:</label>
@@ -91,9 +93,35 @@
         <!-- Pattern info -->
         <div id="patterns-info" class="patterns-info" style="display:none"></div>
 
+        <!-- Rhythm Analysis Panel (FAIL 4) -->
+        <div id="rhythm-panel" class="rhythm-panel" style="display:none">
+            <div class="rhythm-header">Rhythm Analysis</div>
+            <div class="rhythm-details">
+                <span class="rhythm-badge" id="rhythm-feel">--</span>
+                <span class="rhythm-stat">Swing ratio: <strong id="rhythm-ratio">--</strong></span>
+                <span class="rhythm-stat">Syncopation: <strong id="rhythm-sync">--</strong></span>
+                <span class="rhythm-stat">Subdivision: <strong id="rhythm-subdiv">--</strong></span>
+                <span class="rhythm-source" id="rhythm-source"></span>
+            </div>
+        </div>
+
+        <!-- MIDI Status Panel (FAIL 5) -->
+        <div id="midi-panel" class="midi-panel">
+            <div class="midi-status" id="midi-status">MIDI: Checking...</div>
+            <div class="midi-chord-display" id="midi-chord-display" style="display:none">
+                <span class="midi-chord-symbol" id="midi-chord-symbol"></span>
+                <span class="midi-chord-roman" id="midi-chord-roman"></span>
+            </div>
+        </div>
+
         <!-- Chord Display -->
         <div id="chord-display" class="chord-display">
             <p class="loading">Loading chords...</p>
+        </div>
+
+        <!-- Notes View (FAIL 1) -->
+        <div id="notes-display" style="display:none">
+            <div id="notes-content"></div>
         </div>
 
         <!-- Sections -->
@@ -345,6 +373,10 @@
             await loadAnalysisForHeader();
             // Default to Analysis view (HL-010)
             switchView('analysis');
+            // Load rhythm analysis (FAIL 4)
+            loadRhythmAnalysis();
+            // Init MIDI (FAIL 5)
+            initMIDI();
         }
 
         async function loadAnalysisForHeader() {
@@ -441,7 +473,7 @@
 
                             const symbolSpan = document.createElement('div');
                             symbolSpan.className = 'chord-symbol';
-                            symbolSpan.textContent = chord.chord_symbol;
+                            symbolSpan.textContent = normalizeChordDisplay(chord.chord_symbol);
                             card.appendChild(symbolSpan);
 
                             const romanSpan = document.createElement('div');
@@ -584,11 +616,22 @@
         function switchView(view) {
             currentView = view;
             const isAnalysis = view === 'analysis';
+            const isNotes = view === 'notes';
 
             document.getElementById('analysis-controls').style.display = isAnalysis ? '' : 'none';
             document.getElementById('function-legend').style.display = isAnalysis ? '' : 'none';
             document.getElementById('patterns-info').style.display =
                 isAnalysis && analysisData?.patterns?.length ? '' : 'none';
+
+            // Toggle notes vs chord views
+            document.getElementById('sections-display').style.display = isNotes ? 'none' : '';
+            document.getElementById('chord-display').style.display = isNotes ? 'none' : '';
+            document.getElementById('notes-display').style.display = isNotes ? '' : 'none';
+
+            if (isNotes) {
+                loadNotesView();
+                return;
+            }
 
             // Toggle roman numerals visibility
             for (const chord of allChords) {
@@ -699,6 +742,9 @@
 
         function parseChordSymbol(symbol) {
             if (!symbol) return { root: 'C', quality: '', extension: '', bass: '' };
+
+            // Normalize MuseScore jazz font first
+            symbol = normalizeChordDisplay(symbol);
 
             // Extract bass note (slash chord), e.g. Cmaj7/E → bass=E
             let bass = '';
@@ -926,6 +972,307 @@
         }
 
         // ==========================================
+        // CHORD NOTATION NORMALIZATION (FAIL 2)
+        // ==========================================
+
+        function normalizeChordDisplay(symbol) {
+            if (!symbol) return '';
+            // Extract root note first
+            const rootMatch = symbol.match(/^([A-G][#b]?)(.*)/);
+            if (!rootMatch) return symbol;
+            const root = rootMatch[1];
+            let quality = rootMatch[2];
+
+            // Normalize MuseScore jazz font notation
+            quality = quality.replace(/^\^/, 'maj');      // ^7 -> maj7, ^9 -> maj9
+            quality = quality.replace(/^-/, 'm');          // -7 -> m7, -9 -> m9
+            quality = quality.replace(/^0(\d)/, 'dim$1');  // 07 -> dim7
+            quality = quality.replace(/^o(\d)/, 'dim$1');  // o7 -> dim7
+            if (quality === 't' || quality === '\u0394') quality = 'maj7';
+            if (quality === 'Maj') quality = '';
+
+            return root + quality;
+        }
+
+        // ==========================================
+        // EXPORT BUTTON (FAIL 3)
+        // ==========================================
+
+        document.getElementById('export-btn').addEventListener('click', async () => {
+            const btn = document.getElementById('export-btn');
+            btn.disabled = true;
+            btn.textContent = 'Exporting...';
+            try {
+                const res = await fetch(
+                    `${API_BASE}/api/v1/exports/musescore/${songId}?format=mscz&include_analysis=true`
+                );
+                if (!res.ok) throw new Error('Export failed');
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${(songData?.title || 'song').replace(/[^a-zA-Z0-9 ]/g, '')}_analyzed.mscz`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            } catch (err) {
+                alert('Export failed: ' + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Export .mscz';
+            }
+        });
+
+        // ==========================================
+        // RHYTHM ANALYSIS (FAIL 4)
+        // ==========================================
+
+        async function loadRhythmAnalysis() {
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/midi/rhythm/song/${songId}`);
+                if (!res.ok) return;
+                const data = await res.json();
+
+                const panel = document.getElementById('rhythm-panel');
+                panel.style.display = '';
+
+                // Feel badge
+                const feelEl = document.getElementById('rhythm-feel');
+                feelEl.textContent = (data.feel || 'unknown').toUpperCase();
+                feelEl.className = 'rhythm-badge rhythm-' + (data.feel || 'unknown');
+
+                // Stats
+                document.getElementById('rhythm-ratio').textContent =
+                    data.swing_ratio != null ? data.swing_ratio + ':1' : '--';
+                document.getElementById('rhythm-sync').textContent =
+                    data.syncopation_score != null ? Math.round(data.syncopation_score * 100) + '%' : '--';
+                document.getElementById('rhythm-subdiv').textContent =
+                    data.primary_subdivision || '--';
+
+                // Source label
+                const sourceEl = document.getElementById('rhythm-source');
+                if (data.source === 'chord_positions') {
+                    sourceEl.textContent = 'Based on chord positions. Import MIDI with note data for detailed analysis.';
+                } else if (data.source === 'melody_notes') {
+                    sourceEl.textContent = 'Based on MIDI note data.';
+                }
+            } catch (err) {
+                console.log('Rhythm analysis unavailable:', err.message);
+            }
+        }
+
+        // ==========================================
+        // WEB MIDI DETECTION (FAIL 5)
+        // ==========================================
+
+        let midiAccess = null;
+        let activeNotes = new Set();
+        let midiIdentifyTimeout = null;
+
+        async function initMIDI() {
+            const statusEl = document.getElementById('midi-status');
+            if (!navigator.requestMIDIAccess) {
+                statusEl.textContent = 'MIDI: Not supported (use Chrome/Edge)';
+                statusEl.className = 'midi-status midi-unsupported';
+                return;
+            }
+            try {
+                midiAccess = await navigator.requestMIDIAccess();
+                updateMIDIDevices();
+                midiAccess.onstatechange = updateMIDIDevices;
+            } catch (err) {
+                statusEl.textContent = 'MIDI: Access denied';
+                statusEl.className = 'midi-status midi-disconnected';
+            }
+        }
+
+        function updateMIDIDevices() {
+            const statusEl = document.getElementById('midi-status');
+            const inputs = Array.from(midiAccess.inputs.values());
+            if (inputs.length === 0) {
+                statusEl.textContent = 'MIDI: No device connected';
+                statusEl.className = 'midi-status midi-disconnected';
+                return;
+            }
+            const deviceName = inputs[0].name || 'Unknown Device';
+            statusEl.textContent = `MIDI: ${deviceName}`;
+            statusEl.className = 'midi-status midi-connected';
+
+            // Listen to all inputs
+            for (const input of inputs) {
+                input.onmidimessage = handleMIDIMessage;
+            }
+        }
+
+        function handleMIDIMessage(msg) {
+            const [status, note, velocity] = msg.data;
+            const command = status & 0xf0;
+
+            if (command === 0x90 && velocity > 0) {
+                // Note ON
+                activeNotes.add(note);
+                scheduleMIDIIdentify();
+            } else if (command === 0x80 || (command === 0x90 && velocity === 0)) {
+                // Note OFF
+                activeNotes.delete(note);
+            }
+        }
+
+        function scheduleMIDIIdentify() {
+            clearTimeout(midiIdentifyTimeout);
+            midiIdentifyTimeout = setTimeout(async () => {
+                if (activeNotes.size < 2) return; // Need at least 2 notes for a chord
+                const notes = Array.from(activeNotes).sort((a, b) => a - b);
+                try {
+                    const keyContext = analysisData?.detected_key || null;
+                    const res = await fetch(`${API_BASE}/api/v1/midi/identify`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ notes, key_context: keyContext })
+                    });
+                    if (!res.ok) return;
+                    const data = await res.json();
+
+                    const displayEl = document.getElementById('midi-chord-display');
+                    displayEl.style.display = '';
+                    document.getElementById('midi-chord-symbol').textContent =
+                        normalizeChordDisplay(data.chord_symbol) || '?';
+                    document.getElementById('midi-chord-roman').textContent =
+                        data.roman_numeral ? `(${data.roman_numeral})` : '';
+                    document.getElementById('midi-chord-roman').style.color =
+                        data.function_color || 'inherit';
+                } catch (err) {
+                    console.log('MIDI identify error:', err.message);
+                }
+            }, 100); // 100ms debounce
+        }
+
+        // ==========================================
+        // NOTES VIEW (FAIL 1)
+        // ==========================================
+
+        let notesData = null;
+
+        async function loadNotesView() {
+            const content = document.getElementById('notes-content');
+            if (notesData) {
+                renderNotesTable(notesData);
+                return;
+            }
+            content.innerHTML = '<p class="loading">Loading notes...</p>';
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/songs/${songId}/notes`);
+                if (!res.ok) {
+                    if (res.status === 404) {
+                        content.innerHTML = `
+                            <div class="notes-empty">
+                                <p>No note data available for this song.</p>
+                                <p>Upload the original .mscz file to extract individual notes for analysis audit.</p>
+                                <div class="notes-upload-area">
+                                    <input type="file" id="notes-file-input" accept=".mscz,.mscx" style="display:none">
+                                    <button class="btn btn-primary" onclick="document.getElementById('notes-file-input').click()">
+                                        Upload .mscz for Note Extraction
+                                    </button>
+                                </div>
+                            </div>`;
+                        document.getElementById('notes-file-input').addEventListener('change', handleNotesUpload);
+                        return;
+                    }
+                    throw new Error('Failed to load notes');
+                }
+                notesData = await res.json();
+                renderNotesTable(notesData);
+            } catch (err) {
+                content.innerHTML = `<p class="error">Failed to load notes: ${err.message}</p>`;
+            }
+        }
+
+        function midiToNoteName(midi) {
+            const names = ['C','C#','D','Eb','E','F','F#','G','Ab','A','Bb','B'];
+            const octave = Math.floor(midi / 12) - 1;
+            return names[midi % 12] + octave;
+        }
+
+        function renderNotesTable(data) {
+            const notes = data.notes || [];
+            const content = document.getElementById('notes-content');
+
+            if (notes.length === 0) {
+                content.innerHTML = `
+                    <div class="notes-empty">
+                        <p>No note data found. Upload the .mscz file to extract notes.</p>
+                        <div class="notes-upload-area">
+                            <input type="file" id="notes-file-input" accept=".mscz,.mscx" style="display:none">
+                            <button class="btn btn-primary" onclick="document.getElementById('notes-file-input').click()">
+                                Upload .mscz for Note Extraction
+                            </button>
+                        </div>
+                    </div>`;
+                document.getElementById('notes-file-input').addEventListener('change', handleNotesUpload);
+                return;
+            }
+
+            // Build chord lookup by measure
+            const chordsByMeasure = {};
+            if (analysisData?.chords) {
+                for (const ch of analysisData.chords) {
+                    if (!chordsByMeasure[ch.measure]) chordsByMeasure[ch.measure] = [];
+                    chordsByMeasure[ch.measure].push(normalizeChordDisplay(ch.symbol));
+                }
+            }
+
+            let html = '<table class="notes-table"><thead><tr>';
+            html += '<th>Measure</th><th>Beat</th><th>Note</th><th>MIDI</th><th>Duration</th><th>Chord</th>';
+            html += '</tr></thead><tbody>';
+
+            for (const n of notes) {
+                const chords = chordsByMeasure[n.measure_number] || [];
+                const chordStr = chords.join(', ') || '--';
+                html += `<tr>
+                    <td>${n.measure_number}</td>
+                    <td>${n.beat_position.toFixed(1)}</td>
+                    <td class="note-name">${midiToNoteName(n.midi_note)}</td>
+                    <td>${n.midi_note}</td>
+                    <td>${n.duration || '--'}</td>
+                    <td>${escHtml(chordStr)}</td>
+                </tr>`;
+            }
+
+            html += '</tbody></table>';
+            html += `<p class="notes-count">${notes.length} notes across ${new Set(notes.map(n => n.measure_number)).size} measures</p>`;
+            content.innerHTML = html;
+        }
+
+        async function handleNotesUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const content = document.getElementById('notes-content');
+            content.innerHTML = '<p class="loading">Extracting notes...</p>';
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('song_id', songId);
+
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/imports/score/reparse-notes`, {
+                    method: 'POST',
+                    body: formData
+                });
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || 'Note extraction failed');
+                }
+                const data = await res.json();
+                content.innerHTML = `<p class="success">Extracted ${data.notes_count} notes. Loading...</p>`;
+                notesData = null; // Clear cache
+                await loadNotesView();
+            } catch (err) {
+                content.innerHTML = `<p class="error">Note extraction failed: ${err.message}</p>`;
+            }
+        }
+
+        // ==========================================
         // UTILITIES
         // ==========================================
 
@@ -1099,6 +1446,169 @@
         .chord-card:hover {
             transform: scale(1.02);
             box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+
+        /* Rhythm Panel (FAIL 4) */
+        .rhythm-panel {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px 16px;
+            margin-bottom: 12px;
+        }
+
+        .rhythm-header {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+
+        .rhythm-details {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .rhythm-badge {
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+
+        .rhythm-swing { background: #f59e0b; color: #000; }
+        .rhythm-straight { background: #3b82f6; color: #fff; }
+        .rhythm-reverse_swing { background: #8b5cf6; color: #fff; }
+        .rhythm-unknown { background: var(--bg-hover); color: var(--text); }
+        .rhythm-insufficient_data { background: var(--bg-hover); color: var(--text-muted); }
+
+        .rhythm-stat {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .rhythm-stat strong {
+            color: var(--text);
+        }
+
+        .rhythm-source {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            font-style: italic;
+        }
+
+        /* MIDI Panel (FAIL 5) */
+        .midi-panel {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 6px 16px;
+            margin-bottom: 8px;
+        }
+
+        .midi-status {
+            font-size: 0.8rem;
+            padding: 3px 10px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+        }
+
+        .midi-connected {
+            background: rgba(34, 197, 94, 0.15);
+            border-color: #22c55e;
+            color: #22c55e;
+        }
+
+        .midi-disconnected {
+            background: var(--bg-card);
+            color: var(--text-muted);
+        }
+
+        .midi-unsupported {
+            background: var(--bg-card);
+            color: var(--text-muted);
+            font-style: italic;
+        }
+
+        .midi-chord-display {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            background: var(--bg-card);
+            border: 1px solid var(--accent);
+            border-radius: 8px;
+            padding: 4px 12px;
+        }
+
+        .midi-chord-symbol {
+            font-size: 1.3rem;
+            font-weight: bold;
+            color: var(--text);
+        }
+
+        .midi-chord-roman {
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+        /* Notes Table (FAIL 1) */
+        .notes-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+
+        .notes-table th {
+            background: var(--bg-card);
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.5px;
+            padding: 8px 12px;
+            text-align: left;
+            border-bottom: 2px solid var(--border);
+            position: sticky;
+            top: 0;
+        }
+
+        .notes-table td {
+            padding: 6px 12px;
+            border-bottom: 1px solid var(--border);
+            color: var(--text);
+        }
+
+        .notes-table tr:hover {
+            background: var(--bg-hover);
+        }
+
+        .note-name {
+            font-weight: bold;
+            font-family: monospace;
+            font-size: 0.95rem;
+        }
+
+        .notes-count {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 8px;
+            text-align: right;
+        }
+
+        .notes-empty {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-muted);
+        }
+
+        .notes-upload-area {
+            margin-top: 16px;
+        }
+
+        .success {
+            color: #22c55e;
         }
     </style>
 </body>

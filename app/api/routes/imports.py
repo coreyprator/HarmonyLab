@@ -79,11 +79,25 @@ def _save_score_to_db(
             (measure_id, chord_data.beat_position, chord_data.chord_symbol, chord_data.chord_order)
         )
 
+    # Save notes to MelodyNotes if available
+    notes_saved = 0
+    if hasattr(parsed, 'notes') and parsed.notes:
+        for note in parsed.notes:
+            try:
+                db.execute_non_query(
+                    "INSERT INTO MelodyNotes (song_id, measure_number, beat_position, midi_note, duration, velocity) VALUES (?, ?, ?, ?, ?, ?)",
+                    (song_id, note.measure_number, note.beat_position, note.midi_pitch, note.duration_type, 80)
+                )
+                notes_saved += 1
+            except Exception as e:
+                logger.debug("Note insert skip: %s", e)
+
     return {
         "song_id": song_id,
         "title": song_title,
         "measures_created": len(measures_created),
         "chords_created": len(parsed.chords),
+        "notes_saved": notes_saved,
     }
 
 
@@ -96,6 +110,73 @@ def _song_exists(db: DatabaseConnection, title: str, key: Optional[str]) -> bool
     else:
         rows = db.execute_query("SELECT id FROM Songs WHERE title = ?", (title,))
     return len(rows) > 0
+
+
+# ---------------------------------------------------------------------------
+# Note extraction for existing songs (FAIL 1)
+# ---------------------------------------------------------------------------
+
+@router.post("/score/reparse-notes")
+async def reparse_notes(
+    file: UploadFile = File(...),
+    song_id: int = Query(..., description="Song ID to add notes to"),
+):
+    """Re-upload a .mscz/.mscx file to extract individual notes for an existing song.
+
+    This endpoint parses the file for Note data only and stores in MelodyNotes.
+    Useful for songs imported before note extraction was added.
+    """
+    ext = _ext(file.filename)
+    if ext not in ('.mscz', '.mscx', '.musicxml', '.xml', '.mxl'):
+        raise HTTPException(status_code=400, detail="File must be .mscz, .mscx, or .musicxml")
+
+    db = DatabaseConnection(settings)
+
+    # Verify song exists
+    songs = db.execute_query("SELECT id, title FROM Songs WHERE id = ?", (song_id,))
+    if not songs:
+        raise HTTPException(status_code=404, detail=f"Song ID {song_id} not found")
+
+    suffix = ext
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp.write(await file.read())
+        tmp_path = tmp.name
+
+    try:
+        parsed = parse_music_file(tmp_path, file.filename)
+
+        if not parsed.notes:
+            return {
+                "song_id": song_id,
+                "notes_count": 0,
+                "message": "No note data found in this file. The file may not contain staff notation.",
+            }
+
+        # Clear existing notes for this song
+        db.execute_non_query("DELETE FROM MelodyNotes WHERE song_id = ?", (song_id,))
+
+        # Insert extracted notes
+        notes_saved = 0
+        for note in parsed.notes:
+            try:
+                db.execute_non_query(
+                    "INSERT INTO MelodyNotes (song_id, measure_number, beat_position, midi_note, duration, velocity) VALUES (?, ?, ?, ?, ?, ?)",
+                    (song_id, note.measure_number, note.beat_position, note.midi_pitch, note.duration_type, 80)
+                )
+                notes_saved += 1
+            except Exception as e:
+                logger.debug("Note insert skip: %s", e)
+
+        return {
+            "song_id": song_id,
+            "notes_count": notes_saved,
+            "message": f"Extracted {notes_saved} notes for '{songs[0]['title']}'",
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
 
 
 # ---------------------------------------------------------------------------
