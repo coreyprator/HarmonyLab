@@ -1,7 +1,7 @@
 # PROJECT_KNOWLEDGE.md -- HarmonyLab
 
 **Generated**: 2026-02-15
-**Updated**: 2026-02-22 — Sprint "Rework v1.8.6" close-out (CHD-01, IMP-03)
+**Updated**: 2026-02-27 — Sprint HL-MS1 "Mega Sprint" close-out (HL-008, HL-012, HL-015, HL-017)
 **Method**: Full project read-through of every source file, config, schema, workflow, and documentation file.
 **Purpose**: Single-file knowledge recovery for any AI agent resuming work on this project.
 
@@ -16,8 +16,8 @@
 | Repository | https://github.com/coreyprator/harmonylab | `CLAUDE.md` line 65 |
 | Local Path | `G:\My Drive\Code\Python\harmonylab` | `CLAUDE.md` line 66 |
 | Methodology | [coreyprator/project-methodology](https://github.com/coreyprator/project-methodology) v3.14 | `CLAUDE.md` line 67 |
-| Current Version | v1.8.6 | `main.py` line 17 (updated 2026-02-22) |
-| Latest Revision | harmonylab-00091-6h4 (backend), harmonylab-frontend-00060-5f5 (frontend) | Session Closeout 2026-02-22 |
+| Current Version | v2.0.0 | `main.py` line 19 (updated 2026-02-27) |
+| Latest Revision | harmonylab-00094-6h6+ (backend), harmonylab-frontend-00060-5f5 (frontend) | Session Closeout 2026-02-27 |
 | Production URL | https://harmonylab.rentyourcio.com | `PROJECT_STATUS.md` line 5 |
 | API Docs | https://harmonylab.rentyourcio.com/docs | `PROJECT_STATUS.md` line 189 |
 | CLAUDE.md Last Updated | 2026-02-07 | `CLAUDE.md` line 269 |
@@ -165,7 +165,7 @@ Source: `HarmonyLab-Kickoff.md` and schema FK constraints.
 
 ## 6. API Endpoints
 
-All routes registered in `main.py` lines 85-94. Total: 36+ endpoints per `PROJECT_STATUS.md`.
+All routes registered in `main.py` lines 102-115. Total: 45+ endpoints.
 
 ### Auth (`app/api/routes/auth.py`, prefix: `/api/v1/auth`)
 | Method | Path | Description |
@@ -254,6 +254,19 @@ All routes registered in `main.py` lines 85-94. Total: 36+ endpoints per `PROJEC
 | DELETE | `/songs/{song_id}/chord/{chord_index}` | Remove chord override |
 | GET | `/songs/{song_id}/overrides` | List all overrides for a song |
 
+### Exports (`app/api/routes/exports.py`, prefix: `/api/v1/exports`) *(added 2026-02-27, HL-015)*
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/musescore/{song_id}` | Export song as annotated MuseScore file (.mscx or .mscz). Params: format (mscx/mscz), include_analysis (bool) |
+
+### MIDI Input (`app/api/routes/midi_input.py`, prefix: `/api/v1/midi`) *(added 2026-02-27, HL-017)*
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/identify` | Identify chord from MIDI note numbers (for Web MIDI API / MIDI keyboard). Returns chord symbol, root, quality, optional Roman numeral |
+| POST | `/rhythm/analyze` | Analyze rhythmic patterns from uploaded MIDI file |
+| GET | `/rhythm/song/{song_id}` | Analyze rhythm for stored song (uses MelodyNotes or chord positions) |
+| GET | `/webmidi-check` | Web MIDI API setup info and browser compatibility |
+
 ---
 
 ## 7. Services
@@ -266,12 +279,18 @@ Unified parser for all supported music file formats. Key components:
 - **`ScoreChord` dataclass**: measure_number, beat_position, chord_symbol, chord_order.
 - **`parse_music_file(file_path, filename)`**: Dispatches by extension.
   - `.mscz` → unzip with `zipfile`, extract `.mscx`, parse XML with `xml.etree.ElementTree`
-  - `.mscx` → parse XML directly. Uses `measure.iter('Harmony')` to find `<Harmony>/<name>` elements at any nesting depth (MuseScore 4 wraps in `<voice>`). Maps numeric root (14=C…25=B) via `MSCZ_ROOT_TO_NOTE`.
+  - `.mscx` → parse XML directly. Uses `measure.iter('Harmony')` to find `<Harmony>/<name>` elements at any nesting depth (MuseScore 4 wraps in `<voice>`).
   - `.musicxml/.xml/.mxl` → `music21.converter.parse()`, extracts `harmony.ChordSymbol` objects
   - `.mid/.midi` → delegates to existing `app.services.midi_parser.parse_midi_file()`
-- **Key maps**: `_SHARP_KEYS` (0=C…7=C#), `_FLAT_KEYS` (-1=F…-7=Cb), `MSCZ_ROOT_TO_NOTE` (14=C…25=B)
-- **Diagnostic logging** (added 2026-02-22): logs measures_scanned, measures_with_harmony, total_chords. Warns if 0 chords found (file may lack explicit Harmony elements).
-- **MuseScore 4 note** (2026-02-22): MuseScore 4 wraps content in `<voice>` elements. Fixed by using `iter()` instead of direct child iteration. If a score has no explicit chord symbols (only notation), 0 chords will be extracted — expected behavior.
+- **Root numbering** (fixed 2026-02-27): Two distinct systems depending on MuseScore version:
+  - `_CHROMATIC_ROOT` (MS 4.4.x and earlier): chromatic numbering (14=C, 15=Db, 16=D, ..., 25=B)
+  - `_TPC_ROOT` (MS 4.5.x+): Tonal Pitch Class / circle-of-fifths (14=C, 15=G, 16=D, 17=A, ..., 13=F, 12=Bb)
+  - Version auto-detected from `<programVersion>` XML tag. Falls back to chromatic if version unavailable.
+- **harmonyInfo wrapper** (fixed 2026-02-27): MuseScore 4.6+ wraps `<name>` and `<root>` inside `<harmonyInfo>` subelement. Parser checks direct children first, then falls back to harmonyInfo child.
+- **N.C. handling**: "N.C." (no chord) markers stored as-is, skipped from root prepending.
+- **Key maps**: `_SHARP_KEYS` (0=C…7=C#), `_FLAT_KEYS` (-1=F…-7=Cb)
+- **Diagnostic logging** (added 2026-02-22): logs measures_scanned, measures_with_harmony, total_chords. Warns if 0 chords found.
+- **MuseScore 4 note** (2026-02-22): MuseScore 4 wraps content in `<voice>` elements. Fixed by using `iter()` instead of direct child iteration.
 
 ### MIDI Parser (`app/services/midi_parser.py`)
 
@@ -291,13 +310,39 @@ Uses `music21` for Roman numeral analysis, key detection, and pattern recognitio
 - **`HarmonicAnalyzer` class**: Core analyzer.
   - `FUNCTION_COLORS`: tonic=#22c55e (green), subdominant=#3b82f6 (blue), dominant=#ef4444 (red), secondary=#f59e0b (orange), chromatic=#8b5cf6 (purple), diminished=#6b7280 (gray). Source: lines 15-23.
   - `analyze_progression(chords, key_override)`: Main method. Returns dict with detected_key, confidence, analyzed chords, and patterns.
-  - `_detect_key(chords)`: Auto-detects key using music21's `analyze('key')` on the first 16 chords. Source: lines 54-70.
-  - `_normalize_chord_symbol(symbol)`: Converts flat notation (Ab -> A-) for music21 compatibility. Source: lines 72-93.
+  - `_detect_key(chords)`: Auto-detects key using music21's `analyze('key')`. Iterates all chords to find up to 16 valid ones (skips empty/N.C.). Converts ChordSymbol to plain Chord to avoid Krumhansl-Schmuckler algorithm issues.
+  - `_normalize_chord_symbol(symbol)`: Normalizes chord symbols for music21. Converts flat notation (Ab → A-), MuseScore jazz font shorthand (^→maj, -→m, 0→dim, t/△→maj7), and handles 6/9→69, Maj→(empty).
   - `_format_jazz_roman(rn, chord, symbol)`: Formats Roman numerals in jazz style (e.g., "IVmaj7" not "i#653"). Handles secondary dominants. Source: lines 141-155.
   - `_get_quality_suffix(symbol)`: Maps ~30 chord suffixes (Maj7, m7, dim, etc.) to jazz notation. Source: lines 157-212.
   - `_get_function(rn)`: Maps scale degrees to harmonic function. Degrees 1,3,6=tonic; 2,4=subdominant; 5,7=dominant; else=chromatic. Source: lines 214-223.
   - `_detect_patterns(chords)`: Detects ii-V-I patterns. Source: lines 225-242.
 - **`analyze_song(chords, key_override)`**: Module-level convenience function. Source: lines 245-248.
+
+### MuseScore Export (`app/services/score_exporter.py`) *(added 2026-02-27, HL-015)*
+
+Generates annotated MuseScore files (.mscx/.mscz) from HarmonyLab song data + analysis results.
+
+- **`export_mscx(song_data, analysis_data)`**: Generates .mscx XML string with:
+  - TPC root numbering for Harmony elements (circle-of-fifths via `_NOTE_TO_TPC` map)
+  - Chord symbols as `<Harmony>` elements with root and name
+  - Roman numerals as color-coded `<StaffText>` annotations (colors match HarmonicAnalyzer FUNCTION_COLORS)
+  - Metadata: title, composer, key signature, tempo, time signature
+- **`export_mscz(song_data, analysis_data)`**: Wraps .mscx in ZIP container for .mscz format
+- **`_parse_root_from_symbol(symbol)`**: Extracts root note and quality from chord symbol string
+
+### Rhythm Analyzer (`app/services/rhythm_analyzer.py`) *(added 2026-02-27, HL-017)*
+
+Analyzes rhythmic patterns from MIDI data.
+
+- **`analyze_rhythm(note_onsets, tpb, ts_n, ts_d)`**: Core analysis function. Returns:
+  - `feel`: swing/straight/reverse_swing (based on IOI ratio > 1.3 = swing)
+  - `swing_ratio`: Average long/short ratio for eighth note pairs
+  - `syncopation_score`: Percentage of notes on off-beats
+  - `density_notes_per_beat`: Rhythmic density metric
+  - `primary_subdivision`: Most common note value (quarter/eighth/sixteenth/triplet)
+  - `subdivision_breakdown`: Count of each subdivision type
+- **`analyze_rhythm_from_midi(file_path)`**: Parses MIDI file with mido, returns per-track + overall analysis
+- Requires minimum 4 notes for meaningful analysis
 
 ### Authentication (`app/services/auth_service.py`)
 
@@ -426,7 +471,7 @@ All migrations are idempotent (check `INFORMATION_SCHEMA.TABLES` before creating
 1. **CORSMiddleware**: `allow_origins=["*"]`, `allow_credentials=True`, `allow_methods=["*"]`, `allow_headers=["*"]`
 2. **SessionMiddleware**: Uses JWT secret key, `same_site="none"`, `https_only=True`. Required for OAuth state storage.
 
-### Router Registration Order (`main.py` lines 85-94)
+### Router Registration Order (`main.py` lines 102-115)
 1. auth (first, for login/logout)
 2. songs
 3. sections
@@ -437,6 +482,8 @@ All migrations are idempotent (check `INFORMATION_SCHEMA.TABLES` before creating
 8. quiz
 9. imports
 10. analysis
+11. exports *(added 2026-02-27, HL-015)*
+12. midi_input *(added 2026-02-27, HL-017)*
 
 ---
 
@@ -537,6 +584,11 @@ Source: `app/api/routes/progress.py` lines 143-148.
 > **CHD-01 REWORK RESOLVED (2026-02-22):** `chord-modal` (Analysis view, the default view) now has Root/Quality/Extension/Bass `<select>` dropdowns replacing the old readonly `modal-symbol` text input. `saveOverride()` PUTs chord symbol change to `/api/v1/chords/{id}` first, then saves analysis override. `parseChordSymbol()` is reused to pre-populate dropdowns on open. The `chord-edit-modal` (Chords view) is unchanged.
 > **IMP-03 RESOLVED (2026-02-22):** `.mscz` parser: changed direct child iteration to `measure.iter('Harmony')` — fixes MuseScore 4 `<voice>` nesting. Fixed operator precedence bug. Added diagnostic logging. Added specific user message for 0-chord MuseScore imports.
 > **HL-009 CONFIRMED (2026-02-21):** Chord dropdown editing already implemented in song.html. No change needed.
+> **HL-008 EXPANDED (2026-02-27):** 10 additional jazz standards imported from .mscz files (IDs 58-67): Quizas Quizas Quizas, Amazing Grace, So What, My Foolish Heart, Nardis, Baubles Bangles and Beads, Bouree-Bach, Almost Like Being in Love, Amor em Paz, Manha de Carnaval. 8/10 analysis confidence ≥50%.
+> **HL-012 RESOLVED (2026-02-27):** Chord granularity improved. analysis_service.py _normalize_chord_symbol() now handles MuseScore jazz font (^=maj, -=m, 0=dim, t=maj7). _detect_key() iterates all chords, converts ChordSymbol to plain Chord for better Krumhansl-Schmuckler results. Analysis output enriched with measure/beat context and total_measures count. Decimal serialization bug fixed.
+> **HL-015 RESOLVED (2026-02-27):** MuseScore export via GET /api/v1/exports/musescore/{song_id}. Generates .mscx or .mscz with TPC root numbering, chord symbols as Harmony elements, color-coded Roman numeral StaffText annotations.
+> **HL-017 RESOLVED (2026-02-27):** Rhythm analysis (swing/straight detection, syncopation scoring, subdivision breakdown) + MIDI keyboard input (POST /api/v1/midi/identify for real-time chord ID via Web MIDI API). Per-track MIDI file analysis. Song rhythm analysis from MelodyNotes or chord positions.
+> **PARSER FIX (2026-02-27):** score_parser.py: Dual root numbering (chromatic for MS 4.4.x, TPC for MS 4.5+), version auto-detection, harmonyInfo wrapper support for MS 4.6+, N.C. handling.
 > **HL-007 RESOLVED (2026-02-20):** Branch renamed master->main. origin/master deleted. GitHub default = main.
 > **HL-010 RESOLVED (2026-02-20):** song.html now defaults to Analysis view.
 > **HL-011 RESOLVED (2026-02-20):** All 5 HTML pages now fetch version from backend API dynamically. No more hardcoded version mismatch.
@@ -644,7 +696,7 @@ Source: `CLAUDE.md` lines 228-258.
 | Phase 5 | Progress Tracking | Backend complete, no frontend |
 | Phase 6 | UI Polish & Mobile | Not started |
 | Phase 7 | Deployment | Complete (Cloud Run live) |
-| Phase 8 | Data Population | **17 songs in DB** (2026-02-21): 2 legacy MIDI (Corcovado, BWV846_test) + 15 jazz standards seeded via /seed-standards (Autumn Leaves, All The Things You Are, Blue Bossa, Fly Me To The Moon, Take The A Train, Misty, Summertime, Satin Doll, So What, Wave, Maiden Voyage, Watermelon Man, Round Midnight, Footprints, There Will Never Be Another You). Batch import via ZIP now available for additional songs. |
+| Phase 8 | Data Population | **27+ songs in DB** (2026-02-27): 2 legacy MIDI + 15 seeded jazz standards + 10 imported from .mscz MuseScore files (Quizas, Amazing Grace, So What, My Foolish Heart, Nardis, Baubles Bangles and Beads, Bouree-Bach, Almost Like Being in Love, Amor em Paz, Manha de Carnaval). Batch import via ZIP available. |
 
 ### Re-scoped Plan (from handoff architectural decisions)
 After v1.3.0 UAT failures, roadmap was re-scoped:
@@ -656,21 +708,22 @@ After v1.3.0 UAT failures, roadmap was re-scoped:
 - v1.8.4 = Rework sprint: MIDI crash fix (auth.js 5xx handling), chord modal + extensions + bass note, import diagnostic, showToast(), health component field (deployed 2026-02-21)
 - v1.8.5 = Error logging standardization (deployed 2026-02-22)
 - v1.8.6 = CHD-01 rework: chord dropdowns in Analysis view modal; IMP-03: .mscz MuseScore 4 voice nesting fix (deployed 2026-02-22)
+- v2.0.0 = HL-MS1 Mega Sprint: 10 jazz standards imported (HL-008), chord granularity refinement (HL-012), annotated MuseScore export (HL-015), rhythm analysis + MIDI keyboard input (HL-017). MuseScore parser fixes: dual root numbering, harmonyInfo wrapper, N.C. handling. (deployed 2026-02-27)
 
-### What's Next (updated 2026-02-21)
-| ID | Feature | Priority |
-|----|---------|----------|
-| HL-003 | Show intervals on chord display | P2 |
-| HL-004 | Next-chord progression quiz UI | P2 |
-| HL-005 | Audio playback (Tone.js integration) | P2 |
-| HL-015 | Annotated MuseScore export | P3 |
-| HL-016 | Melody analysis | P3 |
-| HL-017 | Rhythm analysis | P3 |
+### What's Next (updated 2026-02-27)
+| ID | Feature | Priority | Status |
+|----|---------|----------|--------|
+| HL-003 | Show intervals on chord display | P2 | Open |
+| HL-004 | Next-chord progression quiz UI | P2 | Open |
+| HL-005 | Audio playback (Tone.js integration) | P2 | Open |
+| HL-015 | Annotated MuseScore export | P3 | **DONE** (v2.0.0) |
+| HL-016 | Melody analysis | P3 | Done (v1.8.3) |
+| HL-017 | Rhythm analysis + MIDI keyboard input | P3 | **DONE** (v2.0.0) |
 
 Source: Handoff architectural decisions file in `handoffs/inbox/`.
 
 ### Target Song Repertoire
-37 jazz standards listed in `HarmonyLab-Kickoff.md`. **20 currently in DB** (2026-02-21 post v1.8.4 UAT): 15 seeded jazz standards + others imported during testing. Batch import via ZIP is now available for any additional file uploads.
+37 jazz standards listed in `HarmonyLab-Kickoff.md`. **27+ currently in DB** (2026-02-27 post v2.0.0): 15 seeded jazz standards + 10 imported from .mscz files (HL-MS1) + 2 legacy MIDI imports. Batch import via ZIP is now available for any additional file uploads.
 
 ---
 
@@ -703,6 +756,8 @@ Source: Handoff architectural decisions file in `handoffs/inbox/`.
 | `app/services/score_parser.py` | Universal parser | .mscz/.mscx (ET XML), .musicxml (music21), .mid (mido delegate). ParsedScore + ScoreChord dataclasses |
 | `app/services/midi_parser.py` | MIDI parser | mido-based chord detection |
 | `app/services/analysis_service.py` | Analysis | music21 harmonic analysis |
+| `app/services/score_exporter.py` | MuseScore export | Generates annotated .mscx/.mscz with chord symbols + Roman numerals *(added 2026-02-27)* |
+| `app/services/rhythm_analyzer.py` | Rhythm analysis | Swing/straight detection, syncopation, subdivision analysis *(added 2026-02-27)* |
 | `app/services/auth_service.py` | Auth service | JWT token management |
 | `app/migrations.py` | Migrations | 4 idempotent schema migrations |
 | `app/api/routes/songs.py` | Songs API | CRUD endpoints |
@@ -714,6 +769,8 @@ Source: Handoff architectural decisions file in `handoffs/inbox/`.
 | `app/api/routes/quiz.py` | Quiz API | Generate, submit, attempts |
 | `app/api/routes/imports.py` | Imports API | MIDI import, MusicXML placeholder |
 | `app/api/routes/analysis.py` | Analysis API | Harmonic analysis, overrides |
+| `app/api/routes/exports.py` | Exports API | MuseScore export with analysis annotations *(added 2026-02-27)* |
+| `app/api/routes/midi_input.py` | MIDI Input API | Real-time chord ID, rhythm analysis, Web MIDI *(added 2026-02-27)* |
 | `app/api/routes/auth.py` | Auth API | Google OAuth, JWT, user management |
 | `test_connection.py` | Test script | Database connection verification |
 | `Dockerfile` | Container | Python 3.12 + ODBC Driver 17 |
