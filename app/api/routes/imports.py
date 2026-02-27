@@ -10,7 +10,7 @@ import logging
 from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter, UploadFile, File, HTTPException, status, Query
-from app.services.score_parser import parse_music_file, ParsedScore
+from app.services.score_parser import parse_music_file, ParsedScore, _DURATION_TO_BEATS
 from app.services.midi_parser import parse_midi_file
 from app.db.connection import DatabaseConnection
 from config.settings import Settings
@@ -84,9 +84,10 @@ def _save_score_to_db(
     if hasattr(parsed, 'notes') and parsed.notes:
         for note in parsed.notes:
             try:
+                dur_beats = _DURATION_TO_BEATS.get(note.duration_type, 1.0)
                 db.execute_non_query(
                     "INSERT INTO MelodyNotes (song_id, measure_number, beat_position, midi_note, duration, velocity) VALUES (?, ?, ?, ?, ?, ?)",
-                    (song_id, note.measure_number, note.beat_position, note.midi_pitch, note.duration_type, 80)
+                    (song_id, note.measure_number, note.beat_position, note.midi_pitch, dur_beats, 80)
                 )
                 notes_saved += 1
             except Exception as e:
@@ -159,9 +160,10 @@ async def reparse_notes(
         notes_saved = 0
         for note in parsed.notes:
             try:
+                dur_beats = _DURATION_TO_BEATS.get(note.duration_type, 1.0)
                 db.execute_non_query(
                     "INSERT INTO MelodyNotes (song_id, measure_number, beat_position, midi_note, duration, velocity) VALUES (?, ?, ?, ?, ?, ?)",
-                    (song_id, note.measure_number, note.beat_position, note.midi_pitch, note.duration_type, 80)
+                    (song_id, note.measure_number, note.beat_position, note.midi_pitch, dur_beats, 80)
                 )
                 notes_saved += 1
             except Exception as e:
