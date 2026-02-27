@@ -149,7 +149,7 @@ async def get_song_notes(song_id: int, db: DatabaseConnection = Depends(get_db))
                 "measure_number": n['measure_number'],
                 "beat_position": float(n.get('beat_position') or 1.0),
                 "midi_note": n['midi_note'],
-                "duration": n.get('duration'),
+                "duration": float(n['duration']) if n.get('duration') is not None else 1.0,
                 "velocity": n.get('velocity'),
             }
             for n in notes
