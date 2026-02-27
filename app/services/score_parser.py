@@ -14,11 +14,20 @@ from typing import Optional, List
 
 logger = logging.getLogger(__name__)
 
-# MuseScore root-note numbering (used in .mscx files)
-MSCZ_ROOT_TO_NOTE = {
-    14: 'C', 15: 'Db', 16: 'D', 17: 'Eb', 18: 'E',
+# MuseScore root-note numbering — two systems exist:
+# MuseScore 4.4.x and earlier: chromatic numbering (14=C, 15=C#/Db, ..., 25=B)
+# MuseScore 4.5.x+: TPC (Tonal Pitch Class) from line of fifths (14=C, 15=G, 16=D, ...)
+_CHROMATIC_ROOT = {
+    13: 'B', 14: 'C', 15: 'Db', 16: 'D', 17: 'Eb', 18: 'E',
     19: 'F', 20: 'F#', 21: 'G', 22: 'Ab', 23: 'A', 24: 'Bb', 25: 'B'
 }
+_TPC_ROOT = {
+    7: 'Cb', 8: 'Gb', 9: 'Db', 10: 'Ab', 11: 'Eb', 12: 'Bb', 13: 'F',
+    14: 'C', 15: 'G', 16: 'D', 17: 'A', 18: 'E', 19: 'B',
+    20: 'F#', 21: 'C#', 22: 'G#', 23: 'D#', 24: 'A#', 25: 'E#',
+}
+# Legacy alias for external callers
+MSCZ_ROOT_TO_NOTE = _CHROMATIC_ROOT
 
 # Key signature accidentals → key name
 _SHARP_KEYS = {0: 'C', 1: 'G', 2: 'D', 3: 'A', 4: 'E', 5: 'B', 6: 'F#', 7: 'C#'}
@@ -108,6 +117,22 @@ def _parse_mscx_content(xml_content: str, default_title: str) -> ParsedScore:
     except ET.ParseError as e:
         raise ValueError(f"Could not parse MuseScore XML: {e}")
 
+    # --- Detect MuseScore version to choose root-note mapping ---
+    # 4.4.x and earlier: chromatic root numbering
+    # 4.5.x+: TPC (Tonal Pitch Class) numbering
+    use_tpc = False
+    ver_el = root.find('.//programVersion')
+    ms_version = ver_el.text.strip() if ver_el is not None and ver_el.text else None
+    if ms_version:
+        try:
+            parts = [int(p) for p in ms_version.split('.')]
+            if parts[0] > 4 or (parts[0] == 4 and len(parts) > 1 and parts[1] >= 5):
+                use_tpc = True
+        except (ValueError, IndexError):
+            pass
+    root_map = _TPC_ROOT if use_tpc else _CHROMATIC_ROOT
+    logger.info("MuseScore version=%s root_map=%s", ms_version, 'TPC' if use_tpc else 'chromatic')
+
     # --- Title ---
     title = default_title
     for tag in ('metaTag[@name="workTitle"]', 'metaTag[@name="title"]'):
@@ -154,6 +179,7 @@ def _parse_mscx_content(xml_content: str, default_title: str) -> ParsedScore:
     # MuseScore stores chord symbols as <Harmony> elements inside measures.
     # MuseScore 4 wraps measure content in <voice> elements, so Harmony may be
     # a grandchild (or deeper) of Measure. Use iter() to find at any depth.
+    # MuseScore 4.6+ wraps name/root inside <harmonyInfo> subelement.
     chords: List[ScoreChord] = []
     measure_num = 0
     measures_scanned = 0
@@ -166,23 +192,40 @@ def _parse_mscx_content(xml_content: str, default_title: str) -> ParsedScore:
         harmony_in_measure = 0
 
         for elem in measure.iter('Harmony'):
-            # Chord name may be directly in <name> or structured
+            # Try direct children first, then <harmonyInfo> wrapper (4.6+)
             name_el = elem.find('name')
+            root_num_text = elem.findtext('root')
+            if name_el is None:
+                info = elem.find('harmonyInfo')
+                if info is not None:
+                    name_el = info.find('name')
+                    if root_num_text is None:
+                        root_num_text = info.findtext('root')
             if name_el is None:
                 continue
             chord_name = (name_el.text or '').strip()
             if not chord_name:
                 continue
 
-            # Root note (numeric) – prepend if the name doesn't already include it
-            root_num_text = elem.findtext('root')
+            # Skip "N.C." (no chord) markers from root prepending
+            if chord_name == 'N.C.':
+                chords.append(ScoreChord(
+                    measure_number=measure_num,
+                    beat_position=1.0,
+                    chord_symbol='N.C.',
+                    chord_order=chord_order,
+                ))
+                chord_order += 1
+                harmony_in_measure += 1
+                continue
+
+            # Root note (numeric) - prepend if the name doesn't already include it
             if root_num_text is not None:
                 try:
-                    root_note = MSCZ_ROOT_TO_NOTE.get(int(root_num_text), '')
+                    root_note = root_map.get(int(root_num_text), '')
                     if root_note and not chord_name[0].isupper():
                         chord_name = root_note + chord_name
-                    elif root_note and (chord_name == 'maj' or chord_name == 'min'):
-                        # Plain quality only, prepend root
+                    elif root_note and chord_name in ('maj', 'min', 'dim', 'aug'):
                         chord_name = root_note + chord_name
                 except (ValueError, TypeError):
                     pass
