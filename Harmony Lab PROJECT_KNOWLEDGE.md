@@ -1,4 +1,5 @@
 # PROJECT_KNOWLEDGE.md -- HarmonyLab
+<!-- CHECKPOINT: HL-PK-9F3A -->
 
 **Generated**: 2026-02-15
 **Updated**: 2026-02-27 — Sprint HL-MS1-FIX: 5 UAT failure fixes (note visibility, chord notation, export UI, rhythm UI, MIDI UI)

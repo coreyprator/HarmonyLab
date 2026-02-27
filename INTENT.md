@@ -1,4 +1,5 @@
 # INTENT.md -- HarmonyLab
+<!-- CHECKPOINT: HL-INTENT-2B7C -->
 
 ## Primary Intent
 A tool for visualizing and memorizing chord progressions so Corey can sense harmonic movement in a song. Not theory reference. Not ear training. The goal is to see where a song moves harmonically, learn the progression from that visualization, and play it from memory.
