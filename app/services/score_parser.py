@@ -43,12 +43,30 @@ class ScoreChord:
 
 
 @dataclass
+class ScoreNote:
+    measure_number: int
+    beat_position: float
+    midi_pitch: int
+    duration_type: str  # e.g. "quarter", "half", "eighth"
+    voice: int = 1
+
+
+# Duration type → beat fraction (assuming quarter = 1 beat in 4/4)
+_DURATION_TO_BEATS = {
+    'whole': 4.0, 'half': 2.0, 'quarter': 1.0, 'eighth': 0.5,
+    '16th': 0.25, '32nd': 0.125, '64th': 0.0625,
+    'breve': 8.0, 'longa': 16.0,
+}
+
+
+@dataclass
 class ParsedScore:
     title: str
     key: Optional[str]
     time_signature: Optional[str]
     tempo: Optional[int]
     chords: List[ScoreChord] = field(default_factory=list)
+    notes: List[ScoreNote] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -254,10 +272,64 @@ def _parse_mscx_content(xml_content: str, default_title: str) -> ParsedScore:
             "Export as .mid from MuseScore for note-based chord analysis."
         )
 
-    logger.info("Parsed MuseScore file: title=%r key=%r time_sig=%r chords=%d",
-                title, key_str, time_sig, len(chords))
+    # --- Note extraction ---
+    # MuseScore <Chord> elements (rhythm events) contain <Note> children with <pitch>.
+    # Track beat position by accumulating durations within each measure/voice.
+    notes: List[ScoreNote] = []
+    note_measure_num = 0
+
+    for measure in root.iter('Measure'):
+        note_measure_num += 1
+        # Process each voice separately
+        voices = measure.findall('.//voice')
+        if not voices:
+            voices = [measure]  # Older format without voice wrapper
+
+        for voice_idx, voice_el in enumerate(voices, start=1):
+            beat_pos = 1.0  # Start at beat 1
+
+            for child in voice_el:
+                tag = child.tag
+                dur_type_el = child.find('durationType')
+                dur_type = dur_type_el.text.strip() if dur_type_el is not None and dur_type_el.text else 'quarter'
+                dur_beats = _DURATION_TO_BEATS.get(dur_type, 1.0)
+
+                # Handle dots (dotted notes = 1.5x duration)
+                dots_el = child.find('dots')
+                if dots_el is not None and dots_el.text:
+                    try:
+                        dot_count = int(dots_el.text)
+                        dur_beats *= (2.0 - (0.5 ** dot_count))
+                    except (ValueError, TypeError):
+                        pass
+
+                if tag == 'Chord':
+                    # Extract all notes in this rhythmic event
+                    for note_el in child.findall('Note'):
+                        pitch_el = note_el.find('pitch')
+                        if pitch_el is not None and pitch_el.text:
+                            try:
+                                midi_pitch = int(pitch_el.text)
+                                notes.append(ScoreNote(
+                                    measure_number=note_measure_num,
+                                    beat_position=round(beat_pos, 2),
+                                    midi_pitch=midi_pitch,
+                                    duration_type=dur_type,
+                                    voice=voice_idx,
+                                ))
+                            except (ValueError, TypeError):
+                                pass
+                    beat_pos += dur_beats
+                elif tag == 'Rest':
+                    beat_pos += dur_beats
+                # Skip other elements (Harmony, Clef, etc.)
+
+    logger.info("Note extraction: %d notes from %d measures", len(notes), note_measure_num)
+
+    logger.info("Parsed MuseScore file: title=%r key=%r time_sig=%r chords=%d notes=%d",
+                title, key_str, time_sig, len(chords), len(notes))
     return ParsedScore(title=title, key=key_str, time_signature=time_sig,
-                       tempo=tempo_val, chords=chords)
+                       tempo=tempo_val, chords=chords, notes=notes)
 
 
 # ---------------------------------------------------------------------------

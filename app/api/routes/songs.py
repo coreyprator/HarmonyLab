@@ -117,8 +117,42 @@ async def update_song(
 async def delete_song(song_id: int, db: DatabaseConnection = Depends(get_db)):
     """Delete a song (cascades to sections, measures, chords)."""
     result = db.execute_non_query("DELETE FROM Songs WHERE id = ?", (song_id,))
-    
+
     if result == 0:
         raise HTTPException(status_code=404, detail="Song not found")
-    
+
     return None
+
+
+@router.get("/{song_id}/notes")
+async def get_song_notes(song_id: int, db: DatabaseConnection = Depends(get_db)):
+    """Get individual notes (MelodyNotes) for a song, grouped by measure."""
+    # Verify song exists
+    songs = db.execute_query("SELECT id FROM Songs WHERE id = ?", (song_id,))
+    if not songs:
+        raise HTTPException(status_code=404, detail="Song not found")
+
+    notes = db.execute_query("""
+        SELECT measure_number, beat_position, midi_note, duration, velocity
+        FROM MelodyNotes
+        WHERE song_id = ?
+        ORDER BY measure_number, beat_position
+    """, (song_id,))
+
+    if not notes:
+        raise HTTPException(status_code=404, detail="No note data for this song")
+
+    return {
+        "song_id": song_id,
+        "notes": [
+            {
+                "measure_number": n['measure_number'],
+                "beat_position": float(n.get('beat_position') or 1.0),
+                "midi_note": n['midi_note'],
+                "duration": n.get('duration'),
+                "velocity": n.get('velocity'),
+            }
+            for n in notes
+        ],
+        "total_notes": len(notes),
+    }
