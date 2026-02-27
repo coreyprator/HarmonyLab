@@ -12,7 +12,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from config.settings import settings
 
 # Import routes
-from app.api.routes import songs, sections, vocabulary, measures, chords, progress, quiz, imports, analysis, auth, exports
+from app.api.routes import songs, sections, vocabulary, measures, chords, progress, quiz, imports, analysis, auth, exports, midi_input
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +111,7 @@ app.include_router(quiz.router)
 app.include_router(imports.router)
 app.include_router(analysis.router)
 app.include_router(exports.router)
+app.include_router(midi_input.router)
 
 
 if __name__ == "__main__":
