@@ -66,9 +66,9 @@ async def get_analysis(
         raise HTTPException(status_code=404, detail="No chords found for this song")
 
     chord_symbols = [c['chord_symbol'] for c in chords]
-    # Build measure context for each chord
+    # Build measure context for each chord (cast Decimal to float for JSON)
     chord_positions = [
-        {"measure": c['measure_number'], "beat": c.get('beat_position', 1.0)}
+        {"measure": c['measure_number'], "beat": float(c.get('beat_position') or 1.0)}
         for c in chords
     ]
 
