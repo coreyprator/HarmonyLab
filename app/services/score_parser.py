@@ -275,21 +275,47 @@ def _parse_mscx_content(xml_content: str, default_title: str) -> ParsedScore:
     # --- Note extraction ---
     # MuseScore <Chord> elements (rhythm events) contain <Note> children with <pitch>.
     # Track beat position by accumulating durations within each measure/voice.
+    #
+    # MuseScore 4 format: <voice> is a CONTAINER element (direct child of Measure)
+    #   <Measure><voice><Chord>...</Chord></voice></Measure>
+    # MuseScore 3 format: <voice> is a TEXT element INSIDE Chord (voice number)
+    #   <Measure><Chord><voice>0</voice>...</Chord></Measure>
+    # We must detect which format by checking if direct children named 'voice'
+    # have sub-elements (container) vs only text (indicator).
     notes: List[ScoreNote] = []
     note_measure_num = 0
 
-    for measure in root.iter('Measure'):
-        note_measure_num += 1
-        # Process each voice separately
-        voices = measure.findall('.//voice')
-        if not voices:
-            voices = [measure]  # Older format without voice wrapper
+    # Use first Staff element to avoid duplicate measures from multi-staff scores
+    first_staff = root.find('.//Staff')
+    note_root = first_staff if first_staff is not None else root
+    logger.debug("Note extraction: searching from <%s>, first_staff found=%s",
+                 note_root.tag, first_staff is not None)
 
-        for voice_idx, voice_el in enumerate(voices, start=1):
+    for measure in note_root.iter('Measure'):
+        note_measure_num += 1
+
+        # Detect voice containers: direct children of Measure named 'voice'
+        # that themselves contain child elements (Chord, Rest, etc.)
+        voice_containers = [
+            el for el in measure if el.tag == 'voice' and len(el) > 0
+        ]
+
+        if not voice_containers:
+            # No voice container wrappers — MuseScore 3 or flat format.
+            # Chord/Rest are direct children of Measure.
+            voice_containers = [measure]
+            if note_measure_num == 1:
+                direct_tags = [el.tag for el in measure]
+                logger.debug("No voice containers in measure 1, direct children: %s", direct_tags)
+
+        for voice_idx, voice_el in enumerate(voice_containers, start=1):
             beat_pos = 1.0  # Start at beat 1
 
             for child in voice_el:
                 tag = child.tag
+                if tag not in ('Chord', 'Rest'):
+                    continue  # Skip Harmony, KeySig, TimeSig, Clef, etc.
+
                 dur_type_el = child.find('durationType')
                 dur_type = dur_type_el.text.strip() if dur_type_el is not None and dur_type_el.text else 'quarter'
                 dur_beats = _DURATION_TO_BEATS.get(dur_type, 1.0)
@@ -319,10 +345,8 @@ def _parse_mscx_content(xml_content: str, default_title: str) -> ParsedScore:
                                 ))
                             except (ValueError, TypeError):
                                 pass
-                    beat_pos += dur_beats
-                elif tag == 'Rest':
-                    beat_pos += dur_beats
-                # Skip other elements (Harmony, Clef, etc.)
+
+                beat_pos += dur_beats
 
     logger.info("Note extraction: %d notes from %d measures", len(notes), note_measure_num)
 
