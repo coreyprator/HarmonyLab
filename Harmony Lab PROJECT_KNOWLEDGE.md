@@ -1,7 +1,7 @@
 # PROJECT_KNOWLEDGE.md -- HarmonyLab
 
 **Generated**: 2026-02-15
-**Updated**: 2026-02-27 — Sprint HL-MS1 "Mega Sprint" close-out (HL-008, HL-012, HL-015, HL-017)
+**Updated**: 2026-02-27 — Sprint HL-MS1-FIX: 5 UAT failure fixes (note visibility, chord notation, export UI, rhythm UI, MIDI UI)
 **Method**: Full project read-through of every source file, config, schema, workflow, and documentation file.
 **Purpose**: Single-file knowledge recovery for any AI agent resuming work on this project.
 
@@ -16,8 +16,8 @@
 | Repository | https://github.com/coreyprator/harmonylab | `CLAUDE.md` line 65 |
 | Local Path | `G:\My Drive\Code\Python\harmonylab` | `CLAUDE.md` line 66 |
 | Methodology | [coreyprator/project-methodology](https://github.com/coreyprator/project-methodology) v3.14 | `CLAUDE.md` line 67 |
-| Current Version | v2.0.0 | `main.py` line 19 (updated 2026-02-27) |
-| Latest Revision | harmonylab-00094-6h6+ (backend), harmonylab-frontend-00060-5f5 (frontend) | Session Closeout 2026-02-27 |
+| Current Version | v2.0.1 | `main.py` line 19 (updated 2026-02-27) |
+| Latest Revision | harmonylab (backend CI/CD), harmonylab-frontend-00062-kvg (frontend) | Session Closeout 2026-02-27 |
 | Production URL | https://harmonylab.rentyourcio.com | `PROJECT_STATUS.md` line 5 |
 | API Docs | https://harmonylab.rentyourcio.com/docs | `PROJECT_STATUS.md` line 189 |
 | CLAUDE.md Last Updated | 2026-02-07 | `CLAUDE.md` line 269 |
@@ -184,6 +184,7 @@ All routes registered in `main.py` lines 102-115. Total: 45+ endpoints.
 | POST | `/` | Create song |
 | PUT | `/{song_id}` | Update song (partial update) |
 | DELETE | `/{song_id}` | Delete song (cascades) |
+| GET | `/{song_id}/notes` | **v2.0.1**: Get individual notes (MelodyNotes) for a song, ordered by measure/beat |
 
 ### Sections (`app/api/routes/sections.py`, prefix: `/api/v1/songs`)
 | Method | Path | Description |
@@ -243,6 +244,7 @@ All routes registered in `main.py` lines 102-115. Total: 45+ endpoints.
 | POST | `/score/preview` | **HL-014**: Universal format preview (.mscz .mscx .musicxml .mid) — returns title/key/tempo/chords |
 | POST | `/score/import` | **HL-014**: Universal format import — saves to Cloud SQL |
 | POST | `/batch` | **HL-018**: ZIP batch import — accepts ZIP of any supported formats, skips duplicates |
+| POST | `/score/reparse-notes` | **v2.0.1**: Re-upload .mscz to extract individual notes for existing song. Query param: song_id. Clears old MelodyNotes, inserts new. |
 | POST | `/seed-standards` | **HL-008**: Seed 15 jazz standards directly (no file upload); safe to call multiple times |
 
 ### Analysis (`app/api/routes/analysis.py`, prefix: `/api/v1/analysis`)
@@ -709,6 +711,7 @@ After v1.3.0 UAT failures, roadmap was re-scoped:
 - v1.8.5 = Error logging standardization (deployed 2026-02-22)
 - v1.8.6 = CHD-01 rework: chord dropdowns in Analysis view modal; IMP-03: .mscz MuseScore 4 voice nesting fix (deployed 2026-02-22)
 - v2.0.0 = HL-MS1 Mega Sprint: 10 jazz standards imported (HL-008), chord granularity refinement (HL-012), annotated MuseScore export (HL-015), rhythm analysis + MIDI keyboard input (HL-017). MuseScore parser fixes: dual root numbering, harmonyInfo wrapper, N.C. handling. (deployed 2026-02-27)
+- v2.0.1 = HL-MS1-FIX: 5 UAT failure fixes. (1) Note/timing visibility: score_parser extracts individual notes from MuseScore XML (handles MS3+MS4 voice formats), notes saved to MelodyNotes, Notes view tab in song.html, reparse-notes endpoint for existing songs. (2) Chord notation: normalizeChordDisplay() converts jazz font (^→maj, -→m, 0→dim, t→maj7). (3) MuseScore export: "Export .mscz" button in song.html. (4) Rhythm analysis: panel shows swing/straight feel, syncopation, source label. (5) Web MIDI: device detection, real-time chord identification via MIDI keyboard. (deployed 2026-02-27)
 
 ### What's Next (updated 2026-02-27)
 | ID | Feature | Priority | Status |
