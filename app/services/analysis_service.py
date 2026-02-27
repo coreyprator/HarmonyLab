@@ -55,16 +55,26 @@ class HarmonicAnalyzer:
         """Auto-detect key from chords."""
         try:
             s = stream.Stream()
-            for symbol in chords[:16]:  # Use first 16 chords
+            added = 0
+            for symbol in chords:
+                if added >= 16:
+                    break
                 try:
                     normalized = self._normalize_chord_symbol(symbol)
+                    if not normalized:
+                        continue
                     cs = harmony.ChordSymbol(normalized)
                     # Convert to plain Chord — ChordSymbol objects confuse
                     # the Krumhansl-Schmuckler algorithm in music21.
                     c = chord.Chord(cs.pitches)
                     s.append(c)
+                    added += 1
                 except Exception:
                     continue
+
+            if added == 0:
+                logger.warning("No valid chords for key detection")
+                return key.Key('C'), 0.0
 
             detected = s.analyze('key')
             conf = getattr(detected, 'correlationCoefficient', 0.5)
@@ -76,25 +86,40 @@ class HarmonicAnalyzer:
     def _normalize_chord_symbol(self, symbol: str) -> str:
         """Normalize chord symbols for music21 parsing.
 
-        Key conversions:
-        - 'b' flats in root → '-' (music21 format): Ab → A-, Bb7 → B-7
-        - 'Maj' suffix without number → remove: BbMaj → B-
+        Handles standard notation, MuseScore jazz font shorthand, and flat notation.
+        MuseScore jazz font uses: ^=maj, -=minor, 0=dim, t/triangle=maj7
         """
         import re
 
-        # Convert flat 'b' in root to '-' (music21 format)
-        # Pattern: letter + 'b' at position 2 → letter + '-'
-        # "Ab" → "A-", "Bb7" → "B-7", "Abm7" → "A-m7"
-        match = re.match(r'^([A-G])b(.*)$', symbol)
-        if match:
-            symbol = match.group(1) + '-' + match.group(2)
+        if not symbol or symbol == 'N.C.':
+            return ''
+
+        # Extract root (A-G with optional # or b) and quality
+        root_match = re.match(r'^([A-G][#b]?)(.*)', symbol)
+        if not root_match:
+            return symbol
+        root_part = root_match.group(1)
+        quality = root_match.group(2)
+
+        # Convert flat 'b' in root to '-' for music21
+        if len(root_part) == 2 and root_part[1] == 'b':
+            root_part = root_part[0] + '-'
+
+        # Normalize MuseScore jazz shorthand quality
+        quality = re.sub(r'^\^', 'maj', quality)       # ^7 → maj7, ^9 → maj9
+        quality = re.sub(r'^-', 'm', quality)           # -7 → m7, -9 → m9
+        quality = re.sub(r'^0(\d)', r'dim\1', quality)  # 07 → dim7
+        quality = re.sub(r'^o(\d)', r'dim\1', quality)  # o7 → dim7
+        if quality in ('t', '\u0394'):                   # triangle = maj7
+            quality = 'maj7'
+        if quality == '6/9':
+            quality = '69'
 
         # Handle "Maj" suffix (without number) - remove it
-        # "CMaj" → "C", "A-Maj" → "A-"
-        if symbol.endswith('Maj') and not any(c.isdigit() for c in symbol):
-            symbol = symbol[:-3]
+        if quality == 'Maj':
+            quality = ''
 
-        return symbol
+        return root_part + quality
 
     def _analyze_chord(self, symbol: str, index: int) -> Dict:
         """Analyze single chord."""
@@ -169,7 +194,6 @@ class HarmonicAnalyzer:
         suffix = match.group(1)
 
         # Map common chord suffixes to jazz notation
-        # Already jazz-style, just clean up
         suffix_map = {
             '': '',           # Major triad
             'M': '',          # Major triad
@@ -181,6 +205,7 @@ class HarmonicAnalyzer:
             'M7': 'maj7',     # Major 7
             'maj7': 'maj7',   # Major 7
             'Maj7': 'maj7',   # Major 7
+            '^7': 'maj7',     # Jazz font maj7
             'm7': 'm7',       # Minor 7
             'min7': 'm7',     # Minor 7
             '-7': 'm7',       # Minor 7
@@ -188,6 +213,7 @@ class HarmonicAnalyzer:
             'o': 'dim',       # Diminished
             'dim7': 'dim7',   # Diminished 7
             'o7': 'dim7',     # Diminished 7
+            '07': 'dim7',     # Jazz font dim7
             'm7b5': 'm7b5',   # Half-diminished
             'ø': 'm7b5',      # Half-diminished
             'ø7': 'm7b5',     # Half-diminished
@@ -197,7 +223,9 @@ class HarmonicAnalyzer:
             'm6': 'm6',       # Minor 6
             '9': '9',         # Dominant 9
             'maj9': 'maj9',   # Major 9
+            '^9': 'maj9',     # Jazz font maj9
             'm9': 'm9',       # Minor 9
+            '-9': 'm9',       # Jazz font m9
             '11': '11',       # 11th
             '13': '13',       # 13th
             'sus4': 'sus4',   # Suspended 4
@@ -206,6 +234,8 @@ class HarmonicAnalyzer:
             '7alt': '7alt',   # Altered dominant
             '7#9': '7#9',     # Sharp 9
             '7b9': '7b9',     # Flat 9
+            '7#5': '7#5',     # Augmented dom 7
+            '7b5': '7b5',     # Flat 5 dom 7
         }
 
         # Try direct mapping first

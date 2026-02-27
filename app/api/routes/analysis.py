@@ -51,8 +51,10 @@ async def get_analysis(
         raise HTTPException(status_code=404, detail="Song not found")
 
     # Get all chords for this song ordered by section/measure/position
+    # Include measure_number and beat_position for granularity context
     chords = db.execute_query("""
-        SELECT c.chord_symbol
+        SELECT c.chord_symbol, m.measure_number, c.beat_position, c.chord_order,
+               s.name as section_name
         FROM Chords c
         JOIN Measures m ON c.measure_id = m.id
         JOIN Sections s ON m.section_id = s.id
@@ -64,6 +66,11 @@ async def get_analysis(
         raise HTTPException(status_code=404, detail="No chords found for this song")
 
     chord_symbols = [c['chord_symbol'] for c in chords]
+    # Build measure context for each chord
+    chord_positions = [
+        {"measure": c['measure_number'], "beat": c.get('beat_position', 1.0)}
+        for c in chords
+    ]
 
     # Check for manual key override
     key_override = None
@@ -76,6 +83,21 @@ async def get_analysis(
 
     # Run analysis
     result = analyze_song(chord_symbols, key_override)
+
+    # Enrich with measure/beat positions
+    for i, ch in enumerate(result.get('chords', [])):
+        if i < len(chord_positions):
+            ch['measure'] = chord_positions[i]['measure']
+            ch['beat'] = chord_positions[i]['beat']
+
+    # Add total measures count
+    measure_count = db.execute_scalar("""
+        SELECT COUNT(DISTINCT m.measure_number)
+        FROM Measures m
+        JOIN Sections s ON m.section_id = s.id
+        WHERE s.song_id = ?
+    """, (song_id,))
+    result['total_measures'] = measure_count or 0
 
     # Cache result using MERGE (upsert)
     analysis_json = json.dumps(result)
