@@ -2,7 +2,7 @@
 <!-- CHECKPOINT: HL-PK-9F3A -->
 
 **Generated**: 2026-02-15
-**Updated**: 2026-02-27 — Sprint HL-MS1-FIX: 5 UAT failure fixes (note visibility, chord notation, export UI, rhythm UI, MIDI UI)
+**Updated**: 2026-02-28T20:00:00Z — Sprint HL-MS2: 3 UAT fixes + 6 new features (MIDI quiz mode, notes display, altered chord templates, Roman numeral fix, delete song UI)
 **Method**: Full project read-through of every source file, config, schema, workflow, and documentation file.
 **Purpose**: Single-file knowledge recovery for any AI agent resuming work on this project.
 
@@ -17,7 +17,7 @@
 | Repository | https://github.com/coreyprator/harmonylab | `CLAUDE.md` line 65 |
 | Local Path | `G:\My Drive\Code\Python\harmonylab` | `CLAUDE.md` line 66 |
 | Methodology | [coreyprator/project-methodology](https://github.com/coreyprator/project-methodology) v3.14 | `CLAUDE.md` line 67 |
-| Current Version | v2.0.1 | `main.py` line 19 (updated 2026-02-27) |
+| Current Version | v2.1.0 | `main.py` line 19 (updated 2026-02-28) |
 | Latest Revision | harmonylab (backend CI/CD), harmonylab-frontend-00062-kvg (frontend) | Session Closeout 2026-02-27 |
 | Production URL | https://harmonylab.rentyourcio.com | `PROJECT_STATUS.md` line 5 |
 | API Docs | https://harmonylab.rentyourcio.com/docs | `PROJECT_STATUS.md` line 189 |
@@ -299,12 +299,12 @@ Unified parser for all supported music file formats. Key components:
 
 Parses MIDI files using the `mido` library. Key components:
 
-- **CHORD_TEMPLATES**: 23 chord type templates defined as interval arrays (triads, sevenths, sixths, extended, suspended). Source: lines 41-73.
-- **NOTE_NAMES**: Chromatic scale `['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B']`. Source: line 75.
+- **CHORD_TEMPLATES**: 30 chord type templates defined as interval arrays (triads, sevenths, sixths, extended, suspended, altered dominants). Source: lines 57-100. **v2.1.0**: Added 7b9, 7#9, 7b13, 7#11, 7alt, 6/9, m6/9 templates.
+- **NOTE_NAMES**: Chromatic scale `['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B']`. Source: line 102.
 - **`parse_midi_file(file_path)`**: Main entry point. Returns `ParsedSong` with title, tempo, time_signature, total_measures, and list of `ChordData` objects.
-- **Track selection**: Finds the track with highest polyphony (most simultaneous notes) as the chord track. Source: lines 152-167.
-- **`identify_chord(notes)`**: Maps MIDI notes to chord symbol via template matching. Tries exact match, then subset match, then falls back to major/minor based on presence of minor/major third. Source: lines 89-119.
-- **`extract_chords_from_track()`**: Extracts chords using a threshold of `ticks_per_beat / 8` to separate successive chords. Requires at least 2 notes for a chord. Source: lines 195-249.
+- **Track selection**: Finds the track with most note-on events as the chord track. Source: lines 252-268.
+- **`identify_chord(notes)`**: Maps MIDI notes to chord symbol via rotation-based root detection with template matching. Tries every pitch class as candidate root, scores exact matches highest (1000+), then subset matches (coverage-based). Root-position voicings get bonus. Handles inversions correctly. Source: lines 124-205.
+- **`extract_chords_from_track()`**: Time-window grouping algorithm — notes whose onsets fall within `chord_window_beats` (default 2.0) are grouped. Handles both block-chord and arpeggiated styles. Source: lines 313-383.
 
 ### Harmonic Analysis (`app/services/analysis_service.py`)
 
@@ -314,7 +314,8 @@ Uses `music21` for Roman numeral analysis, key detection, and pattern recognitio
   - `FUNCTION_COLORS`: tonic=#22c55e (green), subdominant=#3b82f6 (blue), dominant=#ef4444 (red), secondary=#f59e0b (orange), chromatic=#8b5cf6 (purple), diminished=#6b7280 (gray). Source: lines 15-23.
   - `analyze_progression(chords, key_override)`: Main method. Returns dict with detected_key, confidence, analyzed chords, and patterns.
   - `_detect_key(chords)`: Auto-detects key using music21's `analyze('key')`. Iterates all chords to find up to 16 valid ones (skips empty/N.C.). Converts ChordSymbol to plain Chord to avoid Krumhansl-Schmuckler algorithm issues.
-  - `_normalize_chord_symbol(symbol)`: Normalizes chord symbols for music21. Converts flat notation (Ab → A-), MuseScore jazz font shorthand (^→maj, -→m, 0→dim, t/△→maj7), and handles 6/9→69, Maj→(empty).
+  - `_normalize_chord_symbol(symbol)`: Normalizes chord symbols for music21. Converts flat notation (Ab → A-), MuseScore jazz font shorthand (^→maj, -→m, 0→dim, t/△→maj7), strips parenthetical extensions `(b5)→b5`, `(#9)→#9`, and handles 6/9→69, Maj→(empty). **v2.1.0**: Added parenthesis stripping for altered extensions.
+  - `_fallback_roman(symbol)`: **v2.1.0**: Derives Roman numeral from root note alone when music21 can't parse the full chord symbol. Calculates pitch interval from tonic, maps to scale degree (I-VII with accidentals), determines case from quality (minor/dim = lowercase).
   - `_format_jazz_roman(rn, chord, symbol)`: Formats Roman numerals in jazz style (e.g., "IVmaj7" not "i#653"). Handles secondary dominants. Source: lines 141-155.
   - `_get_quality_suffix(symbol)`: Maps ~30 chord suffixes (Maj7, m7, dim, etc.) to jazz notation. Source: lines 157-212.
   - `_get_function(rn)`: Maps scale degrees to harmonic function. Degrees 1,3,6=tonic; 2,4=subdominant; 5,7=dominant; else=chromatic. Source: lines 214-223.
@@ -596,6 +597,13 @@ Source: `app/api/routes/progress.py` lines 143-148.
 > **HL-010 RESOLVED (2026-02-20):** song.html now defaults to Analysis view.
 > **HL-011 RESOLVED (2026-02-20):** All 5 HTML pages now fetch version from backend API dynamically. No more hardcoded version mismatch.
 > **HL-013 DOCUMENTED (2026-02-20):** MIDI files are temp-only (tempfile.NamedTemporaryFile, deleted after parse). Only chord data in Cloud SQL. No GCS used. No persistence issue for Cloud Run.
+> **HL-MS2 FIX-1 RESOLVED (2026-02-28):** Song 65 "No chords found" — Song 50 (duplicate "Almost Like Being in Love") had 0 chords. analysis.py now returns empty analysis with helpful message instead of 404. Songs 61/69 have 31 chords. Delete song UI added to clean up duplicates.
+> **HL-MS2 FIX-2 RESOLVED (2026-02-28):** Note extraction [object Object] — Frontend sent song_id in FormData but backend expects Query param. Fixed to send as URL query param. Added robust error extraction for non-string detail fields.
+> **HL-MS2 FIX-3 RESOLVED (2026-02-28):** Roman numeral "?" — analysis_service._normalize_chord_symbol() now strips parenthetical extensions (b5), (#9), (b9). Added _fallback_roman() deriving Roman numeral from root-to-tonic interval when music21 fails. Reduced Song 65 from ~15 "?" to 0.
+> **HL-NEW-001 RESOLVED (2026-02-28):** MIDI Quiz Mode — Listen/Quiz toggle on song detail page. App shows target chord, PL plays on MIDI keyboard, app scores correct/incorrect. Sequential and random modes. Score tracking.
+> **HL-NEW-002 RESOLVED (2026-02-28):** MIDI notes display — Real-time display of individual note names (e.g., G3, B3, D4, F4) alongside chord ID. Uses activeNotes Set. Clears after 2s timeout.
+> **HL-NEW-003 RESOLVED (2026-02-28):** Altered chord templates — Added 7b9, 7#9, 7b13, 7#11, 7alt, 6/9, m6/9 to CHORD_TEMPLATES. Rotation-based matching + subset scoring handles inversions and partial voicings.
+> **HL-NEW-005 RESOLVED (2026-02-28):** Delete song — UI button with confirmation dialog on song detail page. Uses existing DELETE /api/v1/songs/{id} endpoint with cascade.
 
 ### Architectural Gaps
 | Gap | Description |
@@ -713,13 +721,19 @@ After v1.3.0 UAT failures, roadmap was re-scoped:
 - v1.8.6 = CHD-01 rework: chord dropdowns in Analysis view modal; IMP-03: .mscz MuseScore 4 voice nesting fix (deployed 2026-02-22)
 - v2.0.0 = HL-MS1 Mega Sprint: 10 jazz standards imported (HL-008), chord granularity refinement (HL-012), annotated MuseScore export (HL-015), rhythm analysis + MIDI keyboard input (HL-017). MuseScore parser fixes: dual root numbering, harmonyInfo wrapper, N.C. handling. (deployed 2026-02-27)
 - v2.0.1 = HL-MS1-FIX: 5 UAT failure fixes. (1) Note/timing visibility: score_parser extracts individual notes from MuseScore XML (handles MS3+MS4 voice formats), notes saved to MelodyNotes, Notes view tab in song.html, reparse-notes endpoint for existing songs. (2) Chord notation: normalizeChordDisplay() converts jazz font (^→maj, -→m, 0→dim, t→maj7). (3) MuseScore export: "Export .mscz" button in song.html. (4) Rhythm analysis: panel shows swing/straight feel, syncopation, source label. (5) Web MIDI: device detection, real-time chord identification via MIDI keyboard. (deployed 2026-02-27)
+- v2.1.0 = HL-MS2: 3 UAT fixes + 6 features. (1) Song 65 fix: return empty analysis with helpful message instead of 404. (2) Note extraction [object Object] fix: send song_id as query param, robust error extraction. (3) Roman numeral "?" fix: strip parenthetical extensions, _fallback_roman() for music21 failures. (4) MIDI Quiz Mode: Listen/Quiz toggle, sequential/random chord drill, score tracking. (5) MIDI notes display: real-time note names alongside chord ID. (6) Altered chord templates: 7b9, 7#9, 7b13, 7#11, 7alt, 6/9, m6/9. (7) Delete song UI: button with confirmation dialog. (8) ISO timestamps on docs. (deployed 2026-02-28)
 
-### What's Next (updated 2026-02-27)
+### What's Next (updated 2026-02-28)
 | ID | Feature | Priority | Status |
 |----|---------|----------|--------|
 | HL-003 | Show intervals on chord display | P2 | Open |
 | HL-004 | Next-chord progression quiz UI | P2 | Open |
 | HL-005 | Audio playback (Tone.js integration) | P2 | Open |
+| HL-NEW-001 | MIDI Quiz Mode | P2 | **DONE** (v2.1.0) |
+| HL-NEW-002 | MIDI notes display | P2 | **DONE** (v2.1.0) |
+| HL-NEW-003 | Altered chord templates (7b9, 7#9, etc.) | P2 | **DONE** (v2.1.0) |
+| HL-NEW-004 | Roman numeral "?" fix | P3 | **DONE** (v2.1.0) |
+| HL-NEW-005 | Delete song UI | P3 | **DONE** (v2.1.0) |
 | HL-015 | Annotated MuseScore export | P3 | **DONE** (v2.0.0) |
 | HL-016 | Melody analysis | P3 | Done (v1.8.3) |
 | HL-017 | Rhythm analysis + MIDI keyboard input | P3 | **DONE** (v2.0.0) |

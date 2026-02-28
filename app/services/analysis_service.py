@@ -86,7 +86,8 @@ class HarmonicAnalyzer:
     def _normalize_chord_symbol(self, symbol: str) -> str:
         """Normalize chord symbols for music21 parsing.
 
-        Handles standard notation, MuseScore jazz font shorthand, and flat notation.
+        Handles standard notation, MuseScore jazz font shorthand, flat notation,
+        and parenthetical extensions like (b5), (#9), (b9).
         MuseScore jazz font uses: ^=maj, -=minor, 0=dim, t/triangle=maj7
         """
         import re
@@ -104,6 +105,9 @@ class HarmonicAnalyzer:
         # Convert flat 'b' in root to '-' for music21
         if len(root_part) == 2 and root_part[1] == 'b':
             root_part = root_part[0] + '-'
+
+        # Strip parentheses from extensions: (b5) → b5, (#9) → #9
+        quality = re.sub(r'\(([^)]+)\)', r'\1', quality)
 
         # Normalize MuseScore jazz shorthand quality
         quality = re.sub(r'^\^', 'maj', quality)       # ^7 → maj7, ^9 → maj9
@@ -156,16 +160,63 @@ class HarmonicAnalyzer:
             }
         except Exception as e:
             logger.warning(f"Could not analyze {symbol}: {e}")
+            # Fallback: derive Roman numeral from root note alone
+            fallback_roman = self._fallback_roman(symbol)
+            func = "unknown"
+            if fallback_roman != "?":
+                func = "chromatic"  # Best guess when quality unknown
             return {
                 "index": index,
                 "symbol": symbol,
-                "roman": "?",
-                "function": "unknown",
-                "color": self.FUNCTION_COLORS['unknown'],
+                "roman": fallback_roman,
+                "function": func,
+                "color": self.FUNCTION_COLORS.get(func, self.FUNCTION_COLORS['unknown']),
                 "key_context": str(self.current_key),
                 "is_secondary": False,
                 "secondary_target": None
             }
+
+    def _fallback_roman(self, symbol: str) -> str:
+        """Derive Roman numeral from root note alone when music21 can't parse."""
+        import re
+        from music21 import pitch
+
+        root_match = re.match(r'^([A-G][#b]?)', symbol)
+        if not root_match or not self.current_key:
+            return "?"
+
+        try:
+            root_str = root_match.group(1)
+            # Convert 'b' to '-' for music21 pitch
+            if len(root_str) == 2 and root_str[1] == 'b':
+                root_str = root_str[0] + '-'
+            root_p = pitch.Pitch(root_str)
+            tonic_p = self.current_key.tonic
+
+            interval = (root_p.midi - tonic_p.midi) % 12
+
+            # Determine if minor from symbol
+            quality = symbol[len(root_match.group(1)):]
+            is_minor = quality.startswith('m') and not quality.startswith('maj')
+            is_dim = 'dim' in quality or quality.startswith('ø') or 'b5' in quality
+
+            # Map semitones to scale degrees (major key reference)
+            degree_map = {0: 'I', 1: 'bII', 2: 'II', 3: 'bIII', 4: 'III', 5: 'IV',
+                          6: '#IV', 7: 'V', 8: 'bVI', 9: 'VI', 10: 'bVII', 11: 'VII'}
+            base = degree_map.get(interval, '?')
+            if base == '?':
+                return '?'
+
+            # Lowercase for minor/diminished
+            if is_minor or is_dim:
+                base = base.lower()
+
+            # Append quality suffix
+            qual_suffix = self._get_quality_suffix(symbol)
+            return base + qual_suffix
+
+        except Exception:
+            return "?"
 
     def _format_jazz_roman(self, rn, chord, symbol: str) -> str:
         """Format Roman numeral in jazz style (e.g., 'vim7' not 'i#653')."""
