@@ -82,6 +82,17 @@ CHORD_TEMPLATES = {
     '13': [0, 4, 7, 10, 14, 21],
     'Maj13': [0, 4, 7, 11, 14, 21],
     
+    # Altered dominant chords
+    '7b9': [0, 4, 7, 10, 13],       # dom7 + flat 9
+    '7#9': [0, 4, 7, 10, 15],       # dom7 + sharp 9 (Hendrix chord)
+    '7b13': [0, 4, 7, 10, 20],      # dom7 + flat 13
+    '7#11': [0, 4, 7, 10, 18],      # dom7 + sharp 11 (lydian dominant)
+    '7alt': [0, 4, 10, 13, 15, 20], # dom7 + b9 + #9 + b13 (no 5th)
+
+    # Additional extended chords
+    '6/9': [0, 4, 7, 9, 14],        # major 6 + 9
+    'm6/9': [0, 3, 7, 9, 14],       # minor 6 + 9
+
     # Suspended chords
     'sus2': [0, 2, 7],
     'sus4': [0, 5, 7],

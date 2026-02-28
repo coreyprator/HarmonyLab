@@ -20,12 +20,15 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v2.0.1</div>
+        <div class="nav-version">v2.1.0</div>
     </nav>
 
     <header>
         <div class="header-content">
             <h1 id="song-title">Loading...</h1>
+            <button id="delete-song-btn" class="btn btn-danger btn-sm"
+                    onclick="confirmDeleteSong()" title="Delete this song"
+                    style="margin-left:auto">Delete</button>
         </div>
         <div class="song-info">
             <span id="song-composer"></span>
@@ -108,9 +111,32 @@
         <!-- MIDI Status Panel (FAIL 5) -->
         <div id="midi-panel" class="midi-panel">
             <div class="midi-status" id="midi-status">MIDI: Checking...</div>
+            <div class="midi-mode-toggle" id="midi-mode-toggle" style="display:none">
+                <label><input type="radio" name="midi-mode" value="listen" checked onchange="setMIDIMode('listen')"> Listen</label>
+                <label><input type="radio" name="midi-mode" value="quiz" onchange="setMIDIMode('quiz')"> Quiz</label>
+            </div>
+            <div class="midi-notes-display" id="midi-notes-display" style="display:none">
+                Notes: <span id="midi-notes-list"></span>
+            </div>
             <div class="midi-chord-display" id="midi-chord-display" style="display:none">
                 <span class="midi-chord-symbol" id="midi-chord-symbol"></span>
                 <span class="midi-chord-roman" id="midi-chord-roman"></span>
+            </div>
+        </div>
+
+        <!-- MIDI Quiz Panel -->
+        <div id="midi-quiz-panel" style="display:none">
+            <div class="quiz-target">Play: <span id="quiz-target-chord"></span></div>
+            <div class="quiz-target-roman" id="quiz-target-roman"></div>
+            <div class="quiz-result" id="quiz-result"></div>
+            <div class="quiz-score">Score: <span id="quiz-score-display">0/0</span></div>
+            <div class="quiz-controls">
+                <select id="quiz-chord-source" class="filter-select" onchange="resetQuizScore()">
+                    <option value="sequential">Sequential (song order)</option>
+                    <option value="random">Random (from song)</option>
+                </select>
+                <button class="btn btn-sm" onclick="nextQuizChord()">Next</button>
+                <button class="btn btn-sm" onclick="resetQuizScore()">Reset</button>
             </div>
         </div>
 
@@ -512,7 +538,8 @@
 
                 if (allChords.length === 0) {
                     document.getElementById('chord-display').innerHTML =
-                        '<p class="empty">No chords found for this song.</p>';
+                        '<div class="empty"><p>No chord symbols found for this song.</p>' +
+                        '<p style="font-size:0.85rem;color:var(--text-muted)">This song may need to be re-imported with chord data, or a duplicate with chords may exist.</p></div>';
                 }
             } catch (err) {
                 document.getElementById('chord-display').innerHTML =
@@ -1093,17 +1120,24 @@
             if (inputs.length === 0) {
                 statusEl.textContent = 'MIDI: No device connected';
                 statusEl.className = 'midi-status midi-disconnected';
+                document.getElementById('midi-mode-toggle').style.display = 'none';
                 return;
             }
             const deviceName = inputs[0].name || 'Unknown Device';
             statusEl.textContent = `MIDI: ${deviceName}`;
             statusEl.className = 'midi-status midi-connected';
+            // Show mode toggle when MIDI connected and song has chords
+            if (allChords.length > 0) {
+                document.getElementById('midi-mode-toggle').style.display = '';
+            }
 
             // Listen to all inputs
             for (const input of inputs) {
                 input.onmidimessage = handleMIDIMessage;
             }
         }
+
+        let midiNotesClearTimeout = null;
 
         function handleMIDIMessage(msg) {
             const [status, note, velocity] = msg.data;
@@ -1112,11 +1146,34 @@
             if (command === 0x90 && velocity > 0) {
                 // Note ON
                 activeNotes.add(note);
+                updateMIDINotesDisplay();
                 scheduleMIDIIdentify();
             } else if (command === 0x80 || (command === 0x90 && velocity === 0)) {
                 // Note OFF
                 activeNotes.delete(note);
+                updateMIDINotesDisplay();
             }
+        }
+
+        function updateMIDINotesDisplay() {
+            const displayEl = document.getElementById('midi-notes-display');
+            const listEl = document.getElementById('midi-notes-list');
+            clearTimeout(midiNotesClearTimeout);
+
+            if (activeNotes.size === 0) {
+                // Clear after 2s of no notes
+                midiNotesClearTimeout = setTimeout(() => {
+                    displayEl.style.display = 'none';
+                    listEl.textContent = '';
+                }, 2000);
+                return;
+            }
+
+            const noteNames = Array.from(activeNotes)
+                .sort((a, b) => a - b)
+                .map(n => midiToNoteName(n));
+            listEl.textContent = noteNames.join(', ');
+            displayEl.style.display = '';
         }
 
         function scheduleMIDIIdentify() {
@@ -1134,6 +1191,11 @@
                     if (!res.ok) return;
                     const data = await res.json();
 
+                    if (midiMode === 'quiz') {
+                        checkQuizAnswer(data.chord_symbol);
+                        return;
+                    }
+
                     const displayEl = document.getElementById('midi-chord-display');
                     displayEl.style.display = '';
                     document.getElementById('midi-chord-symbol').textContent =
@@ -1146,6 +1208,112 @@
                     console.log('MIDI identify error:', err.message);
                 }
             }, 100); // 100ms debounce
+        }
+
+        // ==========================================
+        // MIDI QUIZ MODE
+        // ==========================================
+
+        let midiMode = 'listen'; // 'listen' or 'quiz'
+        let quizCorrect = 0;
+        let quizTotal = 0;
+        let quizChordIndex = 0;
+        let quizTargetSymbol = '';
+        let quizAnswered = false;
+
+        function setMIDIMode(mode) {
+            midiMode = mode;
+            const quizPanel = document.getElementById('midi-quiz-panel');
+            const chordDisplay = document.getElementById('midi-chord-display');
+
+            if (mode === 'quiz') {
+                quizPanel.style.display = '';
+                chordDisplay.style.display = 'none';
+                resetQuizScore();
+                nextQuizChord();
+            } else {
+                quizPanel.style.display = 'none';
+            }
+        }
+
+        function nextQuizChord() {
+            if (allChords.length === 0) return;
+            quizAnswered = false;
+            document.getElementById('quiz-result').textContent = '';
+            document.getElementById('quiz-result').className = 'quiz-result';
+
+            const source = document.getElementById('quiz-chord-source').value;
+            if (source === 'sequential') {
+                quizChordIndex = quizChordIndex % allChords.length;
+            } else {
+                quizChordIndex = Math.floor(Math.random() * allChords.length);
+            }
+
+            const chord = allChords[quizChordIndex];
+            quizTargetSymbol = chord.symbol;
+            const displaySymbol = normalizeChordDisplay(quizTargetSymbol);
+            document.getElementById('quiz-target-chord').textContent = displaySymbol;
+
+            // Show Roman numeral context if available
+            const romanEl = document.getElementById('quiz-target-roman');
+            if (analysisData?.chords?.[chord.index]) {
+                const ac = analysisData.chords[chord.index];
+                const keyStr = analysisData.detected_key || '';
+                romanEl.textContent = ac.roman !== '?' ? `${ac.roman} in ${keyStr}` : `in ${keyStr}`;
+            } else {
+                romanEl.textContent = '';
+            }
+
+            if (source === 'sequential') quizChordIndex++;
+        }
+
+        function checkQuizAnswer(playedSymbol) {
+            if (quizAnswered) return; // Already answered this one
+            quizAnswered = true;
+            quizTotal++;
+
+            // Normalize both symbols for comparison
+            const targetNorm = normalizeChordDisplay(quizTargetSymbol).toLowerCase();
+            const playedNorm = normalizeChordDisplay(playedSymbol).toLowerCase();
+
+            // Extract root + quality for comparison (ignore octave/inversion)
+            const targetRoot = targetNorm.match(/^[a-g][#b]?/)?.[0] || '';
+            const playedRoot = playedNorm.match(/^[a-g][#b]?/)?.[0] || '';
+            const targetQuality = targetNorm.slice(targetRoot.length);
+            const playedQuality = playedNorm.slice(playedRoot.length);
+
+            // Match: same root and same quality (or compatible quality)
+            const rootMatch = targetRoot === playedRoot;
+            const qualityMatch = targetQuality === playedQuality ||
+                // Accept close matches: 'maj7' matches 'maj7', '7' matches '7', etc.
+                (targetQuality === '' && playedQuality === 'maj') ||
+                (targetQuality === 'maj' && playedQuality === '');
+
+            const resultEl = document.getElementById('quiz-result');
+            if (rootMatch && qualityMatch) {
+                quizCorrect++;
+                resultEl.textContent = 'Correct!';
+                resultEl.className = 'quiz-result correct';
+            } else {
+                resultEl.textContent = `Incorrect — you played ${normalizeChordDisplay(playedSymbol)}`;
+                resultEl.className = 'quiz-result incorrect';
+            }
+
+            document.getElementById('quiz-score-display').textContent =
+                `${quizCorrect}/${quizTotal}`;
+
+            // Auto-advance after 1.5s
+            setTimeout(() => { if (midiMode === 'quiz') nextQuizChord(); }, 1500);
+        }
+
+        function resetQuizScore() {
+            quizCorrect = 0;
+            quizTotal = 0;
+            quizChordIndex = 0;
+            quizAnswered = false;
+            document.getElementById('quiz-score-display').textContent = '0/0';
+            document.getElementById('quiz-result').textContent = '';
+            document.getElementById('quiz-result').className = 'quiz-result';
         }
 
         // ==========================================
@@ -1184,7 +1352,8 @@
                 notesData = await res.json();
                 renderNotesTable(notesData);
             } catch (err) {
-                content.innerHTML = `<p class="error">Failed to load notes: ${err.message}</p>`;
+                const msg = err && err.message ? err.message : String(err);
+                content.innerHTML = `<p class="error">Failed to load notes: ${escHtml(msg)}</p>`;
             }
         }
 
@@ -1252,23 +1421,57 @@
 
             const formData = new FormData();
             formData.append('file', file);
-            formData.append('song_id', songId);
 
             try {
-                const res = await fetch(`${API_BASE}/api/v1/imports/score/reparse-notes`, {
+                // song_id is a query parameter, not a form field
+                const res = await fetch(`${API_BASE}/api/v1/imports/score/reparse-notes?song_id=${songId}`, {
                     method: 'POST',
                     body: formData
                 });
                 if (!res.ok) {
-                    const err = await res.json();
-                    throw new Error(err.detail || 'Note extraction failed');
+                    let detail = 'Note extraction failed';
+                    try {
+                        const errData = await res.json();
+                        detail = typeof errData.detail === 'string'
+                            ? errData.detail
+                            : JSON.stringify(errData.detail || errData);
+                    } catch { /* non-JSON response */ }
+                    throw new Error(detail);
                 }
                 const data = await res.json();
+                if (data.notes_count === 0) {
+                    content.innerHTML = '<p class="info">No note data found in this file. The file may not contain staff notation (e.g., lead sheets without written notes).</p>';
+                    return;
+                }
                 content.innerHTML = `<p class="success">Extracted ${data.notes_count} notes. Loading...</p>`;
                 notesData = null; // Clear cache
                 await loadNotesView();
             } catch (err) {
-                content.innerHTML = `<p class="error">Note extraction failed: ${err.message}</p>`;
+                const msg = err && err.message ? err.message : String(err);
+                content.innerHTML = `<p class="error">Note extraction failed: ${escHtml(msg)}</p>`;
+            }
+        }
+
+        // ==========================================
+        // DELETE SONG
+        // ==========================================
+
+        async function confirmDeleteSong() {
+            const title = songData?.title || 'this song';
+            if (!confirm(`Delete "${title}"?\n\nThis will remove all chords, notes, and analysis data. This cannot be undone.`)) return;
+
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/songs/${songId}`, {
+                    method: 'DELETE'
+                });
+                if (res.ok || res.status === 204) {
+                    window.location.href = 'index.html';
+                } else {
+                    const err = await res.json().catch(() => ({}));
+                    alert('Failed to delete song: ' + (err.detail || res.statusText));
+                }
+            } catch (err) {
+                alert('Failed to delete song: ' + err.message);
             }
         }
 

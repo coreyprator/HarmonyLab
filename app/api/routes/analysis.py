@@ -63,7 +63,16 @@ async def get_analysis(
     """, (song_id,))
 
     if not chords:
-        raise HTTPException(status_code=404, detail="No chords found for this song")
+        # Return empty analysis instead of 404 so the page still loads
+        empty_result = {
+            "detected_key": songs[0].get('original_key') or "C",
+            "confidence": 0.0,
+            "chords": [],
+            "patterns": [],
+            "total_measures": 0,
+            "message": "No chord symbols found for this song. Try re-importing the score file, or check for duplicate entries.",
+        }
+        return empty_result
 
     chord_symbols = [c['chord_symbol'] for c in chords]
     # Build measure context for each chord (cast Decimal to float for JSON)
