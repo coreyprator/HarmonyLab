@@ -143,9 +143,9 @@ Phase 6: GET /analysis/songs/61 → 0 "?" Roman numerals
 
 ## MetaPM Handoff
 
-- Handoff ID: (pending submission)
-- UAT ID: (pending submission)
-- Status: pending
-- URL: (pending)
+- Handoff ID: HL-MS2-01 (also 08A92133-75AA-46EB-BF0B-3327CC6EDAA3)
+- UAT ID: E7164916-C581-4CED-A60D-93FAFDC3B6AF
+- Status: conditional_pass (7P/0F/3S — MIDI hardware tests pending PL)
+- URL: https://metapm.rentyourcio.com/mcp/handoffs/08A92133-75AA-46EB-BF0B-3327CC6EDAA3/content
 
 All 3 UAT failures fixed + 6 new features deployed. v2.1.0 live at https://harmonylab.rentyourcio.com.
