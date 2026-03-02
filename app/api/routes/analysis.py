@@ -27,6 +27,32 @@ class ChordOverrideRequest(BaseModel):
     notes: Optional[str] = None
 
 
+@router.get("/roman")
+async def get_roman_numeral(
+    symbol: str,
+    key: str = "C",
+):
+    """Calculate Roman numeral for a chord symbol in a given key context.
+    Used by the Edit Chord Analysis modal for real-time preview.
+    """
+    if not symbol:
+        return {"roman": "?", "function": "unknown", "color": None}
+
+    try:
+        analyzer = HarmonicAnalyzer()
+        from music21 import key as m21key
+        analyzer.current_key = m21key.Key(key)
+        analysis = analyzer._analyze_chord(symbol, 0)
+        return {
+            "roman": analysis.get("roman", "?"),
+            "function": analysis.get("function", "unknown"),
+            "color": analysis.get("color"),
+        }
+    except Exception as e:
+        logger.warning("Roman numeral calculation failed for %s in key %s: %s", symbol, key, e)
+        return {"roman": "?", "function": "unknown", "color": None}
+
+
 @router.get("/songs/{song_id}")
 async def get_analysis(
     song_id: int,

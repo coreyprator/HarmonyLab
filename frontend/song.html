@@ -20,7 +20,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v2.1.0</div>
+        <div class="nav-version">v2.1.1</div>
     </nav>
 
     <header>
@@ -111,9 +111,9 @@
         <!-- MIDI Status Panel (FAIL 5) -->
         <div id="midi-panel" class="midi-panel">
             <div class="midi-status" id="midi-status">MIDI: Checking...</div>
-            <div class="midi-mode-toggle" id="midi-mode-toggle" style="display:none">
+            <div class="midi-mode-toggle" id="midi-mode-toggle" style="display:none" title="Listen: see what you play. Song Practice: play chords from this song in order.">
                 <label><input type="radio" name="midi-mode" value="listen" checked onchange="setMIDIMode('listen')"> Listen</label>
-                <label><input type="radio" name="midi-mode" value="quiz" onchange="setMIDIMode('quiz')"> Quiz</label>
+                <label><input type="radio" name="midi-mode" value="quiz" onchange="setMIDIMode('quiz')"> Song Practice</label>
             </div>
             <div class="midi-notes-display" id="midi-notes-display" style="display:none">
                 Notes: <span id="midi-notes-list"></span>
@@ -124,8 +124,9 @@
             </div>
         </div>
 
-        <!-- MIDI Quiz Panel -->
+        <!-- MIDI Quiz Panel (Song Practice) -->
         <div id="midi-quiz-panel" style="display:none">
+            <div class="song-practice-header" id="song-practice-header">Song Practice</div>
             <div class="quiz-target">Play: <span id="quiz-target-chord"></span></div>
             <div class="quiz-target-roman" id="quiz-target-roman"></div>
             <div class="quiz-result" id="quiz-result"></div>
@@ -347,7 +348,7 @@
                 </div>
                 <div class="form-group">
                     <label>Key Context Override</label>
-                    <input type="text" id="modal-key-context" placeholder="e.g. A minor">
+                    <input type="text" id="modal-key-context" placeholder="e.g. A minor" onchange="updateAnalysisChordPreview()">
                 </div>
                 <div class="form-group checkbox-group">
                     <label><input type="checkbox" id="modal-is-pivot"> Pivot Chord</label>
@@ -759,6 +760,18 @@
             let symbol = root + quality + ext;
             if (bass) symbol += '/' + bass;
             document.getElementById('modal-symbol-preview').textContent = symbol;
+
+            // Recalculate Roman numeral via API
+            const keyContext = document.getElementById('modal-key-context').value
+                || analysisData?.detected_key || 'C';
+            fetch(`${API_BASE}/api/v1/analysis/roman?symbol=${encodeURIComponent(symbol)}&key=${encodeURIComponent(keyContext)}`)
+                .then(res => res.ok ? res.json() : null)
+                .then(data => {
+                    if (data) {
+                        document.getElementById('modal-roman-auto').value = data.roman || '?';
+                    }
+                })
+                .catch(() => {});
         }
 
         // ==========================================
@@ -1229,6 +1242,8 @@
             if (mode === 'quiz') {
                 quizPanel.style.display = '';
                 chordDisplay.style.display = 'none';
+                const songTitle = document.getElementById('song-title').textContent || 'Song';
+                document.getElementById('song-practice-header').textContent = `Practice: ${songTitle}`;
                 resetQuizScore();
                 nextQuizChord();
             } else {
@@ -1302,8 +1317,9 @@
             document.getElementById('quiz-score-display').textContent =
                 `${quizCorrect}/${quizTotal}`;
 
-            // Auto-advance after 1.5s
-            setTimeout(() => { if (midiMode === 'quiz') nextQuizChord(); }, 1500);
+            // Auto-advance (longer for incorrect to read feedback)
+            const feedbackDelay = (rootMatch && qualityMatch) ? 2000 : 3000;
+            setTimeout(() => { if (midiMode === 'quiz') nextQuizChord(); }, feedbackDelay);
         }
 
         function resetQuizScore() {

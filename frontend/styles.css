@@ -817,6 +817,13 @@ main {
     margin-bottom: 12px;
 }
 
+.song-practice-header {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: 8px;
+}
+
 .quiz-target {
     font-size: 1.4rem;
     font-weight: bold;
