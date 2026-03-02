@@ -1,4 +1,5 @@
 # CLAUDE.md - HarmonyLab AI Instructions
+<!-- CHECKPOINT: HL-CL-3A5E -->
 
 ---
 
@@ -64,7 +65,7 @@ After processing handoff:
 | Description | Jazz chord progression training app |
 | Repository | https://github.com/coreyprator/harmonylab |
 | Local Path | G:\My Drive\Code\Python\harmonylab |
-| Methodology | [coreyprator/project-methodology](https://github.com/coreyprator/project-methodology) v3.14 |
+| Methodology | [coreyprator/project-methodology](https://github.com/coreyprator/project-methodology) v3.17 |
 
 ---
 
@@ -267,4 +268,4 @@ See `project-methodology/CLAUDE.md` for full policy.
 ---
 
 **Last Updated**: 2026-02-07
-**Methodology Version**: 3.14
+**Methodology Version**: 3.17
