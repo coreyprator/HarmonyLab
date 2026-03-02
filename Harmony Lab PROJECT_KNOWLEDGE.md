@@ -2,7 +2,7 @@
 <!-- CHECKPOINT: HL-PK-9F3A -->
 
 **Generated**: 2026-02-15
-**Updated**: 2026-02-28T20:00:00Z — Sprint HL-MS2: 3 UAT fixes + 6 new features (MIDI quiz mode, notes display, altered chord templates, Roman numeral fix, delete song UI)
+**Updated**: 2026-03-01T12:00:00Z — Sprint HL-MS2-FIX: 5 bug fixes (Quiz MIDI display, G9sus4 chord ID, Cmaj9 Roman numeral modal, quiz feedback timing, quiz UX labels)
 **Method**: Full project read-through of every source file, config, schema, workflow, and documentation file.
 **Purpose**: Single-file knowledge recovery for any AI agent resuming work on this project.
 
@@ -17,8 +17,8 @@
 | Repository | https://github.com/coreyprator/harmonylab | `CLAUDE.md` line 65 |
 | Local Path | `G:\My Drive\Code\Python\harmonylab` | `CLAUDE.md` line 66 |
 | Methodology | [coreyprator/project-methodology](https://github.com/coreyprator/project-methodology) v3.14 | `CLAUDE.md` line 67 |
-| Current Version | v2.1.0 | `main.py` line 19 (updated 2026-02-28) |
-| Latest Revision | harmonylab (backend CI/CD), harmonylab-frontend-00062-kvg (frontend) | Session Closeout 2026-02-27 |
+| Current Version | v2.1.1 | `main.py` line 19 (updated 2026-03-01) |
+| Latest Revision | harmonylab-00122-r7l (backend), harmonylab-frontend-00064-vbk (frontend) | Session Closeout 2026-03-01 |
 | Production URL | https://harmonylab.rentyourcio.com | `PROJECT_STATUS.md` line 5 |
 | API Docs | https://harmonylab.rentyourcio.com/docs | `PROJECT_STATUS.md` line 189 |
 | CLAUDE.md Last Updated | 2026-02-07 | `CLAUDE.md` line 269 |
@@ -604,6 +604,11 @@ Source: `app/api/routes/progress.py` lines 143-148.
 > **HL-NEW-002 RESOLVED (2026-02-28):** MIDI notes display — Real-time display of individual note names (e.g., G3, B3, D4, F4) alongside chord ID. Uses activeNotes Set. Clears after 2s timeout.
 > **HL-NEW-003 RESOLVED (2026-02-28):** Altered chord templates — Added 7b9, 7#9, 7b13, 7#11, 7alt, 6/9, m6/9 to CHORD_TEMPLATES. Rotation-based matching + subset scoring handles inversions and partial voicings.
 > **HL-NEW-005 RESOLVED (2026-02-28):** Delete song — UI button with confirmation dialog on song detail page. Uses existing DELETE /api/v1/songs/{id} endpoint with cascade.
+> **HL-MS2-FIX BUG 1 RESOLVED (2026-03-01):** Quiz page MIDI display — Added MIDI panel HTML (status, notes display, chord display) + JS (initMIDI, updateMIDIDevices, handleMIDIMessage, updateMIDINotesDisplay, midiToNoteName, scheduleMIDIIdentify) to quiz.html. CSS already existed in styles.css. Backend endpoint already existed.
+> **HL-MS2-FIX BUG 2 RESOLVED (2026-03-01):** G9sus4 chord ID — Added '9sus4': [0, 5, 7, 10, 14] to CHORD_TEMPLATES in midi_parser.py. Existing bass-note preference (root_pos_bonus=50) correctly breaks ties in favor of bass note as root. G3,C4,D4,F4,A4 now returns G9sus4 instead of F6/9.
+> **HL-MS2-FIX BUG 3 RESOLVED (2026-03-01):** Cmaj9 Roman numeral in Edit modal — Added GET /api/v1/analysis/roman?symbol=X&key=Y endpoint (analysis.py). updateAnalysisChordPreview() in song.html now calls this endpoint to recalculate modal-roman-auto field when dropdowns change. Added onchange to key context input.
+> **HL-MS2-FIX BUG 4 RESOLVED (2026-03-01):** Quiz feedback timing — Changed setTimeout from 1500ms to 2000ms (correct) / 3000ms (incorrect) in both quiz.html and song.html.
+> **HL-MS2-FIX BUG 5 RESOLVED (2026-03-01):** Quiz UX labels — quiz.html title changed to "Chord Quiz (Library)". song.html quiz radio button changed to "Song Practice" with "Practice: [Song Name]" header and tooltip.
 
 ### Architectural Gaps
 | Gap | Description |
