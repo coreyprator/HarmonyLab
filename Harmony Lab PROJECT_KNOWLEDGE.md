@@ -306,6 +306,17 @@ Parses MIDI files using the `mido` library. Key components:
 - **`identify_chord(notes)`**: Maps MIDI notes to chord symbol via rotation-based root detection with template matching. Tries every pitch class as candidate root, scores exact matches highest (1000+), then subset matches (coverage-based). Root-position voicings get bonus. Handles inversions correctly. Source: lines 124-205.
 - **`extract_chords_from_track()`**: Time-window grouping algorithm — notes whose onsets fall within `chord_window_beats` (default 2.0) are grouped. Handles both block-chord and arpeggiated styles. Source: lines 313-383.
 
+## Chord Identification — Interval Priority Rule
+
+When identifying chords from a note set:
+1. Evaluate structural intervals FIRST: sus4, sus2, dim, aug, power chords.
+2. Only attempt slash-chord pattern matching AFTER structural types are ruled out.
+3. Extended voicings (9, 11, 13) should be tested within the structural type, not as separate candidates.
+
+Root cause: HL-026 — G9sus4 was misidentified as F6/9 because slash-chord
+matching ran before sus4 evaluation. Fixed in v2.1.1. This ordering must
+be preserved in all future chord ID refactors.
+
 ### Harmonic Analysis (`app/services/analysis_service.py`)
 
 Uses `music21` for Roman numeral analysis, key detection, and pattern recognition.
