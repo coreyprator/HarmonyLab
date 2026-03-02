@@ -20,14 +20,14 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v2.1.0</div>
+        <div class="nav-version">v2.1.1</div>
     </nav>
 
     <header>
         <div class="header-content">
-            <h1>Chord Quiz</h1>
+            <h1>Chord Quiz (Library)</h1>
         </div>
-        <p class="subtitle">Test your knowledge of jazz chord progressions</p>
+        <p class="subtitle">Test your chord knowledge from the full chord library</p>
     </header>
 
     <main>
@@ -115,6 +115,18 @@
                 </div>
             </div>
 
+            <!-- MIDI Status Panel -->
+            <div id="midi-panel" class="midi-panel">
+                <div class="midi-status" id="midi-status">MIDI: Checking...</div>
+                <div class="midi-notes-display" id="midi-notes-display" style="display:none">
+                    Notes: <span id="midi-notes-list"></span>
+                </div>
+                <div class="midi-chord-display" id="midi-chord-display" style="display:none">
+                    <span class="midi-chord-symbol" id="midi-chord-symbol"></span>
+                    <span class="midi-chord-roman" id="midi-chord-roman"></span>
+                </div>
+            </div>
+
             <div id="quiz-options" class="quiz-options">
                 <!-- Options will be inserted here -->
             </div>
@@ -182,6 +194,7 @@
             await loadSongs();
             setupEventListeners();
             setupAudioControls();
+            initMIDI();
         }
 
         async function loadSongs() {
@@ -366,7 +379,8 @@
                 timeTaken
             });
 
-            // Auto-advance after delay
+            // Auto-advance after delay (longer for incorrect to read feedback)
+            const feedbackDelay = isCorrect ? 2000 : 3000;
             setTimeout(() => {
                 currentQuestionIndex++;
                 if (currentQuestionIndex < currentQuiz.questions.length) {
@@ -374,7 +388,7 @@
                 } else {
                     showResults();
                 }
-            }, 1500);
+            }, feedbackDelay);
         }
 
         function showFeedback(isCorrect, correctAnswer) {
@@ -578,6 +592,117 @@
             stopAudio();
             originalDisplayQuestion();
         };
+
+        // ==========================================
+        // WEB MIDI DETECTION
+        // ==========================================
+
+        let midiAccess = null;
+        let activeNotes = new Set();
+        let midiIdentifyTimeout = null;
+        let midiNotesClearTimeout = null;
+
+        const NOTE_NAMES_MIDI = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
+
+        async function initMIDI() {
+            const statusEl = document.getElementById('midi-status');
+            if (!navigator.requestMIDIAccess) {
+                statusEl.textContent = 'MIDI: Not supported (use Chrome/Edge)';
+                statusEl.className = 'midi-status midi-unsupported';
+                return;
+            }
+            try {
+                midiAccess = await navigator.requestMIDIAccess();
+                updateMIDIDevices();
+                midiAccess.onstatechange = updateMIDIDevices;
+            } catch (err) {
+                statusEl.textContent = 'MIDI: Access denied';
+                statusEl.className = 'midi-status midi-disconnected';
+            }
+        }
+
+        function updateMIDIDevices() {
+            const statusEl = document.getElementById('midi-status');
+            const inputs = Array.from(midiAccess.inputs.values());
+            if (inputs.length === 0) {
+                statusEl.textContent = 'MIDI: No device connected';
+                statusEl.className = 'midi-status midi-disconnected';
+                return;
+            }
+            const deviceName = inputs[0].name || 'Unknown Device';
+            statusEl.textContent = `MIDI: ${deviceName}`;
+            statusEl.className = 'midi-status midi-connected';
+
+            for (const input of inputs) {
+                input.onmidimessage = handleMIDIMessage;
+            }
+        }
+
+        function handleMIDIMessage(msg) {
+            const [status, note, velocity] = msg.data;
+            const command = status & 0xf0;
+
+            if (command === 0x90 && velocity > 0) {
+                activeNotes.add(note);
+                updateMIDINotesDisplay();
+                scheduleMIDIIdentify();
+            } else if (command === 0x80 || (command === 0x90 && velocity === 0)) {
+                activeNotes.delete(note);
+                updateMIDINotesDisplay();
+            }
+        }
+
+        function midiToNoteName(noteNum) {
+            const name = NOTE_NAMES_MIDI[noteNum % 12];
+            const octave = Math.floor(noteNum / 12) - 1;
+            return name + octave;
+        }
+
+        function updateMIDINotesDisplay() {
+            const displayEl = document.getElementById('midi-notes-display');
+            const listEl = document.getElementById('midi-notes-list');
+            clearTimeout(midiNotesClearTimeout);
+
+            if (activeNotes.size === 0) {
+                midiNotesClearTimeout = setTimeout(() => {
+                    displayEl.style.display = 'none';
+                    listEl.textContent = '';
+                }, 2000);
+                return;
+            }
+
+            const noteNames = Array.from(activeNotes)
+                .sort((a, b) => a - b)
+                .map(n => midiToNoteName(n));
+            listEl.textContent = noteNames.join(', ');
+            displayEl.style.display = '';
+        }
+
+        function scheduleMIDIIdentify() {
+            clearTimeout(midiIdentifyTimeout);
+            midiIdentifyTimeout = setTimeout(async () => {
+                if (activeNotes.size < 2) return;
+                const notes = Array.from(activeNotes).sort((a, b) => a - b);
+                try {
+                    const res = await fetch(`${API_BASE}/api/v1/midi/identify`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ notes, key_context: null })
+                    });
+                    if (!res.ok) return;
+                    const data = await res.json();
+
+                    const displayEl = document.getElementById('midi-chord-display');
+                    displayEl.style.display = '';
+                    document.getElementById('midi-chord-symbol').textContent =
+                        data.chord_symbol || '?';
+                    document.getElementById('midi-chord-roman').textContent =
+                        data.roman_numeral ? `(${data.roman_numeral})` : '';
+                } catch (err) {
+                    console.log('MIDI identify error:', err.message);
+                }
+            }, 100);
+        }
     </script>
 
     <style>

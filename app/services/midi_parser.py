@@ -97,6 +97,7 @@ CHORD_TEMPLATES = {
     'sus2': [0, 2, 7],
     'sus4': [0, 5, 7],
     '7sus4': [0, 5, 7, 10],
+    '9sus4': [0, 5, 7, 10, 14],
 }
 
 NOTE_NAMES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B']
