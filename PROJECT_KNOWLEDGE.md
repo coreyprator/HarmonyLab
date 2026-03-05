@@ -2,7 +2,7 @@
 <!-- CHECKPOINT: HL-PK-9F3A -->
 
 **Generated**: 2026-02-15
-**Updated**: 2026-03-01T12:00:00Z — Sprint HL-MS2-FIX: 5 bug fixes (Quiz MIDI display, G9sus4 chord ID, Cmaj9 Roman numeral modal, quiz feedback timing, quiz UX labels)
+**Updated**: 2026-03-05T06:00:00Z — Sprint HL-MS3: v2.2.0 Analysis and Display Mega Sprint (key center detection, ii-V-I patterns, transpose, multi-chord display, bracket notation)
 **Method**: Full project read-through of every source file, config, schema, workflow, and documentation file.
 **Purpose**: Single-file knowledge recovery for any AI agent resuming work on this project.
 
@@ -17,8 +17,8 @@
 | Repository | https://github.com/coreyprator/harmonylab | `CLAUDE.md` line 65 |
 | Local Path | `G:\My Drive\Code\Python\harmonylab` | `CLAUDE.md` line 66 |
 | Methodology | [coreyprator/project-methodology](https://github.com/coreyprator/project-methodology) v3.14 | `CLAUDE.md` line 67 |
-| Current Version | v2.1.1 | `main.py` line 19 (updated 2026-03-01) |
-| Latest Revision | harmonylab-00122-r7l (backend), harmonylab-frontend-00064-vbk (frontend) | Session Closeout 2026-03-01 |
+| Current Version | v2.2.0 | `main.py` line 19 (updated 2026-03-05) |
+| Latest Revision | harmonylab-00129-5fp (backend), harmonylab-frontend-00066-8b2 (frontend) | Session Closeout 2026-03-05 |
 | Production URL | https://harmonylab.rentyourcio.com | `PROJECT_STATUS.md` line 5 |
 | API Docs | https://harmonylab.rentyourcio.com/docs | `PROJECT_STATUS.md` line 189 |
 | CLAUDE.md Last Updated | 2026-02-07 | `CLAUDE.md` line 269 |
@@ -43,9 +43,9 @@ All values sourced from `CLAUDE.md` lines 71-83 unless otherwise noted.
 | Custom Domain | `harmonylab.rentyourcio.com` |
 | Artifact Registry | `us-central1-docker.pkg.dev/super-flashcards-475210/harmonylab/harmonylab` |
 
-> **Note:** A `harmonylab-frontend` Cloud Run service exists but the frontend directory has no
-> tracked source files in git. This service may be serving stale or no content. Verify whether
-> it's actively used — if not, delete the Cloud Run service to avoid confusion and cost.
+> **Note:** The `harmonylab-frontend` Cloud Run service serves the vanilla HTML/CSS/JS frontend.
+> Pages: index.html (song list), song.html (song detail + analysis + MIDI), quiz.html, progress.html, login.html.
+> Deployed via `gcloud run deploy harmonylab-frontend --source frontend/ --region us-central1`.
 
 Source for Artifact Registry path: `.github/workflows/deploy.yml` line 40.
 
@@ -106,9 +106,11 @@ Secrets are injected at deploy time via the GitHub Actions workflow (`deploy.yml
 ### Frontend
 | Component | Technology | Source |
 |-----------|-----------|--------|
-| Planned Stack | React + Vite + Tailwind | `PROJECT_STATUS.md` line 133 |
-| Audio (Planned) | Tone.js | `PROJECT_STATUS.md` line 134 |
-| Current State | **EMPTY** -- frontend directory has no tracked source files | Glob of `frontend/**/*` returned only `frontend/Dockerfile` |
+| Stack | Vanilla HTML/CSS/JS | `frontend/song.html`, `frontend/styles.css` |
+| Audio | Tone.js (CDN) | `frontend/song.html` line 9 |
+| MIDI | Web MIDI API (native) | `frontend/song.html` |
+| Pages | index.html, song.html, quiz.html, progress.html, login.html | `frontend/` |
+| Hosting | Cloud Run (nginx) | `frontend/Dockerfile` |
 
 ### Container
 | Component | Value | Source |
@@ -251,6 +253,10 @@ All routes registered in `main.py` lines 102-115. Total: 45+ endpoints.
 ### Analysis (`app/api/routes/analysis.py`, prefix: `/api/v1/analysis`)
 | Method | Path | Description |
 |--------|------|-------------|
+| GET | `/roman` | **v2.2.0**: Calculate Roman numeral for a chord symbol in a given key (params: symbol, key) |
+| GET | `/songs/{song_id}/key-centers` | **v2.2.0**: Get key center regions and ii-V-I patterns for a song |
+| GET | `/songs/{song_id}/patterns` | **v2.2.0**: Get detected harmonic patterns (ii-V-I, ii-V-i) for a song |
+| POST | `/songs/{song_id}/transpose` | **v2.2.0**: Transpose song analysis by N semitones (session-only, not persisted) |
 | GET | `/songs/{song_id}` | Get harmonic analysis (cached, with override application) |
 | POST | `/songs/{song_id}` | Re-analyze with manual key override |
 | PUT | `/songs/{song_id}/chord/{chord_index}` | Override analysis for a specific chord |
@@ -294,6 +300,7 @@ Unified parser for all supported music file formats. Key components:
 - **Key maps**: `_SHARP_KEYS` (0=C…7=C#), `_FLAT_KEYS` (-1=F…-7=Cb)
 - **Diagnostic logging** (added 2026-02-22): logs measures_scanned, measures_with_harmony, total_chords. Warns if 0 chords found.
 - **MuseScore 4 note** (2026-02-22): MuseScore 4 wraps content in `<voice>` elements. Fixed by using `iter()` instead of direct child iteration.
+- **Import data capture audit** (HL-033, 2026-03-05): Captured: chord symbols, melody notes (first staff only via MelodyNotes table), key signature, time signature, tempo. NOT captured: inner voices (harmony/bass parts), dynamics, per-section tempo/key changes, phrase breaks/rehearsal marks.
 
 ### MIDI Parser (`app/services/midi_parser.py`)
 
@@ -317,6 +324,15 @@ Root cause: HL-026 — G9sus4 was misidentified as F6/9 because slash-chord
 matching ran before sus4 evaluation. Fixed in v2.1.1. This ordering must
 be preserved in all future chord ID refactors.
 
+### Key Center Detection (`app/services/key_center_service.py`) *(added 2026-03-05, HL-037/HL-042)*
+
+Interval-based key center detection and ii-V-I pattern recognition, independent of global key.
+
+- **`_parse_chord(symbol)`**: Parses chord symbol into root pitch class (0-11) and quality flags (is_minor, is_dom7, is_maj7, is_half_dim, is_dim, is_major_triad).
+- **`detect_ii_v_i_patterns(chords)`**: Detects ii-V-I (major) and ii-V-i (harmonic minor) patterns. Uses interval math: ii root at +2 semitones from I, V root at +7 from I. V must be dom7. Returns list of pattern dicts with type, indices, target_key, mode, label, start/end_measure.
+- **`detect_key_centers(chords, detected_key)`**: Detects key center regions by clustering ii-V-I patterns and fitting remaining chords to candidate keys using major/harmonic minor scales. Returns list of region dicts with start/end index, start/end measure, key_center, mode, confidence (0.8 for pattern-backed, 0.5 for inferred).
+- **Note names**: Uses flat-preferred jazz convention: `['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B']`.
+
 ### Harmonic Analysis (`app/services/analysis_service.py`)
 
 Uses `music21` for Roman numeral analysis, key detection, and pattern recognition.
@@ -330,7 +346,7 @@ Uses `music21` for Roman numeral analysis, key detection, and pattern recognitio
   - `_format_jazz_roman(rn, chord, symbol)`: Formats Roman numerals in jazz style (e.g., "IVmaj7" not "i#653"). Handles secondary dominants. Source: lines 141-155.
   - `_get_quality_suffix(symbol)`: Maps ~30 chord suffixes (Maj7, m7, dim, etc.) to jazz notation. Source: lines 157-212.
   - `_get_function(rn)`: Maps scale degrees to harmonic function. Degrees 1,3,6=tonic; 2,4=subdominant; 5,7=dominant; else=chromatic. Source: lines 214-223.
-  - `_detect_patterns(chords)`: Detects ii-V-I patterns. Source: lines 225-242.
+  - `_detect_patterns(chords)`: Legacy basic ii-V-I detection via Roman numeral text matching. Source: lines 225-242. **v2.2.0**: Superseded by `key_center_service.detect_ii_v_i_patterns()` for interval-based detection.
 - **`analyze_song(chords, key_override)`**: Module-level convenience function. Source: lines 245-248.
 
 ### MuseScore Export (`app/services/score_exporter.py`) *(added 2026-02-27, HL-015)*

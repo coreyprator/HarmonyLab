@@ -624,6 +624,27 @@ main {
     margin-top: 2px;
 }
 
+/* Key center bracket notation */
+.kc-bracket-top {
+    border-top: 2px solid var(--kc-color, #2563eb);
+}
+.kc-bracket-start {
+    border-top-left-radius: 8px;
+    border-left: 2px solid var(--kc-color, #2563eb);
+}
+.kc-bracket-end {
+    border-top-right-radius: 8px;
+    border-right: 2px solid var(--kc-color, #2563eb);
+}
+.kc-bracket {
+    font-size: 0.65rem;
+    font-weight: 600;
+    white-space: nowrap;
+    padding: 0 2px;
+    margin-bottom: 2px;
+    letter-spacing: 0.3px;
+}
+
 /* ==========================================
    MODAL
    ========================================== */
