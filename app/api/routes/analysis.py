@@ -3,15 +3,52 @@ Analysis API Routes
 Harmonic analysis, chord overrides, and key region management.
 """
 from fastapi import APIRouter, HTTPException, Depends
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel
 from app.services.analysis_service import analyze_song, HarmonicAnalyzer
 from app.db.connection import DatabaseConnection, get_db
 import json
+import re
 import logging
 
 router = APIRouter(prefix="/api/v1/analysis", tags=["analysis"])
 logger = logging.getLogger(__name__)
+
+NOTE_NAMES_SHARP = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+NOTE_NAMES_FLAT = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B']
+
+def transpose_chord_symbol(symbol: str, semitones: int) -> str:
+    """Transpose a chord symbol by N semitones."""
+    if not symbol or symbol == 'N.C.':
+        return symbol
+    match = re.match(r'^([A-G])([#b]?)(.*)', symbol)
+    if not match:
+        return symbol
+    root_letter = match.group(1)
+    accidental = match.group(2)
+    quality = match.group(3)
+
+    # Handle slash chords (e.g., Dm7/G)
+    bass_part = ''
+    if '/' in quality:
+        slash_idx = quality.index('/')
+        bass_note = quality[slash_idx + 1:]
+        quality = quality[:slash_idx]
+        # Transpose bass note too
+        bass_part = '/' + transpose_chord_symbol(bass_note, semitones)
+
+    root_str = root_letter + accidental
+    # Find current pitch class
+    lookup = {n: i for i, n in enumerate(NOTE_NAMES_SHARP)}
+    lookup.update({n: i for i, n in enumerate(NOTE_NAMES_FLAT)})
+    pc = lookup.get(root_str)
+    if pc is None:
+        return symbol
+    new_pc = (pc + semitones) % 12
+    # Use flats for flat keys, sharps otherwise
+    use_flats = accidental == 'b' or semitones < 0
+    new_root = NOTE_NAMES_FLAT[new_pc] if use_flats else NOTE_NAMES_SHARP[new_pc]
+    return new_root + quality + bass_part
 
 
 class AnalysisRequest(BaseModel):
@@ -51,6 +88,102 @@ async def get_roman_numeral(
     except Exception as e:
         logger.warning("Roman numeral calculation failed for %s in key %s: %s", symbol, key, e)
         return {"roman": "?", "function": "unknown", "color": None}
+
+
+@router.get("/songs/{song_id}/key-centers")
+async def get_key_centers(
+    song_id: int,
+    db: DatabaseConnection = Depends(get_db),
+):
+    """Get key center regions for a song."""
+    from app.services.key_center_service import detect_key_centers, detect_ii_v_i_patterns
+
+    # Get analysis data first
+    analysis = await get_analysis(song_id, db=db)
+    chords = analysis.get('chords', [])
+    detected_key = analysis.get('detected_key', 'C')
+
+    regions = detect_key_centers(chords, detected_key)
+    patterns = detect_ii_v_i_patterns(chords)
+
+    return {
+        'song_id': song_id,
+        'detected_key': detected_key,
+        'regions': regions,
+        'patterns': patterns,
+    }
+
+
+@router.get("/songs/{song_id}/patterns")
+async def get_patterns(
+    song_id: int,
+    db: DatabaseConnection = Depends(get_db),
+):
+    """Get detected harmonic patterns for a song."""
+    from app.services.key_center_service import detect_ii_v_i_patterns
+
+    analysis = await get_analysis(song_id, db=db)
+    chords = analysis.get('chords', [])
+
+    patterns = detect_ii_v_i_patterns(chords)
+
+    return {
+        'song_id': song_id,
+        'patterns': patterns,
+    }
+
+
+class TransposeRequest(BaseModel):
+    semitones: int
+
+
+@router.post("/songs/{song_id}/transpose")
+async def transpose_song(
+    song_id: int,
+    request: TransposeRequest,
+    db: DatabaseConnection = Depends(get_db),
+):
+    """Transpose a song's analysis by N semitones. Session-only, not persisted."""
+    semitones = max(-11, min(11, request.semitones))
+
+    # Get chords for this song
+    chords = db.execute_query("""
+        SELECT c.chord_symbol, m.measure_number, c.beat_position, c.chord_order
+        FROM Chords c
+        JOIN Measures m ON c.measure_id = m.id
+        JOIN Sections s ON m.section_id = s.id
+        WHERE s.song_id = ?
+        ORDER BY s.section_order, m.measure_number, c.chord_order
+    """, (song_id,))
+
+    if not chords:
+        raise HTTPException(status_code=404, detail="No chords found for this song")
+
+    # Transpose each chord symbol
+    transposed_symbols = [transpose_chord_symbol(c['chord_symbol'], semitones) for c in chords]
+
+    # Transpose the key too
+    songs = db.execute_query("SELECT original_key FROM Songs WHERE id = ?", (song_id,))
+    original_key = (songs[0].get('original_key') or 'C') if songs else 'C'
+    transposed_key = transpose_chord_symbol(original_key.split()[0], semitones)
+
+    # Re-analyze with transposed chords
+    result = analyze_song(transposed_symbols, transposed_key)
+
+    # Enrich with measure/beat positions
+    chord_positions = [
+        {"measure": c['measure_number'], "beat": float(c.get('beat_position') or 1.0)}
+        for c in chords
+    ]
+    for i, ch in enumerate(result.get('chords', [])):
+        if i < len(chord_positions):
+            ch['measure'] = chord_positions[i]['measure']
+            ch['beat'] = chord_positions[i]['beat']
+
+    result['transposed_semitones'] = semitones
+    result['original_key'] = original_key
+
+    return result
 
 
 @router.get("/songs/{song_id}")

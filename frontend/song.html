@@ -20,7 +20,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v2.1.1</div>
+        <div class="nav-version">v2.2.0</div>
     </nav>
 
     <header>
@@ -81,6 +81,13 @@
                 <button id="reanalyze-btn" class="btn btn-sm">Re-analyze</button>
                 <span id="detected-key" class="detected-key"></span>
                 <span id="confidence" class="confidence"></span>
+            </div>
+            <div class="transpose-controls" id="transpose-controls">
+                <label>Transpose:</label>
+                <button class="btn btn-sm" onclick="transposeBy(-1)" title="Down one semitone">-1</button>
+                <span id="transpose-display">0</span>
+                <button class="btn btn-sm" onclick="transposeBy(1)" title="Up one semitone">+1</button>
+                <button class="btn btn-sm" onclick="transposeBy(0, true)" title="Reset transpose">Reset</button>
             </div>
         </div>
 
@@ -383,6 +390,7 @@
         let analysisData = null;
         let allChords = [];
         let editingChordIndex = null;
+        let currentTranspose = 0;
 
         // ==========================================
         // INITIALIZATION
@@ -492,6 +500,10 @@
                         chordsDiv.className = 'measure-chords';
 
                         const measureChords = measure.chords || [];
+                        const isMultiChord = measureChords.length > 1;
+                        if (isMultiChord) {
+                            measureDiv.classList.add('multi-chord');
+                        }
                         for (const chord of measureChords) {
                             const card = document.createElement('div');
                             card.className = 'chord-card';
@@ -507,6 +519,14 @@
                             romanSpan.className = 'roman-numeral';
                             romanSpan.style.display = 'none';
                             card.appendChild(romanSpan);
+
+                            if (isMultiChord) {
+                                const beatLabel = document.createElement('div');
+                                beatLabel.className = 'beat-label';
+                                const beat = parseFloat(chord.beat_position) || 1;
+                                beatLabel.textContent = '\u2669' + Math.round(beat);
+                                card.appendChild(beatLabel);
+                            }
 
                             card.addEventListener('click', () => openChordEditor(parseInt(card.dataset.index)));
 
@@ -548,6 +568,8 @@
             }
         }
 
+        let keyCenterData = null;
+
         async function loadAnalysis(forceRefresh = false) {
             try {
                 const url = `${API_BASE}/api/v1/analysis/songs/${songId}${forceRefresh ? '?refresh=true' : ''}`;
@@ -555,9 +577,57 @@
                 if (!res.ok) throw new Error('Analysis failed');
                 analysisData = await res.json();
                 renderAnalysis();
+                loadKeyCenters();
             } catch (err) {
                 console.error('Analysis error:', err);
                 document.getElementById('detected-key').textContent = 'Analysis unavailable';
+            }
+        }
+
+        async function loadKeyCenters() {
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/analysis/songs/${songId}/key-centers`);
+                if (!res.ok) return;
+                keyCenterData = await res.json();
+                renderKeyCenters();
+                renderPatternAnnotations();
+            } catch (e) {
+                console.error('Key center load failed:', e);
+            }
+        }
+
+        // ==========================================
+        // TRANSPOSE
+        // ==========================================
+
+        async function transposeBy(delta, reset = false) {
+            if (reset) {
+                currentTranspose = 0;
+            } else {
+                currentTranspose += delta;
+                currentTranspose = Math.max(-11, Math.min(11, currentTranspose));
+            }
+            document.getElementById('transpose-display').textContent =
+                currentTranspose > 0 ? '+' + currentTranspose :
+                currentTranspose === 0 ? '0' : String(currentTranspose);
+
+            if (currentTranspose === 0) {
+                // Reset: reload original analysis
+                await loadAnalysis();
+            } else {
+                try {
+                    const res = await fetch(`${API_BASE}/api/v1/analysis/songs/${songId}/transpose`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({semitones: currentTranspose})
+                    });
+                    if (res.ok) {
+                        analysisData = await res.json();
+                        renderAnalysis();
+                    }
+                } catch (e) {
+                    console.error('Transpose failed:', e);
+                }
             }
         }
 
@@ -632,6 +702,80 @@
                     const chordInfo = allChords[idx];
                     if (chordInfo) {
                         chordInfo.element.classList.add('pattern-highlight');
+                    }
+                }
+            }
+        }
+
+        function renderKeyCenters() {
+            if (!keyCenterData || currentView !== 'analysis') return;
+            const regions = keyCenterData.regions || [];
+            if (regions.length === 0) return;
+
+            // Build key center legend
+            let legendEl = document.getElementById('key-center-legend');
+            if (!legendEl) {
+                legendEl = document.createElement('div');
+                legendEl.id = 'key-center-legend';
+                legendEl.className = 'key-center-legend';
+                const functionLegend = document.getElementById('function-legend');
+                if (functionLegend) functionLegend.after(legendEl);
+            }
+
+            const palette = ['#2563eb', '#dc2626', '#16a34a', '#9333ea', '#ea580c', '#0891b2', '#be185d', '#65a30d'];
+            const keyColorMap = {};
+            let colorIdx = 0;
+            for (const r of regions) {
+                const kLabel = r.key_center + (r.mode !== 'major' ? 'm' : '');
+                if (!(kLabel in keyColorMap)) {
+                    keyColorMap[kLabel] = palette[colorIdx % palette.length];
+                    colorIdx++;
+                }
+            }
+
+            legendEl.innerHTML = '<strong>Key Centers:</strong> ' +
+                Object.entries(keyColorMap).map(([k, c]) =>
+                    `<span class="kc-legend-item" style="border-bottom: 3px solid ${c}">${escHtml(k)}</span>`
+                ).join(' ');
+            legendEl.style.display = '';
+
+            // Apply text color to chord symbols by key center region
+            for (const r of regions) {
+                const kLabel = r.key_center + (r.mode !== 'major' ? 'm' : '');
+                const color = keyColorMap[kLabel];
+                for (let idx = r.start_index; idx <= r.end_index; idx++) {
+                    const info = allChords[idx];
+                    if (info && info.element) {
+                        const symbolEl = info.element.querySelector('.chord-symbol');
+                        if (symbolEl) symbolEl.style.color = color;
+                        info.element.style.borderBottom = `3px solid ${color}`;
+                    }
+                }
+            }
+        }
+
+        function renderPatternAnnotations() {
+            if (!keyCenterData || currentView !== 'analysis') return;
+            const patterns = keyCenterData.patterns || [];
+            for (const pat of patterns) {
+                // Add pattern label under the first chord of the pattern
+                const firstIdx = pat.indices[0];
+                const info = allChords[firstIdx];
+                if (!info || !info.element) continue;
+                let label = info.element.querySelector('.pattern-annotation');
+                if (!label) {
+                    label = document.createElement('div');
+                    label.className = 'pattern-annotation';
+                    info.element.appendChild(label);
+                }
+                label.textContent = pat.label || pat.type;
+                label.style.display = '';
+
+                // Highlight all chords in the pattern
+                for (const idx of pat.indices) {
+                    const ci = allChords[idx];
+                    if (ci && ci.element) {
+                        ci.element.classList.add('pattern-highlight');
                     }
                 }
             }

@@ -306,6 +306,22 @@ main {
     font-size: 0.85rem;
 }
 
+.transpose-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+}
+.transpose-controls label {
+    color: var(--text-muted);
+}
+#transpose-display {
+    min-width: 28px;
+    text-align: center;
+    font-weight: 600;
+    color: var(--accent);
+}
+
 .analysis-controls label {
     color: var(--text-muted);
 }
@@ -469,6 +485,21 @@ main {
     flex-wrap: wrap;
 }
 
+/* Multi-chord measure layout */
+.measure-block.multi-chord .measure-chords {
+    flex-wrap: nowrap;
+}
+.measure-block.multi-chord .chord-card {
+    flex: 1;
+    min-width: 0;
+}
+.beat-label {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    opacity: 0.7;
+    margin-top: 2px;
+}
+
 /* ==========================================
    CHORD CARDS
    ========================================== */
@@ -568,6 +599,29 @@ main {
     height: 3px;
     background: var(--accent);
     border-radius: 2px;
+}
+
+/* Key center legend */
+.key-center-legend {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 16px;
+    font-size: 0.85rem;
+    flex-wrap: wrap;
+}
+.kc-legend-item {
+    padding: 2px 8px;
+    font-weight: 500;
+}
+
+/* Pattern annotations */
+.pattern-annotation {
+    font-size: 0.6rem;
+    color: var(--accent);
+    font-weight: 600;
+    white-space: nowrap;
+    margin-top: 2px;
 }
 
 /* ==========================================
