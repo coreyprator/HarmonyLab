@@ -22,3 +22,8 @@ docs/
 templates/
 scripts/
 *.md
+*.gdoc
+*.gsheet
+*.gslides
+*.pdf
+tmpclaude-*

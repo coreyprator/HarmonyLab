@@ -591,6 +591,7 @@
                 keyCenterData = await res.json();
                 renderKeyCenters();
                 renderPatternAnnotations();
+                renderKeyCenterBrackets();
             } catch (e) {
                 console.error('Key center load failed:', e);
             }
@@ -781,6 +782,65 @@
             }
         }
 
+        function renderKeyCenterBrackets() {
+            if (!keyCenterData || currentView !== 'analysis') return;
+            const regions = keyCenterData.regions || [];
+            if (regions.length <= 1) return; // Single key doesn't need brackets
+
+            // Clean up previous brackets
+            document.querySelectorAll('.kc-bracket').forEach(el => el.remove());
+            document.querySelectorAll('.kc-bracket-top').forEach(el => {
+                el.classList.remove('kc-bracket-top', 'kc-bracket-start', 'kc-bracket-end');
+                el.style.removeProperty('--kc-color');
+            });
+
+            const palette = ['#2563eb', '#dc2626', '#16a34a', '#9333ea', '#ea580c', '#0891b2', '#be185d', '#65a30d'];
+            const keyColorMap = {};
+            let colorIdx = 0;
+            for (const r of regions) {
+                const kLabel = r.key_center + (r.mode !== 'major' ? 'm' : '');
+                if (!(kLabel in keyColorMap)) {
+                    keyColorMap[kLabel] = palette[colorIdx % palette.length];
+                    colorIdx++;
+                }
+            }
+
+            for (const r of regions) {
+                const kLabel = r.key_center + (r.mode !== 'major' ? 'm' : '');
+                const color = keyColorMap[kLabel];
+
+                // Collect unique measure-blocks in this region
+                const measureBlocks = [];
+                const seen = new Set();
+                for (let idx = r.start_index; idx <= r.end_index; idx++) {
+                    const info = allChords[idx];
+                    if (!info || !info.element) continue;
+                    const mb = info.element.closest('.measure-block');
+                    if (mb && !seen.has(mb)) {
+                        seen.add(mb);
+                        measureBlocks.push(mb);
+                    }
+                }
+
+                // Apply bracket borders to measure-blocks
+                measureBlocks.forEach((mb, i) => {
+                    mb.classList.add('kc-bracket-top');
+                    mb.style.setProperty('--kc-color', color);
+                    if (i === 0) mb.classList.add('kc-bracket-start');
+                    if (i === measureBlocks.length - 1) mb.classList.add('kc-bracket-end');
+                });
+
+                // Add key label above the first measure in the region
+                if (measureBlocks.length > 0) {
+                    const label = document.createElement('div');
+                    label.className = 'kc-bracket';
+                    label.textContent = kLabel;
+                    label.style.color = color;
+                    measureBlocks[0].insertBefore(label, measureBlocks[0].firstChild);
+                }
+            }
+        }
+
         // ==========================================
         // VIEW SWITCHING
         // ==========================================
@@ -812,13 +872,30 @@
                 if (secTarget) secTarget.style.display = isAnalysis ? '' : 'none';
             }
 
+            // Hide key center legend and brackets when not in analysis view
+            const kcLegend = document.getElementById('key-center-legend');
+            if (kcLegend) kcLegend.style.display = isAnalysis ? '' : 'none';
+
             // Reset chord card classes if switching to chords view
             if (!isAnalysis) {
+                document.querySelectorAll('.kc-bracket').forEach(el => el.remove());
+                document.querySelectorAll('.kc-bracket-top').forEach(el => {
+                    el.classList.remove('kc-bracket-top', 'kc-bracket-start', 'kc-bracket-end');
+                    el.style.removeProperty('--kc-color');
+                });
                 for (const chord of allChords) {
                     chord.element.className = 'chord-card';
+                    chord.element.style.borderBottom = '';
+                    const sym = chord.element.querySelector('.chord-symbol');
+                    if (sym) sym.style.color = '';
                 }
             } else if (analysisData) {
                 renderAnalysis();
+                if (keyCenterData) {
+                    renderKeyCenters();
+                    renderPatternAnnotations();
+                    renderKeyCenterBrackets();
+                }
             } else {
                 loadAnalysis();
             }
