@@ -119,11 +119,28 @@ def detect_ii_v_i_patterns(chords: List[Dict]) -> List[Dict]:
     return patterns
 
 
+def _are_relative_keys(key1: str, mode1: str, key2: str, mode2: str) -> bool:
+    """Check if two keys are relative major/minor (share same key signature)."""
+    if key1 == key2:
+        return True
+    pc1 = NOTE_TO_PC.get(key1, -1)
+    pc2 = NOTE_TO_PC.get(key2, -1)
+    if pc1 < 0 or pc2 < 0:
+        return False
+    interval = (pc1 - pc2) % 12
+    # Relative major/minor are 3 semitones apart
+    is_major_minor_pair = (mode1 == 'major' and 'minor' in mode2) or ('minor' in mode1 and mode2 == 'major')
+    if is_major_minor_pair:
+        return interval == 3 or interval == 9
+    return False
+
+
 def detect_key_centers(chords: List[Dict], detected_key: str = None) -> List[Dict]:
     """Detect key center regions in a chord progression.
 
     Uses ii-V-I pattern detection plus chord-to-key fitting to identify
-    where key center changes occur.
+    where key center changes occur. Merges relative major/minor regions
+    to avoid over-fragmentation.
 
     Args:
         chords: List of analyzed chord dicts with 'symbol', 'measure', 'beat' fields.
@@ -138,19 +155,36 @@ def detect_key_centers(chords: List[Dict], detected_key: str = None) -> List[Dic
     patterns = detect_ii_v_i_patterns(chords)
     parsed = [_parse_chord(c.get('symbol', '')) for c in chords]
 
-    # Build a map of chord index -> key center from patterns
+    # Step 1: Determine home key from last chord (90% jazz rule: last chord = tonic)
+    home_key = 'C'
+    home_mode = 'major'
+    for p in reversed(parsed):
+        if p:
+            home_key = p['root_name']
+            home_mode = 'minor' if (p['is_minor'] or p['is_half_dim']) else 'major'
+            break
+
+    # Refine with detected_key if it's in the same tonal center
+    if detected_key:
+        dk = detected_key.split()
+        if dk:
+            det_name = dk[0]
+            det_mode = 'minor' if 'minor' in detected_key.lower() else 'major'
+            if _are_relative_keys(det_name, det_mode, home_key, home_mode):
+                home_key = det_name
+                home_mode = det_mode
+
+    # Step 2: Build chord-key map from patterns (first pattern wins per chord)
     chord_key_map = {}
     for pat in patterns:
         target = pat['target_key']
         mode = pat['mode']
         for idx in pat['indices']:
-            chord_key_map[idx] = (target, mode)
+            if idx not in chord_key_map:
+                chord_key_map[idx] = (target, mode)
 
-    # For chords not in patterns, determine key by checking which key
-    # they fit best (major scale or harmonic minor scale)
-    # Major scale intervals: 0, 2, 4, 5, 7, 9, 11
+    # Scales for fitting
     major_scale = {0, 2, 4, 5, 7, 9, 11}
-    # Harmonic minor intervals: 0, 2, 3, 5, 7, 8, 11
     h_minor_scale = {0, 2, 3, 5, 7, 8, 11}
 
     # Collect candidate keys from patterns
@@ -160,15 +194,8 @@ def detect_key_centers(chords: List[Dict], detected_key: str = None) -> List[Dic
         if pk not in pattern_keys:
             pattern_keys.append(pk)
 
-    # If no patterns detected, use the global detected key
-    if not pattern_keys and detected_key:
-        dk = detected_key.split()
-        key_name = dk[0] if dk else 'C'
-        mode = 'minor' if 'minor' in detected_key.lower() else 'major'
-        pattern_keys.append((key_name, mode))
-
     if not pattern_keys:
-        pattern_keys.append(('C', 'major'))
+        pattern_keys.append((home_key, home_mode))
 
     def _chord_fits_key(chord_pc, key_name, mode):
         key_pc = NOTE_TO_PC.get(key_name, 0)
@@ -176,13 +203,12 @@ def detect_key_centers(chords: List[Dict], detected_key: str = None) -> List[Dic
         scale = h_minor_scale if 'minor' in mode else major_scale
         return interval in scale
 
-    # Assign each chord to the best-fit key
+    # Step 3: Assign each chord to the best-fit key
     assignments = []
     for i, p in enumerate(parsed):
         if i in chord_key_map:
             assignments.append(chord_key_map[i])
         elif p:
-            # Find best fitting key from candidates
             best = pattern_keys[0]
             for k, m in pattern_keys:
                 if _chord_fits_key(p['root_pc'], k, m):
@@ -192,10 +218,10 @@ def detect_key_centers(chords: List[Dict], detected_key: str = None) -> List[Dic
         else:
             assignments.append(pattern_keys[0])
 
-    # Build regions from consecutive same-key assignments
-    regions = []
+    # Step 4: Build raw regions from consecutive same-key assignments
+    raw_regions = []
     if not assignments:
-        return regions
+        return raw_regions
 
     current_key, current_mode = assignments[0]
     start_idx = 0
@@ -203,7 +229,7 @@ def detect_key_centers(chords: List[Dict], detected_key: str = None) -> List[Dic
     for i in range(1, len(assignments)):
         k, m = assignments[i]
         if k != current_key or m != current_mode:
-            regions.append({
+            raw_regions.append({
                 'start_index': start_idx,
                 'end_index': i - 1,
                 'start_measure': chords[start_idx].get('measure'),
@@ -217,8 +243,7 @@ def detect_key_centers(chords: List[Dict], detected_key: str = None) -> List[Dic
             current_key, current_mode = k, m
             start_idx = i
 
-    # Final region
-    regions.append({
+    raw_regions.append({
         'start_index': start_idx,
         'end_index': len(assignments) - 1,
         'start_measure': chords[start_idx].get('measure'),
@@ -230,4 +255,56 @@ def detect_key_centers(chords: List[Dict], detected_key: str = None) -> List[Dic
         ) else 0.5,
     })
 
-    return regions
+    # Step 5: Merge adjacent relative major/minor regions
+    # Use the home key's label for the merged region
+    merged = []
+    for r in raw_regions:
+        if merged and _are_relative_keys(
+            merged[-1]['key_center'], merged[-1]['mode'],
+            r['key_center'], r['mode']
+        ):
+            merged[-1]['end_index'] = r['end_index']
+            merged[-1]['end_measure'] = r['end_measure']
+            merged[-1]['confidence'] = max(merged[-1]['confidence'], r['confidence'])
+            # Prefer home key label for the merged region
+            if _are_relative_keys(r['key_center'], r['mode'], home_key, home_mode):
+                merged[-1]['key_center'] = home_key
+                merged[-1]['mode'] = home_mode
+        else:
+            merged.append(dict(r))
+
+    # Step 6: Absorb tiny regions (< 3 chords) into their nearest neighbor
+    if len(merged) > 1:
+        final = []
+        for r in merged:
+            size = r['end_index'] - r['start_index'] + 1
+            if size < 3 and final:
+                # Absorb into previous region
+                final[-1]['end_index'] = r['end_index']
+                final[-1]['end_measure'] = r['end_measure']
+            else:
+                final.append(r)
+        # Also check if the last region is tiny and should merge backward
+        if len(final) > 1:
+            last = final[-1]
+            if last['end_index'] - last['start_index'] + 1 < 3:
+                final[-2]['end_index'] = last['end_index']
+                final[-2]['end_measure'] = last['end_measure']
+                final.pop()
+        merged = final
+
+    # Step 7: Final pass — merge consecutive same-key regions
+    # (can arise after absorbing tiny regions)
+    if len(merged) > 1:
+        consolidated = [merged[0]]
+        for r in merged[1:]:
+            prev = consolidated[-1]
+            if r['key_center'] == prev['key_center'] and r['mode'] == prev['mode']:
+                prev['end_index'] = r['end_index']
+                prev['end_measure'] = r['end_measure']
+                prev['confidence'] = max(prev['confidence'], r['confidence'])
+            else:
+                consolidated.append(dict(r))
+        merged = consolidated
+
+    return merged

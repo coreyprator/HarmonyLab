@@ -20,7 +20,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v2.2.0</div>
+        <div class="nav-version">v2.2.1</div>
     </nav>
 
     <header>
@@ -83,11 +83,22 @@
                 <span id="confidence" class="confidence"></span>
             </div>
             <div class="transpose-controls" id="transpose-controls">
-                <label>Transpose:</label>
-                <button class="btn btn-sm" onclick="transposeBy(-1)" title="Down one semitone">-1</button>
-                <span id="transpose-display">0</span>
-                <button class="btn btn-sm" onclick="transposeBy(1)" title="Up one semitone">+1</button>
-                <button class="btn btn-sm" onclick="transposeBy(0, true)" title="Reset transpose">Reset</button>
+                <label>Transpose to:</label>
+                <select id="transpose-key-select" onchange="transposeToKey(this.value)">
+                    <option value="">Original key</option>
+                    <option value="C">C major / A minor</option>
+                    <option value="Db">Db major / Bb minor</option>
+                    <option value="D">D major / B minor</option>
+                    <option value="Eb">Eb major / C minor</option>
+                    <option value="E">E major / C# minor</option>
+                    <option value="F">F major / D minor</option>
+                    <option value="F#">F# major / D# minor</option>
+                    <option value="G">G major / E minor</option>
+                    <option value="Ab">Ab major / F minor</option>
+                    <option value="A">A major / F# minor</option>
+                    <option value="Bb">Bb major / G minor</option>
+                    <option value="B">B major / G# minor</option>
+                </select>
             </div>
         </div>
 
@@ -601,34 +612,52 @@
         // TRANSPOSE
         // ==========================================
 
-        async function transposeBy(delta, reset = false) {
-            if (reset) {
-                currentTranspose = 0;
-            } else {
-                currentTranspose += delta;
-                currentTranspose = Math.max(-11, Math.min(11, currentTranspose));
-            }
-            document.getElementById('transpose-display').textContent =
-                currentTranspose > 0 ? '+' + currentTranspose :
-                currentTranspose === 0 ? '0' : String(currentTranspose);
+        const KEY_SEMITONES = {
+            'C': 0, 'C#': 1, 'Db': 1, 'D': 2, 'D#': 3, 'Eb': 3, 'E': 4,
+            'F': 5, 'F#': 6, 'Gb': 6, 'G': 7, 'G#': 8, 'Ab': 8, 'A': 9,
+            'A#': 10, 'Bb': 10, 'B': 11
+        };
 
-            if (currentTranspose === 0) {
-                // Reset: reload original analysis
+        function getOriginalKeySemitone() {
+            // Get the detected key's root semitone value
+            const keyStr = analysisData?.detected_key || songData?.original_key || 'C';
+            const rootMatch = keyStr.match(/^([A-G][#b]?)/);
+            if (!rootMatch) return 0;
+            return KEY_SEMITONES[rootMatch[1]] ?? 0;
+        }
+
+        async function transposeToKey(targetKey) {
+            if (!targetKey) {
+                // Reset to original
+                currentTranspose = 0;
                 await loadAnalysis();
-            } else {
-                try {
-                    const res = await fetch(`${API_BASE}/api/v1/analysis/songs/${songId}/transpose`, {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({semitones: currentTranspose})
-                    });
-                    if (res.ok) {
-                        analysisData = await res.json();
-                        renderAnalysis();
-                    }
-                } catch (e) {
-                    console.error('Transpose failed:', e);
+                return;
+            }
+
+            const originalSemitone = getOriginalKeySemitone();
+            const targetSemitone = KEY_SEMITONES[targetKey] ?? 0;
+            let delta = (targetSemitone - originalSemitone + 12) % 12;
+            if (delta > 6) delta -= 12; // Use shortest path
+
+            if (delta === 0) {
+                currentTranspose = 0;
+                await loadAnalysis();
+                return;
+            }
+
+            currentTranspose = delta;
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/analysis/songs/${songId}/transpose`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({semitones: delta})
+                });
+                if (res.ok) {
+                    analysisData = await res.json();
+                    renderAnalysis();
                 }
+            } catch (e) {
+                console.error('Transpose failed:', e);
             }
         }
 
@@ -682,6 +711,26 @@
 
             // Render patterns
             renderPatterns(analysisData.patterns || []);
+
+            // Pre-select current key in transpose dropdown
+            const keySelect = document.getElementById('transpose-key-select');
+            if (keySelect && currentTranspose === 0) {
+                // Find the option matching the detected key root
+                const keyStr = analysisData.detected_key || songData?.original_key || '';
+                const rootMatch = keyStr.match(/^([A-G][#b]?)/);
+                if (rootMatch) {
+                    const root = rootMatch[1];
+                    // Map sharp keys to flat equivalents used in dropdown
+                    const sharpToFlat = {'C#':'Db','D#':'Eb','F#':'F#','G#':'Ab','A#':'Bb'};
+                    const selectVal = sharpToFlat[root] || root;
+                    for (const opt of keySelect.options) {
+                        if (opt.value === selectVal) {
+                            keySelect.value = selectVal;
+                            break;
+                        }
+                    }
+                }
+            }
         }
 
         function renderPatterns(patterns) {
@@ -727,7 +776,7 @@
             const keyColorMap = {};
             let colorIdx = 0;
             for (const r of regions) {
-                const kLabel = r.key_center + (r.mode !== 'major' ? 'm' : '');
+                const kLabel = r.key_center + ' ' + ({'major':'major','minor':'minor','harmonic_minor':'harmonic minor'}[r.mode] || r.mode);
                 if (!(kLabel in keyColorMap)) {
                     keyColorMap[kLabel] = palette[colorIdx % palette.length];
                     colorIdx++;
@@ -742,7 +791,7 @@
 
             // Apply text color to chord symbols by key center region
             for (const r of regions) {
-                const kLabel = r.key_center + (r.mode !== 'major' ? 'm' : '');
+                const kLabel = r.key_center + ' ' + ({'major':'major','minor':'minor','harmonic_minor':'harmonic minor'}[r.mode] || r.mode);
                 const color = keyColorMap[kLabel];
                 for (let idx = r.start_index; idx <= r.end_index; idx++) {
                     const info = allChords[idx];
@@ -798,7 +847,7 @@
             const keyColorMap = {};
             let colorIdx = 0;
             for (const r of regions) {
-                const kLabel = r.key_center + (r.mode !== 'major' ? 'm' : '');
+                const kLabel = r.key_center + ' ' + ({'major':'major','minor':'minor','harmonic_minor':'harmonic minor'}[r.mode] || r.mode);
                 if (!(kLabel in keyColorMap)) {
                     keyColorMap[kLabel] = palette[colorIdx % palette.length];
                     colorIdx++;
@@ -806,7 +855,7 @@
             }
 
             for (const r of regions) {
-                const kLabel = r.key_center + (r.mode !== 'major' ? 'm' : '');
+                const kLabel = r.key_center + ' ' + ({'major':'major','minor':'minor','harmonic_minor':'harmonic minor'}[r.mode] || r.mode);
                 const color = keyColorMap[kLabel];
 
                 // Collect unique measure-blocks in this region
