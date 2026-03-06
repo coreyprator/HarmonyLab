@@ -2,7 +2,7 @@
 <!-- CHECKPOINT: HL-PK-9F3A -->
 
 **Generated**: 2026-02-15
-**Updated**: 2026-03-05T06:00:00Z — Sprint HL-MS3: v2.2.0 Analysis and Display Mega Sprint (key center detection, ii-V-I patterns, transpose, multi-chord display, bracket notation)
+**Updated**: 2026-03-05T10:00:00Z — Sprint HL-MS3-FIX: v2.2.1 Key center consolidation, transpose dropdown, label format
 **Method**: Full project read-through of every source file, config, schema, workflow, and documentation file.
 **Purpose**: Single-file knowledge recovery for any AI agent resuming work on this project.
 
@@ -17,8 +17,8 @@
 | Repository | https://github.com/coreyprator/harmonylab | `CLAUDE.md` line 65 |
 | Local Path | `G:\My Drive\Code\Python\harmonylab` | `CLAUDE.md` line 66 |
 | Methodology | [coreyprator/project-methodology](https://github.com/coreyprator/project-methodology) v3.14 | `CLAUDE.md` line 67 |
-| Current Version | v2.2.0 | `main.py` line 19 (updated 2026-03-05) |
-| Latest Revision | harmonylab-00129-5fp (backend), harmonylab-frontend-00066-8b2 (frontend) | Session Closeout 2026-03-05 |
+| Current Version | v2.2.1 | `main.py` line 19 (updated 2026-03-05) |
+| Latest Revision | harmonylab-00132-2mq (backend), harmonylab-frontend-00068-txk (frontend) | HL-MS3-FIX 2026-03-05 |
 | Production URL | https://harmonylab.rentyourcio.com | `PROJECT_STATUS.md` line 5 |
 | API Docs | https://harmonylab.rentyourcio.com/docs | `PROJECT_STATUS.md` line 189 |
 | CLAUDE.md Last Updated | 2026-02-07 | `CLAUDE.md` line 269 |
@@ -330,8 +330,10 @@ Interval-based key center detection and ii-V-I pattern recognition, independent 
 
 - **`_parse_chord(symbol)`**: Parses chord symbol into root pitch class (0-11) and quality flags (is_minor, is_dom7, is_maj7, is_half_dim, is_dim, is_major_triad).
 - **`detect_ii_v_i_patterns(chords)`**: Detects ii-V-I (major) and ii-V-i (harmonic minor) patterns. Uses interval math: ii root at +2 semitones from I, V root at +7 from I. V must be dom7. Returns list of pattern dicts with type, indices, target_key, mode, label, start/end_measure.
-- **`detect_key_centers(chords, detected_key)`**: Detects key center regions by clustering ii-V-I patterns and fitting remaining chords to candidate keys using major/harmonic minor scales. Returns list of region dicts with start/end index, start/end measure, key_center, mode, confidence (0.8 for pattern-backed, 0.5 for inferred).
+- **`detect_key_centers(chords, detected_key)`**: 7-step algorithm: (1) home key from last chord (90% jazz rule), (2) chord-key map from patterns, (3) best-fit assignment per chord, (4) raw regions from consecutive assignments, (5) merge relative major/minor regions, (6) absorb tiny regions (<3 chords), (7) merge consecutive same-key regions. Returns list of region dicts with start/end index, start/end measure, key_center, mode, confidence (0.8 for pattern-backed, 0.5 for inferred). **v2.2.1**: Added steps 5-7 to reduce over-fragmentation (Autumn Leaves went from 13 regions to 1).
+- **`_are_relative_keys(key1, mode1, key2, mode2)`**: Checks if two keys share same key signature (relative major/minor, 3 semitones apart). **v2.2.1**: Added to support region merging.
 - **Note names**: Uses flat-preferred jazz convention: `['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B']`.
+- **Autumn Leaves (song 34)**: Stored in Bb major / G minor (original_key="G minor"). Last chord=Gm. Contains ii-V-I/Bb and ii-V-i/Gm patterns. Not Am/C — depends on the arrangement imported.
 
 ### Harmonic Analysis (`app/services/analysis_service.py`)
 
