@@ -16,7 +16,7 @@ from app.api.routes import songs, sections, vocabulary, measures, chords, progre
 
 logger = logging.getLogger(__name__)
 
-VERSION = "2.2.1"
+VERSION = "2.2.2"
 
 app = FastAPI(
     title="Harmony Lab API",
@@ -41,9 +41,16 @@ async def general_exception_handler(request: Request, exc: Exception):
     )
 
 # CORS middleware
+# Note: allow_origins=["*"] is INVALID with allow_credentials=True (browsers reject it).
+# Must list explicit origins when credentials are enabled.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for now
+    allow_origins=[
+        "https://harmonylab.rentyourcio.com",
+        "https://harmonylab-frontend-wmrla7fhwa-uc.a.run.app",
+        "http://localhost:8080",
+        "http://localhost:3000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
