@@ -99,7 +99,7 @@
                 Sign in to access quizzes and track your progress
             </p>
 
-            <p class="login-version" id="login-version">v2.2.2</p>
+            <p class="login-version" id="login-version">v2.2.3</p>
         </div>
     </div>
 
@@ -134,7 +134,7 @@
 
             // HL-011: fetch version from backend, don't hardcode
             try {
-                const r = await fetch('https://harmonylab-wmrla7fhwa-uc.a.run.app/');
+                const r = await fetch('/health');
                 const d = await r.json();
                 if (d.version) document.getElementById('login-version').textContent = 'v' + d.version;
             } catch (e) {}
