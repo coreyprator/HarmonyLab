@@ -342,7 +342,7 @@ window.auth = new Auth();
 // HL-011: Fetch version from backend and update nav on all pages
 (async () => {
     try {
-        const r = await fetch('https://harmonylab-wmrla7fhwa-uc.a.run.app/');
+        const r = await fetch('/health');
         const d = await r.json();
         if (d.version) {
             document.querySelectorAll('.nav-version').forEach(el => {
