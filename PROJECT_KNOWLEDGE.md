@@ -2,7 +2,7 @@
 <!-- CHECKPOINT: HL-PK-9F3A -->
 
 **Generated**: 2026-02-15
-**Updated**: 2026-03-05T10:00:00Z — Sprint HL-MS3-FIX: v2.2.1 Key center consolidation, transpose dropdown, label format
+**Updated**: 2026-03-07T13:45:00Z — Sprint HL-VERSION-FIX-001: v2.2.3 Frontend version strings
 **Method**: Full project read-through of every source file, config, schema, workflow, and documentation file.
 **Purpose**: Single-file knowledge recovery for any AI agent resuming work on this project.
 
@@ -17,8 +17,8 @@
 | Repository | https://github.com/coreyprator/harmonylab | `CLAUDE.md` line 65 |
 | Local Path | `G:\My Drive\Code\Python\harmonylab` | `CLAUDE.md` line 66 |
 | Methodology | [coreyprator/project-methodology](https://github.com/coreyprator/project-methodology) v3.14 | `CLAUDE.md` line 67 |
-| Current Version | v2.2.2 | `main.py` line 19 (updated 2026-03-06) |
-| Latest Revision | harmonylab-00134-7vs (backend), harmonylab-frontend-00069-765 (frontend) | HL-MS3-FIX-002 2026-03-06 |
+| Current Version | v2.2.3 (frontend) / v2.2.2 (backend) | `frontend/nginx.conf` (updated 2026-03-07) |
+| Latest Revision | harmonylab-00136-j85 (backend), harmonylab-frontend-00070-56p (frontend) | HL-VERSION-FIX-001 2026-03-07 |
 | Production URL | https://harmonylab.rentyourcio.com | `PROJECT_STATUS.md` line 5 |
 | API Docs | https://harmonylab.rentyourcio.com/docs | `PROJECT_STATUS.md` line 189 |
 | CLAUDE.md Last Updated | 2026-02-07 | `CLAUDE.md` line 269 |
@@ -440,7 +440,7 @@ Source: `CLAUDE.md` lines 106-109.
 - **Authentication**: Workload Identity Federation via `google-github-actions/auth@v2`. Uses GitHub secrets `WIF_PROVIDER` and `WIF_SERVICE_ACCOUNT`. Source: lines 27-30.
 - **Build**: Docker build, tag with commit SHA, push to Artifact Registry at `us-central1-docker.pkg.dev/super-flashcards-475210/harmonylab/harmonylab:{sha}`. Source: lines 39-44.
 - **Deploy**: `gcloud run deploy` with `--set-secrets` flag injecting 4 database secrets as environment variables. Source: lines 46-53.
-- **Note**: Only deploys backend. Frontend deployment is manual or via separate process. NOT DOCUMENTED -- needs investigation whether frontend has its own CI/CD.
+- **Note**: Only deploys backend (`harmonylab` service). Frontend (`harmonylab-frontend`) has NO CI/CD. CONFIRMED 2026-03-07. Frontend must always be deployed manually: `cd frontend/ && gcloud run deploy harmonylab-frontend --source . --region us-central1 --allow-unauthenticated --quiet`
 
 ### ✅ Branch RESOLVED (2026-02-20, HL-007)
 Active development branch is now `main`. `origin/master` deleted. GitHub default branch set to `main`.
@@ -624,7 +624,7 @@ Source: `app/api/routes/progress.py` lines 143-148.
 > **PARSER FIX (2026-02-27):** score_parser.py: Dual root numbering (chromatic for MS 4.4.x, TPC for MS 4.5+), version auto-detection, harmonyInfo wrapper support for MS 4.6+, N.C. handling.
 > **HL-007 RESOLVED (2026-02-20):** Branch renamed master->main. origin/master deleted. GitHub default = main.
 > **HL-010 RESOLVED (2026-02-20):** song.html now defaults to Analysis view.
-> **HL-011 RESOLVED (2026-02-20):** All 5 HTML pages now fetch version from backend API dynamically. No more hardcoded version mismatch.
+> **HL-011 UPDATED (2026-03-07):** Version fetch changed from backend root URL to frontend `/health` endpoint in both `auth.js` and `login.html`. Frontend nav badges now show the frontend version (2.2.3), not the backend version (2.2.2). This is correct: frontend should display its own version.
 > **HL-013 DOCUMENTED (2026-02-20):** MIDI files are temp-only (tempfile.NamedTemporaryFile, deleted after parse). Only chord data in Cloud SQL. No GCS used. No persistence issue for Cloud Run.
 > **HL-MS2 FIX-1 RESOLVED (2026-02-28):** Song 65 "No chords found" — Song 50 (duplicate "Almost Like Being in Love") had 0 chords. analysis.py now returns empty analysis with helpful message instead of 404. Songs 61/69 have 31 chords. Delete song UI added to clean up duplicates.
 > **HL-MS2 FIX-2 RESOLVED (2026-02-28):** Note extraction [object Object] — Frontend sent song_id in FormData but backend expects Query param. Fixed to send as URL query param. Added robust error extraction for non-string detail fields.
