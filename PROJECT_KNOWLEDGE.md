@@ -17,8 +17,8 @@
 | Repository | https://github.com/coreyprator/harmonylab | `CLAUDE.md` line 65 |
 | Local Path | `G:\My Drive\Code\Python\harmonylab` | `CLAUDE.md` line 66 |
 | Methodology | [coreyprator/project-methodology](https://github.com/coreyprator/project-methodology) v3.14 | `CLAUDE.md` line 67 |
-| Current Version | v2.2.1 | `main.py` line 19 (updated 2026-03-05) |
-| Latest Revision | harmonylab-00132-2mq (backend), harmonylab-frontend-00068-txk (frontend) | HL-MS3-FIX 2026-03-05 |
+| Current Version | v2.2.2 | `main.py` line 19 (updated 2026-03-06) |
+| Latest Revision | harmonylab-00134-7vs (backend), harmonylab-frontend-00069-765 (frontend) | HL-MS3-FIX-002 2026-03-06 |
 | Production URL | https://harmonylab.rentyourcio.com | `PROJECT_STATUS.md` line 5 |
 | API Docs | https://harmonylab.rentyourcio.com/docs | `PROJECT_STATUS.md` line 189 |
 | CLAUDE.md Last Updated | 2026-02-07 | `CLAUDE.md` line 269 |
@@ -501,7 +501,7 @@ On startup (`main.py` lines 45-52), the FastAPI `startup` event runs `run_migrat
 All migrations are idempotent (check `INFORMATION_SCHEMA.TABLES` before creating). Failures are caught and logged as warnings (non-fatal). Source: `app/migrations.py` lines 10-132.
 
 ### Middleware Stack (registered in `main.py` lines 27-42)
-1. **CORSMiddleware**: `allow_origins=["*"]`, `allow_credentials=True`, `allow_methods=["*"]`, `allow_headers=["*"]`
+1. **CORSMiddleware**: `allow_origins=["https://harmonylab.rentyourcio.com", "https://harmonylab-frontend-wmrla7fhwa-uc.a.run.app", "http://localhost:8080", "http://localhost:3000"]`, `allow_credentials=True`, `allow_methods=["*"]`, `allow_headers=["*"]`. **v2.2.2**: Explicit origins required — wildcard `*` is invalid with `allow_credentials=True` (browsers reject it).
 2. **SessionMiddleware**: Uses JWT secret key, `same_site="none"`, `https_only=True`. Required for OAuth state storage.
 
 ### Router Registration Order (`main.py` lines 102-115)
@@ -644,7 +644,7 @@ Source: `app/api/routes/progress.py` lines 143-148.
 |-----|-------------|
 | Auth not enforced on most endpoints | Routes accept `user_id` as query parameter rather than extracting from JWT. Source: `app/api/routes/quiz.py` line 18, `app/api/routes/progress.py` line 16 |
 | No database migration framework | Uses hand-written idempotent migrations in `app/migrations.py`. No rollback capability. |
-| CORS allows all origins | `allow_origins=["*"]` in `main.py` line 29. Should be restricted in production. |
+| CORS now explicit origins | Fixed v2.2.2: explicit allow_origins list (`harmonylab.rentyourcio.com` + Cloud Run frontend URL + localhost). Wildcard was broken with allow_credentials=True. |
 | Inconsistent DB access pattern | Some routes use `Depends(get_db)`, others instantiate `DatabaseConnection(settings)` directly. |
 
 ---
