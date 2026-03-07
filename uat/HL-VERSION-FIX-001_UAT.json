@@ -1,0 +1,156 @@
+{
+  "uat_version": "2.2",
+  "generated_by": "cc",
+  "generated_at": "2026-03-07T13:45:00Z",
+  "handoff_id": "HL-VERSION-FIX-001",
+  "project": {
+    "name": "HarmonyLab",
+    "emoji": "\ud83d\udd35",
+    "version": "2.2.3",
+    "app_url": "https://harmonylab.rentyourcio.com",
+    "health_url": "https://harmonylab.rentyourcio.com/health",
+    "deployed_revision": "harmonylab-frontend-00070-56p"
+  },
+  "context": {
+    "summary": "Stale frontend version strings updated to v2.2.3. nginx.conf /health was returning 2.1.0. HTML nav-version fallbacks were 2.2.2. JS version fetch was pulling from backend (2.2.2) instead of frontend health.",
+    "root_cause": "Version strings were not updated during HL-MS3-FIX-002 sprint; JS fetched version from backend URL, masking frontend version.",
+    "files_modified": [
+      "frontend/nginx.conf",
+      "frontend/index.html",
+      "frontend/song.html",
+      "frontend/quiz.html",
+      "frontend/progress.html",
+      "frontend/login.html",
+      "frontend/js/auth.js"
+    ],
+    "commit": "7e6a91c",
+    "risk_areas": [
+      "auth.js version fetch URL changed from backend to /health — verify nav badge still populates on all pages",
+      "login.html version fetch URL changed — verify login page shows correct version"
+    ]
+  },
+  "sections": [
+    {
+      "id": "section-1",
+      "title": "Frontend Health Endpoint",
+      "tests": [
+        {
+          "id": "VF01-01",
+          "title": "Frontend /health returns v2.2.3",
+          "description": "GET https://harmonylab.rentyourcio.com/health",
+          "expected": "{\"status\":\"healthy\",\"service\":\"harmonylab-frontend\",\"component\":\"frontend\",\"version\":\"2.2.3\"}",
+          "category": "fix_verification",
+          "priority": "critical"
+        },
+        {
+          "id": "VF01-02",
+          "title": "Backend /health still returns v2.2.2",
+          "description": "GET https://harmonylab-wmrla7fhwa-uc.a.run.app/health",
+          "expected": "version field is \"2.2.2\" — backend not touched",
+          "category": "regression",
+          "priority": "critical"
+        }
+      ]
+    },
+    {
+      "id": "section-2",
+      "title": "Login Page Version Badge",
+      "tests": [
+        {
+          "id": "VF02-01",
+          "title": "Login page shows v2.2.3",
+          "description": "Open https://harmonylab.rentyourcio.com/login.html. Look for the version label at the bottom of the login card.",
+          "expected": "Version badge reads v2.2.3",
+          "category": "fix_verification",
+          "priority": "critical"
+        },
+        {
+          "id": "VF02-02",
+          "title": "Login page version badge updates dynamically",
+          "description": "Open login page with DevTools Network tab open. Observe the fetch to /health completing.",
+          "expected": "Fetch to /health succeeds (200) and version badge shows v2.2.3 after JS runs",
+          "category": "fix_verification",
+          "priority": "high"
+        }
+      ]
+    },
+    {
+      "id": "section-3",
+      "title": "Nav Version Badge — All Pages",
+      "tests": [
+        {
+          "id": "VF03-01",
+          "title": "Song list page nav shows v2.2.3",
+          "description": "Sign in and open https://harmonylab.rentyourcio.com/index.html. Check top-right nav version badge.",
+          "expected": "Shows v2.2.3",
+          "category": "fix_verification",
+          "priority": "high"
+        },
+        {
+          "id": "VF03-02",
+          "title": "Song view page nav shows v2.2.3",
+          "description": "Open any song (e.g., Autumn Leaves). Check top-right nav version badge.",
+          "expected": "Shows v2.2.3",
+          "category": "fix_verification",
+          "priority": "high"
+        },
+        {
+          "id": "VF03-03",
+          "title": "Quiz page nav shows v2.2.3",
+          "description": "Open https://harmonylab.rentyourcio.com/quiz.html. Check top-right nav version badge.",
+          "expected": "Shows v2.2.3",
+          "category": "fix_verification",
+          "priority": "high"
+        },
+        {
+          "id": "VF03-04",
+          "title": "Progress page nav shows v2.2.3",
+          "description": "Open https://harmonylab.rentyourcio.com/progress.html. Check top-right nav version badge.",
+          "expected": "Shows v2.2.3",
+          "category": "fix_verification",
+          "priority": "high"
+        }
+      ]
+    },
+    {
+      "id": "section-4",
+      "title": "Regression — Core Functionality",
+      "tests": [
+        {
+          "id": "VF04-01",
+          "title": "Song list loads",
+          "description": "Sign in and open https://harmonylab.rentyourcio.com/index.html. Song list should load.",
+          "expected": "Songs appear in the list",
+          "category": "regression",
+          "priority": "critical"
+        },
+        {
+          "id": "VF04-02",
+          "title": "Song view loads chord analysis",
+          "description": "Click Autumn Leaves from the song list.",
+          "expected": "Chord progression, key centers, and Roman numerals display correctly",
+          "category": "regression",
+          "priority": "critical"
+        },
+        {
+          "id": "VF04-03",
+          "title": "Transpose dropdown works",
+          "description": "In Autumn Leaves song view, use the key center transpose dropdown.",
+          "expected": "Chords and Roman numerals update to reflect transposed key. No errors.",
+          "category": "regression",
+          "priority": "high"
+        },
+        {
+          "id": "VF04-04",
+          "title": "CORS not broken",
+          "description": "Sign in to harmonylab.rentyourcio.com. Load a song. Open DevTools Console.",
+          "expected": "No CORS errors in console. API calls succeed.",
+          "category": "regression",
+          "priority": "critical"
+        }
+      ]
+    }
+  ],
+  "test_data_notes": "Use any existing song (e.g., Autumn Leaves, song 34). Authentication via Google OAuth required for pages beyond login.",
+  "cc_observations": "The CI/CD workflow deploys the backend only — frontend was deployed manually from frontend/ subdirectory. The version fetch in auth.js was changed from backend URL to /health (frontend). This is semantically correct but is a behavior change — nav badges now show frontend version instead of backend version."
+}
