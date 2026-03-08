@@ -259,6 +259,27 @@ async def get_song_audit(song_id: int, db: DatabaseConnection = Depends(get_db))
     }
 
 
+@router.get("/{song_id}/imports")
+async def get_song_imports(song_id: int, db: DatabaseConnection = Depends(get_db)):
+    """Get all import records for a song, newest first."""
+    songs = db.execute_query("SELECT id, title FROM Songs WHERE id = ?", (song_id,))
+    if not songs:
+        raise HTTPException(status_code=404, detail="Song not found")
+
+    try:
+        imports = db.execute_query("""
+            SELECT * FROM song_imports
+            WHERE song_id = ? ORDER BY uploaded_at DESC
+        """, (song_id,))
+    except Exception:
+        imports = []
+
+    return {
+        'song_id': song_id,
+        'imports': [dict(i) for i in imports],
+    }
+
+
 @router.get("/{song_id}/notes")
 async def get_song_notes(song_id: int, db: DatabaseConnection = Depends(get_db)):
     """Get individual notes (MelodyNotes) for a song, grouped by measure."""

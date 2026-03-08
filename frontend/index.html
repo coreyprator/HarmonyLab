@@ -18,7 +18,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v2.4.0</div>
+        <div class="nav-version">v2.5.0</div>
     </nav>
 
     <header>
@@ -202,7 +202,7 @@
             }
             container.innerHTML = songs.map(s => `
                 <a href="song.html?id=${s.id}" class="song-card">
-                    <div class="song-title">${escHtml(s.title)}${s.has_note_data ? ' <span style="font-size:0.7rem;color:var(--tonic)">[notes]</span>' : ''}</div>
+                    <div class="song-title">${escHtml(s.title)}${s.version_number > 1 ? `<span class="version-badge">v${s.version_number}</span>` : ''}${s.has_note_data ? ' <span style="font-size:0.7rem;color:var(--tonic)">[notes]</span>' : ''}</div>
                     <div class="song-meta">
                         ${s.composer ? `<span>${escHtml(s.composer)}</span>` : ''}
                         ${s.original_key ? `<span class="key-badge">${escHtml(s.original_key)}</span>` : ''}
@@ -316,6 +316,10 @@
             const formData = new FormData();
             formData.append('file', scoreSelectedFile);
 
+            // Client-side metadata
+            formData.append('fs_modified_at', new Date(scoreSelectedFile.lastModified).toISOString());
+            formData.append('source_path', scoreSelectedFile.webkitRelativePath || '');
+
             const title = document.getElementById('score-title').value.trim();
             const composer = document.getElementById('score-composer').value.trim();
             const genre = document.getElementById('score-genre').value;
@@ -333,21 +337,61 @@
                 btn.textContent = 'Importing...';
 
                 const res = await fetch(url, { method: 'POST', body: formData });
-                if (!res.ok) {
-                    await window.logFetchError(res, 'POST', url);
-                    const err = await res.json();
-                    throw new Error(err.detail || 'Failed to import');
-                }
-
                 const result = await res.json();
-                closeImportModal();
-                window.location.href = `song.html?id=${result.song_id}`;
+
+                // Show import result card (handles 200, 207, 422)
+                showImportResult(result, res.status);
+
+                if (result.song_id) loadSongs();
             } catch (err) {
                 showToast('Error importing: ' + err.message);
             } finally {
                 const btn = document.getElementById('btn-import-score');
                 btn.disabled = false;
                 btn.textContent = 'Import Song';
+            }
+        }
+
+        function showImportResult(result, httpStatus) {
+            const modal = document.getElementById('import-modal');
+            const statusClass = result.import_status === 'success' ? 'ir-success'
+                              : result.import_status === 'partial' ? 'ir-partial'
+                              : 'ir-failed';
+            const icon = result.import_status === 'success' ? '&#10003;'
+                       : result.import_status === 'partial' ? '&#9888;'
+                       : '&#10007;';
+            const statusLabel = result.import_status === 'success' ? 'Imported'
+                              : result.import_status === 'partial' ? 'Partial Import'
+                              : 'Import Failed';
+
+            const fileSize = scoreSelectedFile ? `${(scoreSelectedFile.size / 1024).toFixed(1)} KB` : '';
+            const fsDate = scoreSelectedFile ? new Date(scoreSelectedFile.lastModified).toLocaleDateString() : '';
+
+            const warningsHtml = (result.warnings && result.warnings.length)
+                ? `<div class="ir-warnings">${result.warnings.map(w => `<div>&#9888; ${escHtml(w)}</div>`).join('')}</div>`
+                : '';
+            const errorHtml = result.error
+                ? `<div class="ir-error">${escHtml(String(result.error).substring(0, 300))}</div>`
+                : '';
+
+            const card = document.createElement('div');
+            card.className = `import-result ${statusClass}`;
+            card.innerHTML = `
+                <div class="ir-title">${icon} ${statusLabel}: ${escHtml(result.title || 'Unknown')}</div>
+                <div class="ir-stats">${result.note_count || 0} notes &middot; ${result.lyric_count || 0} lyrics &middot; ${result.chords_created || 0} chords &middot; ${result.import_duration_ms || 0}ms</div>
+                <div class="ir-meta">File: ${escHtml(scoreSelectedFile ? scoreSelectedFile.name : '')} (${fileSize}) &middot; Modified: ${fsDate}<br>
+                Import #${result.import_id || '?'} &middot; Version ${result.version_number || 1}</div>
+                ${warningsHtml}
+                ${errorHtml}
+                ${result.song_id ? `<a href="audit.html?id=${result.song_id}" class="btn btn-sm" style="margin-top:8px">View Audit &rarr;</a>` : ''}
+                <a href="song.html?id=${result.song_id}" class="btn btn-sm btn-primary" style="margin-top:8px;margin-left:8px">View Song &rarr;</a>
+            `;
+
+            // Replace modal body content with result card
+            const body = modal.querySelector('.modal-body') || modal.querySelector('.modal-content');
+            if (body) {
+                body.innerHTML = '';
+                body.appendChild(card);
             }
         }
 
@@ -479,5 +523,20 @@
             loadSongs();
         });
     </script>
+    <style>
+        .import-result { padding: 16px; border-radius: 8px; border: 2px solid var(--border); }
+        .ir-success { border-color: #22c55e; }
+        .ir-partial { border-color: #f59e0b; }
+        .ir-failed { border-color: #ef4444; }
+        .ir-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 6px; }
+        .ir-success .ir-title { color: #22c55e; }
+        .ir-partial .ir-title { color: #f59e0b; }
+        .ir-failed .ir-title { color: #ef4444; }
+        .ir-stats { font-size: 0.9rem; color: var(--text-muted); margin-bottom: 4px; }
+        .ir-meta { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px; }
+        .ir-warnings { font-size: 0.8rem; color: #f59e0b; margin-top: 6px; }
+        .ir-error { font-size: 0.75rem; color: #ef4444; background: rgba(239,68,68,0.1); padding: 8px; border-radius: 4px; margin-top: 6px; font-family: monospace; white-space: pre-wrap; max-height: 150px; overflow-y: auto; }
+        .version-badge { font-size: 0.65rem; background: var(--bg-hover); color: var(--text-muted); padding: 1px 5px; border-radius: 3px; margin-left: 4px; }
+    </style>
 </body>
 </html>
