@@ -1,0 +1,164 @@
+{
+  "uat_version": "2.2",
+  "generated_by": "cc",
+  "generated_at": "2026-03-08T14:30:00Z",
+  "handoff_id": "HO-HL-MS4A",
+  "project": {
+    "name": "HarmonyLab",
+    "emoji": "\ud83d\udd35",
+    "version": "2.3.0",
+    "app_url": "https://harmonylab.rentyourcio.com",
+    "health_url": "https://harmonylab-frontend-wmrla7fhwa-uc.a.run.app/health",
+    "deployed_revision": "harmonylab-frontend-00071-8m6"
+  },
+  "context": {
+    "summary": "Added Tone.js chord playback engine, piano roll display, and transport controls. Songs now play chord progressions in real-time with synchronized visual feedback.",
+    "root_cause": null,
+    "files_modified": [
+      "frontend/song.html",
+      "frontend/index.html",
+      "frontend/login.html",
+      "frontend/quiz.html",
+      "frontend/progress.html",
+      "frontend/nginx.conf"
+    ],
+    "commit": "9f06f97",
+    "risk_areas": [
+      "Tone.js Transport scheduling with chord events",
+      "Piano roll canvas rendering performance on long songs",
+      "Sampler loading delay on first play"
+    ]
+  },
+  "sections": [
+    {
+      "id": "section-1",
+      "title": "HL-050: Full Song Chord Playback",
+      "tests": [
+        {
+          "id": "HL04-01",
+          "title": "Play button appears after song loads",
+          "description": "Open harmonylab.rentyourcio.com, sign in, open Autumn Leaves (song 34). Verify that a transport bar with Play/Pause, Stop, and tempo slider appears below the controls bar.",
+          "expected": "Transport bar visible with Play button (triangle), Stop button (square), tempo slider showing 120, and Arpeggiated checkbox",
+          "category": "fix_verification",
+          "priority": "critical"
+        },
+        {
+          "id": "HL04-02",
+          "title": "Full song plays from start to finish",
+          "description": "Click the Play button on Autumn Leaves. Listen for chord playback progressing through all 32 measures.",
+          "expected": "Piano sounds play each chord in sequence: Cm7, F7, BbMaj7, EbMaj7, Am7b5, D7, Gm... through all 32 measures. Playback stops automatically at the end.",
+          "category": "fix_verification",
+          "priority": "critical"
+        },
+        {
+          "id": "HL04-03",
+          "title": "Play/Pause toggle works",
+          "description": "Start playback, then click the Play/Pause button mid-song. Click again to resume.",
+          "expected": "Button changes to pause icon (||) during playback and back to play icon (triangle) when paused. Playback resumes from paused position.",
+          "category": "fix_verification",
+          "priority": "critical"
+        },
+        {
+          "id": "HL04-04",
+          "title": "Stop resets to beginning",
+          "description": "Start playback, let it play a few measures, then click Stop.",
+          "expected": "Playback stops, position display resets to 1:1, chord highlight clears. Clicking Play starts from the beginning.",
+          "category": "fix_verification",
+          "priority": "high"
+        },
+        {
+          "id": "HL04-05",
+          "title": "Tempo slider changes speed",
+          "description": "Start playback at default tempo. Move the tempo slider to 200 BPM, then to 60 BPM.",
+          "expected": "Playback speed audibly changes in real-time. BPM number updates to match slider position.",
+          "category": "fix_verification",
+          "priority": "high"
+        },
+        {
+          "id": "HL04-06",
+          "title": "Position display updates during playback",
+          "description": "Start playback and watch the position counter next to the controls.",
+          "expected": "Position shows current measure:beat (e.g., 1:1, 1:2, 1:3, 1:4, 2:1...) and updates continuously during playback.",
+          "category": "fix_verification",
+          "priority": "medium"
+        },
+        {
+          "id": "HL04-07",
+          "title": "Chord cards highlight during playback",
+          "description": "Start playback and watch the chord cards in the sections display.",
+          "expected": "Each chord card gets a blue outline/glow as its chord plays. Highlight moves to the next chord card when the progression advances.",
+          "category": "fix_verification",
+          "priority": "high"
+        }
+      ]
+    },
+    {
+      "id": "section-2",
+      "title": "HL-034: Piano Roll Melody Display",
+      "tests": [
+        {
+          "id": "HL04-08",
+          "title": "Piano roll appears on song page",
+          "description": "Open Autumn Leaves. Look for a dark-background horizontal canvas above the chord cards.",
+          "expected": "Piano roll canvas visible showing colored rectangles (chord tones) arranged horizontally by time and vertically by pitch. Measure grid lines visible.",
+          "category": "fix_verification",
+          "priority": "critical"
+        },
+        {
+          "id": "HL04-09",
+          "title": "Piano roll cursor moves with playback",
+          "description": "Start playback and watch the piano roll canvas.",
+          "expected": "A red vertical cursor line moves from left to right in sync with the chord progression playback.",
+          "category": "fix_verification",
+          "priority": "high"
+        }
+      ]
+    },
+    {
+      "id": "section-3",
+      "title": "HL-036: Chord Playback Mode",
+      "tests": [
+        {
+          "id": "HL04-10",
+          "title": "Arpeggiated toggle changes playback style",
+          "description": "Start playback with Arpeggiated checkbox unchecked (default). Stop, check the Arpeggiated checkbox, play again.",
+          "expected": "With checkbox unchecked: chords play as block chords (all notes at once). With checkbox checked: chord notes play one at a time in quick succession (arpeggiated).",
+          "category": "fix_verification",
+          "priority": "high"
+        }
+      ]
+    },
+    {
+      "id": "section-4",
+      "title": "Regression Tests",
+      "tests": [
+        {
+          "id": "HL04-11",
+          "title": "Clicking chord card still plays sound",
+          "description": "Click any chord card in the chord display. Verify it still plays the chord sound (existing feature).",
+          "expected": "Chord plays on click as before. Opening the chord editor still works.",
+          "category": "regression",
+          "priority": "high"
+        },
+        {
+          "id": "HL04-12",
+          "title": "Version shows 2.3.0",
+          "description": "Check the version badge in the navigation bar.",
+          "expected": "Version badge shows v2.3.0 (or backend version if auth.js overwrites it).",
+          "category": "regression",
+          "priority": "medium"
+        },
+        {
+          "id": "HL04-13",
+          "title": "Song list and navigation work",
+          "description": "Navigate to the song list, open a different song, go back.",
+          "expected": "All navigation works. Song list loads. Other songs display their chord data.",
+          "category": "regression",
+          "priority": "medium"
+        }
+      ]
+    }
+  ],
+  "test_data_notes": "Use Autumn Leaves (song 34) as primary test case. Song has 32 measures, 32 chords, 120 BPM, 4/4 time, key of G minor.",
+  "cc_observations": "Since no songs have individual MIDI note data (notes endpoint returns 0 for all songs), playback uses chord analysis data instead. The piano roll shows chord tones rather than individual melody notes. The 'Enable Audio' button must be clicked first (browser autoplay policy), then the transport Play button starts chord playback. First play may have a delay while Salamander piano samples load from CDN."
+}
