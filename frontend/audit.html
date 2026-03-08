@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Import Audit - HarmonyLab</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body style="display: none;">
+    <nav class="main-nav">
+        <a href="index.html" class="nav-brand">HarmonyLab</a>
+        <div class="nav-links">
+            <a href="index.html" class="nav-link">Songs</a>
+            <a href="quiz.html" class="nav-link">Quiz</a>
+            <a href="progress.html" class="nav-link">Progress</a>
+        </div>
+        <div id="auth-container" class="nav-auth">
+            <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
+        </div>
+        <div class="nav-version">v2.4.0</div>
+    </nav>
+
+    <header>
+        <div class="header-content">
+            <h1 id="song-title">Loading...</h1>
+            <a id="back-link" href="index.html" class="btn btn-sm">Back to Songs</a>
+        </div>
+        <div class="song-info" id="song-meta"></div>
+    </header>
+
+    <main>
+        <!-- Statistics Panel -->
+        <div class="audit-stats" id="stats-panel">
+            <div class="stat-card"><span class="stat-val" id="stat-notes">-</span><span class="stat-label">Notes</span></div>
+            <div class="stat-card"><span class="stat-val" id="stat-rests">-</span><span class="stat-label">Rests</span></div>
+            <div class="stat-card"><span class="stat-val" id="stat-lyrics">-</span><span class="stat-label">Lyrics</span></div>
+            <div class="stat-card"><span class="stat-val" id="stat-pitches">-</span><span class="stat-label">Unique Pitches</span></div>
+            <div class="stat-card"><span class="stat-val" id="stat-range">-</span><span class="stat-label">Range</span></div>
+            <div class="stat-card"><span class="stat-val" id="stat-velocity">-</span><span class="stat-label">Avg Velocity</span></div>
+        </div>
+
+        <!-- Tab bar -->
+        <div class="audit-tabs">
+            <button class="tab-btn active" data-tab="measures">Measures</button>
+            <button class="tab-btn" data-tab="raw-xml">Raw XML</button>
+        </div>
+
+        <!-- Measure navigator -->
+        <div class="measure-nav" id="measure-nav"></div>
+
+        <!-- Track filter -->
+        <div class="track-filter" id="track-filter"></div>
+
+        <!-- Measure content -->
+        <div id="tab-measures" class="tab-content active">
+            <div id="measures-container"></div>
+            <div class="pagination">
+                <button id="prev-btn" class="btn btn-sm" disabled>Prev</button>
+                <span id="page-info"></span>
+                <button id="next-btn" class="btn btn-sm">Next</button>
+            </div>
+        </div>
+
+        <!-- Raw XML tab -->
+        <div id="tab-raw-xml" class="tab-content" style="display:none">
+            <pre id="raw-xml-content" class="raw-xml-block">No raw XML stored for this song.</pre>
+        </div>
+    </main>
+
+    <script src="js/auth.js"></script>
+    <style>
+        .audit-stats {
+            display: flex; gap: 12px; flex-wrap: wrap;
+            padding: 16px 24px; margin-bottom: 8px;
+        }
+        .stat-card {
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: 8px; padding: 12px 20px; text-align: center;
+            min-width: 100px;
+        }
+        .stat-val { display: block; font-size: 1.5rem; font-weight: 700; color: var(--accent); }
+        .stat-label { font-size: 0.8rem; color: var(--text-muted); }
+        .audit-tabs {
+            display: flex; gap: 0; padding: 0 24px; border-bottom: 1px solid var(--border);
+        }
+        .tab-btn {
+            background: none; border: none; color: var(--text-muted);
+            padding: 10px 20px; cursor: pointer; font-size: 0.9rem;
+            border-bottom: 2px solid transparent;
+        }
+        .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+        .tab-btn:hover { color: var(--text); }
+        .measure-nav {
+            display: flex; gap: 4px; flex-wrap: wrap; padding: 12px 24px;
+        }
+        .measure-nav button {
+            background: var(--bg-card); border: 1px solid var(--border);
+            color: var(--text-muted); padding: 4px 10px; border-radius: 4px;
+            cursor: pointer; font-size: 0.8rem; min-width: 32px;
+        }
+        .measure-nav button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+        .measure-nav button:hover { border-color: var(--accent); }
+        .track-filter {
+            padding: 4px 24px 8px; display: flex; gap: 8px; align-items: center;
+        }
+        .track-filter label { font-size: 0.85rem; color: var(--text-muted); cursor: pointer; }
+        .track-filter select {
+            background: var(--bg-card); color: var(--text); border: 1px solid var(--border);
+            padding: 4px 8px; border-radius: 4px;
+        }
+        .measure-block {
+            margin: 12px 24px; padding: 16px; background: var(--bg-card);
+            border: 1px solid var(--border); border-radius: 8px;
+        }
+        .measure-header {
+            font-weight: 700; font-size: 1.1rem; color: var(--accent);
+            margin-bottom: 8px; display: flex; gap: 16px; align-items: center;
+        }
+        .chord-badge {
+            background: var(--bg-hover); padding: 2px 10px; border-radius: 4px;
+            font-size: 0.85rem; color: var(--tonic); font-weight: 600;
+        }
+        .lyric-badge {
+            background: var(--bg-hover); padding: 2px 10px; border-radius: 4px;
+            font-size: 0.85rem; color: #f59e0b;
+        }
+        .note-table {
+            width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-top: 8px;
+        }
+        .note-table th {
+            text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--border);
+            color: var(--text-muted); font-weight: 600;
+        }
+        .note-table td {
+            padding: 4px 8px; border-bottom: 1px solid rgba(51,65,85,0.3);
+        }
+        .note-table tr.rest-row td { color: var(--text-muted); opacity: 0.6; }
+        .note-table tr.grace-row td { font-style: italic; opacity: 0.8; }
+        .track-label {
+            font-size: 0.9rem; font-weight: 600; color: var(--text);
+            margin-top: 12px; margin-bottom: 4px;
+        }
+        .pagination {
+            display: flex; align-items: center; gap: 12px;
+            padding: 12px 24px; justify-content: center;
+        }
+        .raw-xml-block {
+            background: #0b1120; color: #94a3b8; padding: 16px 24px;
+            overflow-x: auto; font-size: 0.75rem; line-height: 1.4;
+            max-height: 600px; overflow-y: auto; margin: 12px 24px;
+            border-radius: 8px; border: 1px solid var(--border);
+            white-space: pre-wrap; word-break: break-all;
+        }
+    </style>
+
+    <script>
+    (function() {
+        'use strict';
+        const API_BASE = 'https://harmonylab-wmrla7fhwa-uc.a.run.app';
+        const params = new URLSearchParams(window.location.search);
+        const songId = params.get('id');
+        if (!songId) { document.getElementById('song-title').textContent = 'No song ID'; return; }
+
+        const MEASURES_PER_PAGE = 4;
+        let auditData = null;
+        let currentPage = 0;
+        let trackFilter = 'all';
+
+        // MIDI pitch to note name
+        const NOTE_NAMES = ['C','C#','D','Eb','E','F','F#','G','Ab','A','Bb','B'];
+        function midiToName(p) {
+            if (p <= 0) return 'rest';
+            return NOTE_NAMES[p % 12] + (Math.floor(p / 12) - 1);
+        }
+
+        async function loadAudit() {
+            try {
+                const resp = await fetch(`${API_BASE}/api/v1/songs/${songId}/audit`, { credentials: 'include' });
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                auditData = await resp.json();
+                render();
+            } catch (e) {
+                document.getElementById('song-title').textContent = 'Error loading audit data';
+                console.error(e);
+            }
+        }
+
+        function render() {
+            const d = auditData;
+            document.getElementById('song-title').textContent = d.title + ' — Import Audit';
+            document.title = `${d.title} Audit - HarmonyLab`;
+
+            // Meta
+            const metaParts = [];
+            if (d.import_format) metaParts.push(`Format: ${d.import_format}`);
+            if (d.track_count) metaParts.push(`Tracks: ${d.track_count}`);
+            if (d.measure_count) metaParts.push(`Measures: ${d.measure_count}`);
+            if (d.total_notes) metaParts.push(`Notes: ${d.total_notes}`);
+            if (d.has_lyrics) metaParts.push('Has lyrics');
+            document.getElementById('song-meta').textContent = metaParts.join(' | ');
+
+            // Stats
+            const s = d.statistics || {};
+            document.getElementById('stat-notes').textContent = s.note_count ?? '-';
+            document.getElementById('stat-rests').textContent = s.rest_count ?? '-';
+            document.getElementById('stat-lyrics').textContent = s.lyric_count ?? '-';
+            document.getElementById('stat-pitches').textContent = s.unique_pitches ?? '-';
+            document.getElementById('stat-range').textContent =
+                (s.lowest_note != null && s.highest_note != null)
+                ? `${midiToName(s.lowest_note)} - ${midiToName(s.highest_note)}` : '-';
+            document.getElementById('stat-velocity').textContent = s.avg_velocity ?? '-';
+
+            // Measure navigator
+            const nav = document.getElementById('measure-nav');
+            nav.innerHTML = '';
+            d.measures.forEach((m, i) => {
+                const btn = document.createElement('button');
+                btn.textContent = m.measure_num;
+                btn.onclick = () => { currentPage = Math.floor(i / MEASURES_PER_PAGE); renderMeasures(); };
+                nav.appendChild(btn);
+            });
+
+            // Track filter
+            const tracks = new Set();
+            d.measures.forEach(m => m.notes.forEach(n => tracks.add(n.track_num + ':' + (n.track_name || ''))));
+            const filterEl = document.getElementById('track-filter');
+            if (tracks.size > 1) {
+                filterEl.innerHTML = '<label>Track:</label>';
+                const sel = document.createElement('select');
+                sel.innerHTML = '<option value="all">All tracks</option>';
+                [...tracks].sort().forEach(t => {
+                    const [num, name] = t.split(':');
+                    sel.innerHTML += `<option value="${num}">Track ${num}${name ? ': ' + name : ''}</option>`;
+                });
+                sel.onchange = () => { trackFilter = sel.value; renderMeasures(); };
+                filterEl.appendChild(sel);
+            }
+
+            renderMeasures();
+        }
+
+        function renderMeasures() {
+            if (!auditData) return;
+            const measures = auditData.measures;
+            const start = currentPage * MEASURES_PER_PAGE;
+            const end = Math.min(start + MEASURES_PER_PAGE, measures.length);
+            const container = document.getElementById('measures-container');
+            container.innerHTML = '';
+
+            // Update nav highlights
+            document.querySelectorAll('.measure-nav button').forEach((btn, i) => {
+                btn.classList.toggle('active', i >= start && i < end);
+            });
+
+            for (let i = start; i < end; i++) {
+                const m = measures[i];
+                const block = document.createElement('div');
+                block.className = 'measure-block';
+
+                // Header
+                const header = document.createElement('div');
+                header.className = 'measure-header';
+                header.innerHTML = `<span>Measure ${m.measure_num}</span>`;
+
+                // Chord badges
+                if (m.notes) {
+                    // Get unique chords from chord_symbols if we had them in measures
+                    // For now show chord info if present
+                }
+
+                block.appendChild(header);
+
+                // Chords row
+                const chordSyms = []; // chord symbols not in audit measures currently, but lyrics are
+                // Lyrics row
+                if (m.lyrics && m.lyrics.length > 0) {
+                    const lyrDiv = document.createElement('div');
+                    lyrDiv.style.marginBottom = '6px';
+                    m.lyrics.forEach(l => {
+                        const badge = document.createElement('span');
+                        badge.className = 'lyric-badge';
+                        badge.textContent = `"${l.syllable}" @${l.beat}`;
+                        lyrDiv.appendChild(badge);
+                        lyrDiv.appendChild(document.createTextNode(' '));
+                    });
+                    block.appendChild(lyrDiv);
+                }
+
+                // Group notes by track
+                let notes = m.notes || [];
+                if (trackFilter !== 'all') {
+                    notes = notes.filter(n => String(n.track_num) === trackFilter);
+                }
+                const byTrack = {};
+                notes.forEach(n => {
+                    const key = n.track_num;
+                    if (!byTrack[key]) byTrack[key] = { name: n.track_name || `Track ${key}`, notes: [] };
+                    byTrack[key].notes.push(n);
+                });
+
+                for (const [tnum, tdata] of Object.entries(byTrack)) {
+                    const label = document.createElement('div');
+                    label.className = 'track-label';
+                    label.textContent = tdata.name;
+                    block.appendChild(label);
+
+                    const table = document.createElement('table');
+                    table.className = 'note-table';
+                    table.innerHTML = `<thead><tr>
+                        <th>Beat</th><th>Note</th><th>Duration</th><th>Dots</th>
+                        <th>Vel</th><th>Rest</th><th>Grace</th><th>Tie</th><th>Articulations</th>
+                    </tr></thead>`;
+                    const tbody = document.createElement('tbody');
+
+                    tdata.notes.forEach(n => {
+                        const tr = document.createElement('tr');
+                        if (n.is_rest) tr.className = 'rest-row';
+                        if (n.is_grace) tr.className = 'grace-row';
+                        tr.innerHTML = `
+                            <td>${n.beat}</td>
+                            <td>${n.note_name || '-'}</td>
+                            <td>${n.duration_type || ''} (${n.duration_quarters}q)</td>
+                            <td>${n.dot_count || 0}</td>
+                            <td>${n.velocity || '-'}</td>
+                            <td>${n.is_rest ? 'R' : ''}</td>
+                            <td>${n.is_grace ? 'G' : ''}</td>
+                            <td>${n.tie_type || ''}</td>
+                            <td>${(n.articulations || []).join(', ')}</td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                    table.appendChild(tbody);
+                    block.appendChild(table);
+                }
+
+                if (Object.keys(byTrack).length === 0) {
+                    const empty = document.createElement('div');
+                    empty.style.color = 'var(--text-muted)';
+                    empty.textContent = 'No notes in this measure';
+                    block.appendChild(empty);
+                }
+
+                container.appendChild(block);
+            }
+
+            // Pagination
+            document.getElementById('prev-btn').disabled = currentPage === 0;
+            document.getElementById('next-btn').disabled = end >= measures.length;
+            document.getElementById('page-info').textContent =
+                `Measures ${start + 1}-${end} of ${measures.length}`;
+        }
+
+        document.getElementById('prev-btn').onclick = () => { if (currentPage > 0) { currentPage--; renderMeasures(); } };
+        document.getElementById('next-btn').onclick = () => { currentPage++; renderMeasures(); };
+
+        // Tab switching
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.onclick = () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+                btn.classList.add('active');
+                document.getElementById('tab-' + btn.dataset.tab).style.display = '';
+
+                // Load raw XML on first click
+                if (btn.dataset.tab === 'raw-xml' && auditData) {
+                    loadRawXml();
+                }
+            };
+        });
+
+        async function loadRawXml() {
+            try {
+                const resp = await fetch(`${API_BASE}/api/v1/songs/${songId}`, { credentials: 'include' });
+                if (!resp.ok) return;
+                const song = await resp.json();
+                const xmlEl = document.getElementById('raw-xml-content');
+                if (song.raw_xml) {
+                    xmlEl.textContent = song.raw_xml;
+                } else {
+                    xmlEl.textContent = 'No raw XML stored for this song.';
+                }
+            } catch (e) {
+                console.error('Failed to load raw XML:', e);
+            }
+        }
+
+        loadAudit();
+    })();
+    </script>
+</body>
+</html>

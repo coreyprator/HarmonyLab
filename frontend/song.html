@@ -20,12 +20,13 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v2.3.0</div>
+        <div class="nav-version">v2.4.0</div>
     </nav>
 
     <header>
         <div class="header-content">
             <h1 id="song-title">Loading...</h1>
+            <a id="audit-link" href="#" class="btn btn-sm" style="display:none;margin-left:8px">Audit</a>
             <button id="delete-song-btn" class="btn btn-danger btn-sm"
                     onclick="confirmDeleteSong()" title="Delete this song"
                     style="margin-left:auto">Delete</button>
@@ -488,6 +489,11 @@
                     document.getElementById('song-genre').textContent = songData.genre;
                 if (songData.time_signature)
                     document.getElementById('song-time').textContent = songData.time_signature;
+                if (songData.has_note_data) {
+                    const auditLink = document.getElementById('audit-link');
+                    auditLink.href = `audit.html?id=${songId}`;
+                    auditLink.style.display = '';
+                }
             } catch (err) {
                 document.getElementById('song-title').textContent = 'Error loading song';
             }

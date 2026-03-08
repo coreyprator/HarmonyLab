@@ -124,6 +124,141 @@ async def delete_song(song_id: int, db: DatabaseConnection = Depends(get_db)):
     return None
 
 
+@router.get("/{song_id}/audit")
+async def get_song_audit(song_id: int, db: DatabaseConnection = Depends(get_db)):
+    """Get full import audit data for a song, grouped by measure."""
+    songs = db.execute_query("SELECT * FROM Songs WHERE id = ?", (song_id,))
+    if not songs:
+        raise HTTPException(status_code=404, detail="Song not found")
+    song = songs[0]
+
+    # Load all rich note data
+    try:
+        notes = db.execute_query("""
+            SELECT * FROM song_notes
+            WHERE song_id = ? ORDER BY measure_num, beat, track_num, midi_pitch DESC
+        """, (song_id,))
+    except Exception:
+        notes = []
+
+    try:
+        lyrics = db.execute_query("""
+            SELECT * FROM song_lyrics
+            WHERE song_id = ? ORDER BY measure_num, beat, verse_num
+        """, (song_id,))
+    except Exception:
+        lyrics = []
+
+    try:
+        dynamics = db.execute_query("""
+            SELECT * FROM song_dynamics
+            WHERE song_id = ? ORDER BY measure_num, beat
+        """, (song_id,))
+    except Exception:
+        dynamics = []
+
+    try:
+        tempos = db.execute_query("""
+            SELECT * FROM song_tempos
+            WHERE song_id = ? ORDER BY measure_num, beat
+        """, (song_id,))
+    except Exception:
+        tempos = []
+
+    try:
+        time_sigs = db.execute_query("""
+            SELECT * FROM song_time_signatures
+            WHERE song_id = ? ORDER BY measure_num
+        """, (song_id,))
+    except Exception:
+        time_sigs = []
+
+    try:
+        key_sigs = db.execute_query("""
+            SELECT * FROM song_key_signatures
+            WHERE song_id = ? ORDER BY measure_num
+        """, (song_id,))
+    except Exception:
+        key_sigs = []
+
+    try:
+        text_marks = db.execute_query("""
+            SELECT * FROM song_text_marks
+            WHERE song_id = ? ORDER BY measure_num, beat
+        """, (song_id,))
+    except Exception:
+        text_marks = []
+
+    # Group by measure
+    measures = {}
+    for n in notes:
+        m = n['measure_num']
+        measures.setdefault(m, {'notes': [], 'lyrics': [], 'dynamics': [],
+                                'tempos': [], 'time_signatures': [], 'key_signatures': [],
+                                'text_marks': []})
+        measures[m]['notes'].append(dict(n))
+
+    for lyr in lyrics:
+        m = lyr['measure_num']
+        measures.setdefault(m, {'notes': [], 'lyrics': [], 'dynamics': [],
+                                'tempos': [], 'time_signatures': [], 'key_signatures': [],
+                                'text_marks': []})
+        measures[m]['lyrics'].append(dict(lyr))
+
+    for d in dynamics:
+        m = d['measure_num']
+        if m in measures:
+            measures[m]['dynamics'].append(dict(d))
+
+    for t in tempos:
+        m = t['measure_num']
+        if m in measures:
+            measures[m]['tempos'].append(dict(t))
+
+    for ts in time_sigs:
+        m = ts['measure_num']
+        if m in measures:
+            measures[m]['time_signatures'].append(dict(ts))
+
+    for ks in key_sigs:
+        m = ks['measure_num']
+        if m in measures:
+            measures[m]['key_signatures'].append(dict(ks))
+
+    for tm in text_marks:
+        m = tm['measure_num']
+        if m in measures:
+            measures[m]['text_marks'].append(dict(tm))
+
+    # Statistics
+    actual_notes = [n for n in notes if not n.get('is_rest')]
+    pitches = [n['midi_pitch'] for n in actual_notes] if actual_notes else []
+
+    return {
+        'song_id': song_id,
+        'title': song.get('title'),
+        'import_format': song.get('import_format'),
+        'total_notes': song.get('total_notes', len(actual_notes)),
+        'has_lyrics': bool(song.get('has_lyrics')),
+        'has_note_data': bool(song.get('has_note_data')),
+        'track_count': song.get('track_count'),
+        'measure_count': song.get('measure_count'),
+        'statistics': {
+            'note_count': len(actual_notes),
+            'rest_count': len(notes) - len(actual_notes),
+            'lyric_count': len(lyrics),
+            'unique_pitches': len(set(pitches)),
+            'lowest_note': min(pitches) if pitches else None,
+            'highest_note': max(pitches) if pitches else None,
+            'avg_velocity': round(sum(n.get('velocity', 64) for n in actual_notes) / len(actual_notes), 1) if actual_notes else None,
+        },
+        'measures': [
+            {'measure_num': m, **data}
+            for m, data in sorted(measures.items())
+        ],
+    }
+
+
 @router.get("/{song_id}/notes")
 async def get_song_notes(song_id: int, db: DatabaseConnection = Depends(get_db)):
     """Get individual notes (MelodyNotes) for a song, grouped by measure."""

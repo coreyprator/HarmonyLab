@@ -18,7 +18,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v2.3.0</div>
+        <div class="nav-version">v2.4.0</div>
     </nav>
 
     <header>
@@ -202,11 +202,12 @@
             }
             container.innerHTML = songs.map(s => `
                 <a href="song.html?id=${s.id}" class="song-card">
-                    <div class="song-title">${escHtml(s.title)}</div>
+                    <div class="song-title">${escHtml(s.title)}${s.has_note_data ? ' <span style="font-size:0.7rem;color:var(--tonic)">[notes]</span>' : ''}</div>
                     <div class="song-meta">
                         ${s.composer ? `<span>${escHtml(s.composer)}</span>` : ''}
                         ${s.original_key ? `<span class="key-badge">${escHtml(s.original_key)}</span>` : ''}
                         ${s.genre ? `<span class="genre-badge">${escHtml(s.genre)}</span>` : ''}
+                        ${s.has_note_data ? `<a href="audit.html?id=${s.id}" class="btn btn-sm" style="font-size:0.7rem;padding:2px 8px;margin-left:auto" onclick="event.stopPropagation()">Audit</a>` : ''}
                     </div>
                 </a>
             `).join('');
