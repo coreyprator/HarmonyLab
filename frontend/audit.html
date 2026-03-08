@@ -17,7 +17,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v2.5.0</div>
+        <div class="nav-version">v2.5.1</div>
     </nav>
 
     <header>
@@ -173,7 +173,7 @@
         const API_BASE = 'https://harmonylab-wmrla7fhwa-uc.a.run.app';
         const params = new URLSearchParams(window.location.search);
         const songId = params.get('id');
-        if (!songId) { document.getElementById('song-title').textContent = 'No song ID'; return; }
+        if (!songId) { document.getElementById('song-title').textContent = 'No song ID'; document.body.style.display = ''; return; }
 
         const MEASURES_PER_PAGE = 4;
         let auditData = null;
@@ -192,9 +192,11 @@
                 const resp = await fetch(`${API_BASE}/api/v1/songs/${songId}/audit`, { credentials: 'include' });
                 if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
                 auditData = await resp.json();
+                document.body.style.display = '';
                 render();
                 loadProvenance();
             } catch (e) {
+                document.body.style.display = '';
                 document.getElementById('song-title').textContent = 'Error loading audit data';
                 console.error(e);
             }
