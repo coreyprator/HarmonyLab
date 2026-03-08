@@ -1,0 +1,146 @@
+{
+  "uat_version": "2.2",
+  "generated_by": "cc",
+  "generated_at": "2026-03-08T15:05:00Z",
+  "handoff_id": "HO-HL-REIMPORT",
+  "project": {
+    "name": "HarmonyLab",
+    "emoji": "\ud83d\udd35",
+    "version": "2.4.0",
+    "app_url": "https://harmonylab.rentyourcio.com",
+    "health_url": "https://harmonylab-wmrla7fhwa-uc.a.run.app/health"
+  },
+  "context": {
+    "summary": "Rewrote import pipeline to capture individual notes, lyrics, dynamics, articulations from MuseScore files. Added 8 new DB tables via idempotent migration. Created audit endpoint and audit UI page.",
+    "root_cause": "Previous import pipeline discarded all note data, storing only chord symbols. Analysis had nothing to cross-check chords against.",
+    "files_modified": [
+      "app/services/import_engine.py (NEW)",
+      "app/migrations.py",
+      "app/api/routes/imports.py",
+      "app/api/routes/songs.py",
+      "app/models/__init__.py",
+      "frontend/audit.html (NEW)",
+      "frontend/index.html",
+      "frontend/song.html",
+      "frontend/login.html",
+      "frontend/quiz.html",
+      "frontend/progress.html",
+      "frontend/nginx.conf",
+      "main.py"
+    ],
+    "commit": "5f45a6e",
+    "risk_areas": [
+      "DB migration creates 8 tables on first request — may timeout on cold start",
+      "Raw XML storage in nvarchar(max) column — large scores may hit size limits",
+      "MuseScore 4.6.x TPC root note mapping — untested with older MuseScore versions"
+    ]
+  },
+  "sections": [
+    {
+      "id": "section-1",
+      "title": "Import Pipeline — Note Extraction",
+      "tests": [
+        {
+          "id": "REIMP-01",
+          "title": "Upload .mscz file captures notes",
+          "description": "Go to harmonylab.rentyourcio.com, sign in, click Upload, upload 'manha de carnava.mscz'. Check the response message for note count.",
+          "expected": "Response shows 103 notes, 50 chord symbols. Song appears in song list.",
+          "category": "fix_verification",
+          "priority": "critical"
+        },
+        {
+          "id": "REIMP-02",
+          "title": "Song list shows [notes] badge",
+          "description": "After upload, check the song list (index.html). The uploaded song should have a [notes] indicator.",
+          "expected": "Song card for 'Black Orpheus' (or 'manha de carnava') shows green [notes] badge and Audit link.",
+          "category": "fix_verification",
+          "priority": "high"
+        }
+      ]
+    },
+    {
+      "id": "section-2",
+      "title": "Audit Endpoint",
+      "tests": [
+        {
+          "id": "REIMP-03",
+          "title": "Audit endpoint returns measure data",
+          "description": "Open browser dev tools or curl: GET /api/v1/songs/{id}/audit for the uploaded song.",
+          "expected": "JSON response with measures array. Each measure contains notes with beat, note_name, duration_type, velocity fields. Statistics section shows note_count, rest_count, unique_pitches.",
+          "category": "fix_verification",
+          "priority": "critical"
+        }
+      ]
+    },
+    {
+      "id": "section-3",
+      "title": "Audit UI Page",
+      "tests": [
+        {
+          "id": "REIMP-04",
+          "title": "Audit page loads with note data",
+          "description": "Click the Audit button/link on the uploaded song (from song list or song detail). Verify the audit.html page loads.",
+          "expected": "Page shows song title, statistics panel (notes, rests, lyrics, unique pitches, range, avg velocity), measure navigator buttons, and note tables for each measure.",
+          "category": "fix_verification",
+          "priority": "critical"
+        },
+        {
+          "id": "REIMP-05",
+          "title": "Measure navigator works",
+          "description": "Click different measure numbers in the navigator bar.",
+          "expected": "Page scrolls/paginates to show the selected measures. Active measure buttons are highlighted blue.",
+          "category": "fix_verification",
+          "priority": "high"
+        },
+        {
+          "id": "REIMP-06",
+          "title": "Note table shows correct data for Measure 2",
+          "description": "Navigate to Measure 2 in the audit page.",
+          "expected": "Shows chord A-7 at beat 1.0. Notes: C5 (half) at beat 1.0, B4 (eighth) at beat 4.0, A4 (eighth) at beat 4.5. Lyrics: 'sing' at beat 1.0, 'to' at beat 4.0, 'the' at beat 4.5.",
+          "category": "fix_verification",
+          "priority": "high"
+        },
+        {
+          "id": "REIMP-07",
+          "title": "Raw XML tab works",
+          "description": "Click the 'Raw XML' tab on the audit page.",
+          "expected": "Shows the raw .mscx XML content in a scrollable code block.",
+          "category": "fix_verification",
+          "priority": "medium"
+        }
+      ]
+    },
+    {
+      "id": "section-4",
+      "title": "Regression Tests",
+      "tests": [
+        {
+          "id": "REIMP-08",
+          "title": "Existing songs still work",
+          "description": "Navigate to Autumn Leaves (song 34). Verify chord display and playback still function.",
+          "expected": "Chord cards display correctly. Transport controls work. Piano roll shows chord tones.",
+          "category": "regression",
+          "priority": "high"
+        },
+        {
+          "id": "REIMP-09",
+          "title": "Version shows 2.4.0",
+          "description": "Check the backend health endpoint: curl https://harmonylab-wmrla7fhwa-uc.a.run.app/health",
+          "expected": "Response includes version: 2.4.0",
+          "category": "regression",
+          "priority": "medium"
+        },
+        {
+          "id": "REIMP-10",
+          "title": "Song list and navigation work",
+          "description": "Navigate song list, open different songs, go back.",
+          "expected": "All navigation works. No errors in console.",
+          "category": "regression",
+          "priority": "medium"
+        }
+      ]
+    }
+  ],
+  "test_data_notes": "Upload 'manha de carnava.mscz' from G:\\My Drive\\Sheet Music\\MuseScore\\ as the primary test case. Song is 'Black Orpheus' by Luiz Bonfa — 40 measures, 103 notes, 91 lyrics, 50 chord symbols, key of C, 4/4 time.",
+  "cc_observations": "1. MuseScore CLI was NOT installed — custom XML parser used instead (deviation from prompt). Works directly on .mscx XML without music21 or MuseScore executable dependency. 2. Source files are NOT stored in GCS — the 35 existing songs cannot be re-imported without re-uploading original files. 3. The test file 'manha de carnava.mscz' is MuseScore 4.6.4 format (TPC root numbering). 4. The DB migration runs on first request after deploy (may add ~2s to first cold start)."
+}
