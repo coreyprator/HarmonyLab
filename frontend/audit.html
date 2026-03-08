@@ -17,7 +17,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v2.4.0</div>
+        <div class="nav-version">v2.5.0</div>
     </nav>
 
     <header>
@@ -30,6 +30,9 @@
 
     <main>
         <!-- Statistics Panel -->
+        <!-- Import provenance panel -->
+        <div class="import-provenance" id="provenance-panel" style="display:none"></div>
+
         <div class="audit-stats" id="stats-panel">
             <div class="stat-card"><span class="stat-val" id="stat-notes">-</span><span class="stat-label">Notes</span></div>
             <div class="stat-card"><span class="stat-val" id="stat-rests">-</span><span class="stat-label">Rests</span></div>
@@ -69,6 +72,17 @@
 
     <script src="js/auth.js"></script>
     <style>
+        .import-provenance {
+            margin: 12px 24px; padding: 14px 18px; background: var(--bg-card);
+            border: 1px solid var(--border); border-radius: 8px;
+            display: grid; grid-template-columns: 120px 1fr; gap: 4px 12px; font-size: 0.85rem;
+        }
+        .prov-label { color: var(--text-muted); font-weight: 600; }
+        .prov-val { color: var(--text); }
+        .status-badge { padding: 1px 8px; border-radius: 3px; font-size: 0.75rem; font-weight: 700; }
+        .status-badge.success { background: rgba(34,197,94,0.2); color: #22c55e; }
+        .status-badge.partial { background: rgba(245,158,11,0.2); color: #f59e0b; }
+        .status-badge.failed { background: rgba(239,68,68,0.2); color: #ef4444; }
         .audit-stats {
             display: flex; gap: 12px; flex-wrap: wrap;
             padding: 16px 24px; margin-bottom: 8px;
@@ -179,9 +193,36 @@
                 if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
                 auditData = await resp.json();
                 render();
+                loadProvenance();
             } catch (e) {
                 document.getElementById('song-title').textContent = 'Error loading audit data';
                 console.error(e);
+            }
+        }
+
+        async function loadProvenance() {
+            try {
+                const resp = await fetch(`${API_BASE}/api/v1/songs/${songId}/imports`, { credentials: 'include' });
+                if (!resp.ok) return;
+                const data = await resp.json();
+                if (!data.imports || data.imports.length === 0) return;
+                const imp = data.imports[0]; // most recent
+                const panel = document.getElementById('provenance-panel');
+                const fmtDate = (d) => d ? new Date(d).toLocaleString() : '-';
+                const fmtSize = (b) => b ? `${(b / 1024).toFixed(1)} KB` : '-';
+                const statusCls = imp.import_status || 'pending';
+                panel.innerHTML = `
+                    <span class="prov-label">File</span><span class="prov-val">${imp.original_filename || '-'} (${fmtSize(imp.file_size_bytes)})</span>
+                    <span class="prov-label">File modified</span><span class="prov-val">${fmtDate(imp.fs_modified_at)}</span>
+                    <span class="prov-label">Uploaded</span><span class="prov-val">${fmtDate(imp.uploaded_at)}</span>
+                    <span class="prov-label">Import</span><span class="prov-val">#${imp.id} &middot; v${imp.version_number || 1} &middot; ${imp.import_duration_ms || '?'}ms &middot; <span class="status-badge ${statusCls}">${(imp.import_status || 'pending').toUpperCase()}</span></span>
+                    <span class="prov-label">MD5</span><span class="prov-val" style="font-family:monospace;font-size:0.8rem">${imp.file_hash_md5 || '-'}</span>
+                    ${imp.import_warnings ? `<span class="prov-label">Warnings</span><span class="prov-val" style="color:#f59e0b">${imp.import_warnings}</span>` : ''}
+                    ${imp.import_error_log ? `<span class="prov-label">Error</span><span class="prov-val" style="color:#ef4444;font-size:0.75rem;font-family:monospace">${imp.import_error_log.substring(0, 300)}</span>` : ''}
+                `;
+                panel.style.display = '';
+            } catch (e) {
+                console.error('Failed to load provenance:', e);
             }
         }
 

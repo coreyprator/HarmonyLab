@@ -4,12 +4,17 @@ Also includes a seed endpoint for jazz standards.
 """
 import os
 import io
+import re
+import hashlib
+import time
+import traceback
 import zipfile
 import tempfile
 import logging
 from typing import Optional, List, Dict, Any
 
-from fastapi import APIRouter, UploadFile, File, HTTPException, status, Query
+from fastapi import APIRouter, UploadFile, File, HTTPException, status, Query, Form
+from fastapi.responses import JSONResponse
 from app.services.score_parser import parse_music_file, ParsedScore, _DURATION_TO_BEATS
 from app.services.midi_parser import parse_midi_file
 from app.services.import_engine import parse_upload_full, save_full_parse
@@ -112,6 +117,100 @@ def _song_exists(db: DatabaseConnection, title: str, key: Optional[str]) -> bool
     else:
         rows = db.execute_query("SELECT id FROM Songs WHERE title = ?", (title,))
     return len(rows) > 0
+
+
+def _strip_version_suffix(title: str) -> str:
+    """Strip version suffix like ' (2)', ' (3)' from title."""
+    return re.sub(r'\s*\(\d+\)\s*$', '', title).strip()
+
+
+def _compute_version(db: DatabaseConnection, base_title: str) -> int:
+    """Compute the next version number for a given base title."""
+    normalized = _strip_version_suffix(base_title).strip().lower()
+    try:
+        rows = db.execute_query(
+            "SELECT COUNT(*) as cnt FROM Songs WHERE LOWER(LTRIM(RTRIM(COALESCE(base_title, title)))) = ?",
+            (normalized,)
+        )
+        return (rows[0]['cnt'] if rows else 0) + 1
+    except Exception:
+        return 1
+
+
+def _compute_file_hashes(content: bytes) -> dict:
+    """Compute MD5 and SHA256 of file content."""
+    return {
+        'md5': hashlib.md5(content).hexdigest(),
+        'sha256': hashlib.sha256(content).hexdigest(),
+    }
+
+
+def _check_duplicate_hash(db: DatabaseConnection, md5: str, base_title: str) -> Optional[str]:
+    """Check if same file hash was already imported for this base title. Returns warning or None."""
+    try:
+        rows = db.execute_query(
+            "SELECT si.id, si.uploaded_at FROM song_imports si "
+            "JOIN Songs s ON si.song_id = s.id "
+            "WHERE si.file_hash_md5 = ? AND LOWER(LTRIM(RTRIM(COALESCE(s.base_title, s.title)))) = ?",
+            (md5, _strip_version_suffix(base_title).strip().lower())
+        )
+        if rows:
+            r = rows[0]
+            return f"File identical to import #{r['id']} on {r['uploaded_at']}. Proceeding anyway."
+    except Exception:
+        pass
+    return None
+
+
+def _create_import_record(db: DatabaseConnection, **kwargs) -> int:
+    """Create a song_imports record and return its id."""
+    try:
+        result = db.execute_query("""
+            INSERT INTO song_imports (
+                song_id, original_filename, file_size_bytes, file_hash_md5, file_hash_sha256,
+                fs_modified_at, import_format, parser_version, import_status,
+                source_path, version_number
+            )
+            OUTPUT INSERTED.id
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            kwargs.get('song_id'),
+            kwargs.get('original_filename', ''),
+            kwargs.get('file_size_bytes'),
+            kwargs.get('file_hash_md5'),
+            kwargs.get('file_hash_sha256'),
+            kwargs.get('fs_modified_at'),
+            kwargs.get('import_format'),
+            kwargs.get('parser_version', '2.5.0'),
+            kwargs.get('import_status', 'pending'),
+            kwargs.get('source_path'),
+            kwargs.get('version_number', 1),
+        ))
+        return result[0]['id'] if result else 0
+    except Exception as e:
+        logger.warning("Failed to create import record: %s", e)
+        return 0
+
+
+def _update_import_record(db: DatabaseConnection, import_id: int, **kwargs):
+    """Update a song_imports record with results."""
+    if import_id <= 0:
+        return
+    sets = []
+    params = []
+    for key, val in kwargs.items():
+        sets.append(f"{key} = ?")
+        params.append(val)
+    if not sets:
+        return
+    params.append(import_id)
+    try:
+        db.execute_non_query(
+            f"UPDATE song_imports SET {', '.join(sets)} WHERE id = ?",
+            tuple(params)
+        )
+    except Exception as e:
+        logger.warning("Failed to update import record %d: %s", import_id, e)
 
 
 # ---------------------------------------------------------------------------
@@ -318,8 +417,14 @@ async def import_score(
     title: Optional[str] = None,
     composer: Optional[str] = None,
     genre: Optional[str] = None,
+    fs_modified_at: Optional[str] = Form(None),
+    source_path: Optional[str] = Form(None),
 ):
-    """Import any supported music file and save to database."""
+    """Import any supported music file and save to database.
+
+    Returns import_id, import_status, note_count, version_number.
+    HTTP 200 on success, 207 on partial, 422 on total parse failure.
+    """
     ext = _ext(file.filename)
     if ext not in SUPPORTED_EXTENSIONS:
         raise HTTPException(
@@ -328,12 +433,21 @@ async def import_score(
         )
 
     tmp_path = None
+    t_start = time.monotonic()
+    db = DatabaseConnection(settings)
+
     try:
         content = await file.read()
         with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
             tmp.write(content)
             tmp_path = tmp.name
 
+        # Compute file hashes
+        hashes = _compute_file_hashes(content)
+        import_format = ext.lstrip('.')
+        warnings_list = []
+
+        # --- Parse with legacy parser (chords + metadata) ---
         parsed = parse_music_file(tmp_path, file.filename)
         source_type = {
             '.mscz': 'MuseScore', '.mscx': 'MuseScore',
@@ -341,58 +455,136 @@ async def import_score(
             '.mid': 'MIDI', '.midi': 'MIDI',
         }.get(ext, 'Unknown')
 
-        db = DatabaseConnection(settings)
-        result = _save_score_to_db(db, parsed, title, composer, genre, file.filename, source_type)
+        # --- Versioning ---
+        song_title = title or parsed.title or os.path.splitext(file.filename)[0]
+        base_title = _strip_version_suffix(song_title)
+        version_num = _compute_version(db, base_title)
+        if version_num > 1:
+            song_title = f"{base_title} ({version_num})"
 
-        # HL-REIMPORT: Run full note data extraction via import_engine
+        # Check for duplicate file hash
+        dup_warning = _check_duplicate_hash(db, hashes['md5'], base_title)
+        if dup_warning:
+            warnings_list.append(dup_warning)
+
+        # --- Create song + chords (legacy path) ---
+        result = _save_score_to_db(db, parsed, song_title, composer, genre, file.filename, source_type)
+        song_id = result["song_id"]
+
+        # Set base_title and version_number on the song
+        try:
+            db.execute_non_query(
+                "UPDATE Songs SET base_title = ?, version_number = ? WHERE id = ?",
+                (base_title, version_num, song_id)
+            )
+        except Exception as e:
+            logger.debug("Could not set version fields: %s", e)
+
+        # --- Create import provenance record ---
+        import_id = _create_import_record(
+            db,
+            song_id=song_id,
+            original_filename=file.filename,
+            file_size_bytes=len(content),
+            file_hash_md5=hashes['md5'],
+            file_hash_sha256=hashes['sha256'],
+            fs_modified_at=fs_modified_at,
+            import_format=import_format,
+            import_status='pending',
+            source_path=source_path or '',
+            version_number=version_num,
+        )
+
+        # --- Rich note extraction ---
         rich_result = None
+        rich_error = None
         try:
             rich_parsed = parse_upload_full(content, file.filename)
-            rich_result = save_full_parse(result["song_id"], rich_parsed, db)
-            logger.info("Rich import for song %d: %s", result["song_id"], rich_result)
+            rich_result = save_full_parse(song_id, rich_parsed, db)
+            logger.info("Rich import for song %d: %s", song_id, rich_result)
         except Exception as e:
-            logger.warning("Rich import failed for song %d (chords still saved): %s", result["song_id"], e)
+            rich_error = traceback.format_exc()
+            logger.error("Rich import failed for song %d: %s", song_id, e)
 
-        chord_warning = ""
-        if result["chords_created"] == 0:
-            if ext in ('.mscz', '.mscx'):
-                chord_warning = (
-                    " MuseScore format partially supported: metadata imported, but no explicit "
-                    "chord symbols (Harmony elements) found. If this score has written chord "
-                    "symbols, ensure they are visible in MuseScore. Alternatively, export as "
-                    ".mid from MuseScore for note-based chord analysis."
-                )
-            else:
-                chord_warning = (
-                    " No chord symbols found in this file — open the song and add analysis manually."
-                )
+        # --- Determine import status ---
+        note_count = rich_result['actual_notes'] if rich_result else 0
+        lyric_count = rich_result.get('lyrics_saved', 0) if rich_result else 0
+        chord_count = result["chords_created"]
+        duration_ms = int((time.monotonic() - t_start) * 1000)
 
-        measures_with_chords = len(set(c.measure_number for c in parsed.chords)) if parsed.chords else 0
+        if rich_result and note_count > 0:
+            import_status = 'success'
+        elif rich_result and note_count == 0 and chord_count > 0:
+            import_status = 'partial'
+            warnings_list.append("File parsed but no individual notes found. Chord symbols were saved.")
+        elif rich_error:
+            import_status = 'partial' if chord_count > 0 else 'failed'
+        else:
+            import_status = 'partial' if chord_count > 0 else 'failed'
 
-        return {
-            "success": True,
-            "song_id": result["song_id"],
-            "title": result["title"],
+        # --- Update import record ---
+        _update_import_record(
+            db, import_id,
+            song_id=song_id,
+            import_status=import_status,
+            note_count_imported=note_count,
+            lyric_count_imported=lyric_count,
+            chord_count_imported=chord_count,
+            import_duration_ms=duration_ms,
+            import_error_log=rich_error,
+            import_warnings='\n'.join(warnings_list) if warnings_list else None,
+        )
+
+        response_body = {
+            "success": import_status in ('success', 'partial'),
+            "song_id": song_id,
+            "title": song_title,
+            "version_number": version_num,
+            "import_id": import_id,
+            "import_status": import_status,
             "format": source_type,
             "measures_created": result["measures_created"],
-            "chords_created": result["chords_created"],
-            "notes_saved": rich_result["notes_saved"] if rich_result else 0,
-            "total_notes": rich_result["actual_notes"] if rich_result else 0,
-            "lyrics_saved": rich_result["lyrics_saved"] if rich_result else 0,
-            "message": f"Imported '{result['title']}' ({result['chords_created']} chords, {rich_result['actual_notes'] if rich_result else 0} notes){chord_warning}",
+            "chords_created": chord_count,
+            "note_count": note_count,
+            "lyric_count": lyric_count,
+            "import_duration_ms": duration_ms,
+            "warnings": warnings_list,
+            "message": f"Imported '{song_title}' ({chord_count} chords, {note_count} notes)",
             "diagnostic": {
-                "measures_with_chords": measures_with_chords,
-                "chords_derived": result["chords_created"],
                 "key_detected": parsed.key,
                 "time_signature": parsed.time_signature,
             },
         }
+
+        if import_status == 'failed':
+            response_body["error"] = str(rich_error or "Parse produced no data")
+            return JSONResponse(status_code=422, content=response_body)
+        elif import_status == 'partial':
+            return JSONResponse(status_code=207, content=response_body)
+        else:
+            return response_body
+
     except ValueError as e:
+        duration_ms = int((time.monotonic() - t_start) * 1000)
         raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:
+        duration_ms = int((time.monotonic() - t_start) * 1000)
         logger.exception("Error importing file %s", file.filename)
+        # Try to record the failure
+        try:
+            _create_import_record(
+                db,
+                original_filename=file.filename or 'unknown',
+                file_size_bytes=len(content) if 'content' in dir() else None,
+                import_format=ext.lstrip('.') if ext else None,
+                import_status='failed',
+                import_error_log=traceback.format_exc(),
+                import_duration_ms=duration_ms,
+            )
+        except Exception:
+            pass
         raise HTTPException(status_code=500, detail=f"Import failed: {e}")
     finally:
         if tmp_path and os.path.exists(tmp_path):

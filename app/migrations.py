@@ -330,3 +330,69 @@ def _migration_5_note_import_tables(db):
                 db.execute_non_query(f"ALTER TABLE Songs ADD {col_name} {col_def}")
         except Exception as e:
             logger.warning(f"  Migration 5i ({col_name}) warning: {e}")
+
+    # ======================================================================
+    # Migration 6: song_imports provenance table + Songs.version_number
+    # ======================================================================
+    logger.info("  Migration 6: song_imports provenance table...")
+
+    # 6a: song_imports table
+    try:
+        count = db.execute_scalar(
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'song_imports'"
+        )
+        if count == 0:
+            logger.info("  Migration 6a: Creating song_imports table...")
+            db.execute_non_query("""
+                CREATE TABLE song_imports (
+                    id INT IDENTITY(1,1) PRIMARY KEY,
+                    song_id INT NULL REFERENCES Songs(id) ON DELETE SET NULL,
+                    original_filename NVARCHAR(255) NOT NULL,
+                    file_size_bytes BIGINT NULL,
+                    file_hash_md5 NVARCHAR(32) NULL,
+                    file_hash_sha256 NVARCHAR(64) NULL,
+                    fs_created_at DATETIME NULL,
+                    fs_modified_at DATETIME NULL,
+                    uploaded_at DATETIME NOT NULL DEFAULT GETDATE(),
+                    import_format NVARCHAR(10) NULL,
+                    parser_version NVARCHAR(20) NULL,
+                    import_status NVARCHAR(20) NOT NULL DEFAULT 'pending',
+                    note_count_imported INT NULL,
+                    lyric_count_imported INT NULL,
+                    chord_count_imported INT NULL,
+                    import_duration_ms INT NULL,
+                    import_error_log NVARCHAR(MAX) NULL,
+                    import_warnings NVARCHAR(MAX) NULL,
+                    source_path NVARCHAR(500) NULL,
+                    version_number INT NOT NULL DEFAULT 1
+                )
+            """)
+            db.execute_non_query("CREATE INDEX ix_si_song_id ON song_imports(song_id)")
+            db.execute_non_query("CREATE INDEX ix_si_file_hash ON song_imports(file_hash_md5)")
+            db.execute_non_query("CREATE INDEX ix_si_uploaded ON song_imports(uploaded_at DESC)")
+    except Exception as e:
+        logger.warning(f"  Migration 6a warning: {e}")
+
+    # 6b: Add version_number to Songs
+    try:
+        exists = db.execute_scalar(
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
+            "WHERE TABLE_NAME = 'Songs' AND COLUMN_NAME = 'version_number'"
+        )
+        if exists == 0:
+            logger.info("  Migration 6b: Adding Songs.version_number...")
+            db.execute_non_query("ALTER TABLE Songs ADD version_number INT NOT NULL DEFAULT 1")
+    except Exception as e:
+        logger.warning(f"  Migration 6b warning: {e}")
+
+    # 6c: Add base_title to Songs (for versioning lookups)
+    try:
+        exists = db.execute_scalar(
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
+            "WHERE TABLE_NAME = 'Songs' AND COLUMN_NAME = 'base_title'"
+        )
+        if exists == 0:
+            logger.info("  Migration 6c: Adding Songs.base_title...")
+            db.execute_non_query("ALTER TABLE Songs ADD base_title NVARCHAR(200) NULL")
+    except Exception as e:
+        logger.warning(f"  Migration 6c warning: {e}")

@@ -57,6 +57,8 @@ class Song(SongBase):
     track_count: Optional[int] = None
     measure_count: Optional[int] = None
     total_notes: Optional[int] = None
+    version_number: Optional[int] = None
+    base_title: Optional[str] = None
 
     class Config:
         from_attributes = True
