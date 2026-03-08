@@ -12,6 +12,7 @@ from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, UploadFile, File, HTTPException, status, Query
 from app.services.score_parser import parse_music_file, ParsedScore, _DURATION_TO_BEATS
 from app.services.midi_parser import parse_midi_file
+from app.services.import_engine import parse_upload_full, save_full_parse
 from app.db.connection import DatabaseConnection
 from config.settings import Settings
 
@@ -144,35 +145,25 @@ async def reparse_notes(
         tmp_path = tmp.name
 
     try:
-        parsed = parse_music_file(tmp_path, file.filename)
+        # Use the new rich import engine for full note extraction
+        with open(tmp_path, 'rb') as f:
+            file_bytes = f.read()
+        rich_parsed = parse_upload_full(file_bytes, file.filename)
+        rich_result = save_full_parse(song_id, rich_parsed, db)
 
-        if not parsed.notes:
+        actual_notes = rich_result.get('actual_notes', 0)
+        if actual_notes == 0:
             return {
                 "song_id": song_id,
                 "notes_count": 0,
                 "message": "No note data found in this file. The file may not contain staff notation.",
             }
 
-        # Clear existing notes for this song
-        db.execute_non_query("DELETE FROM MelodyNotes WHERE song_id = ?", (song_id,))
-
-        # Insert extracted notes
-        notes_saved = 0
-        for note in parsed.notes:
-            try:
-                dur_beats = _DURATION_TO_BEATS.get(note.duration_type, 1.0)
-                db.execute_non_query(
-                    "INSERT INTO MelodyNotes (song_id, measure_number, beat_position, midi_note, duration, velocity) VALUES (?, ?, ?, ?, ?, ?)",
-                    (song_id, note.measure_number, note.beat_position, note.midi_pitch, dur_beats, 80)
-                )
-                notes_saved += 1
-            except Exception as e:
-                logger.debug("Note insert skip: %s", e)
-
         return {
             "song_id": song_id,
-            "notes_count": notes_saved,
-            "message": f"Extracted {notes_saved} notes for '{songs[0]['title']}'",
+            "notes_count": actual_notes,
+            "lyrics_count": rich_result.get('lyrics_saved', 0),
+            "message": f"Extracted {actual_notes} notes and {rich_result.get('lyrics_saved', 0)} lyrics for '{songs[0]['title']}'",
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -353,6 +344,15 @@ async def import_score(
         db = DatabaseConnection(settings)
         result = _save_score_to_db(db, parsed, title, composer, genre, file.filename, source_type)
 
+        # HL-REIMPORT: Run full note data extraction via import_engine
+        rich_result = None
+        try:
+            rich_parsed = parse_upload_full(content, file.filename)
+            rich_result = save_full_parse(result["song_id"], rich_parsed, db)
+            logger.info("Rich import for song %d: %s", result["song_id"], rich_result)
+        except Exception as e:
+            logger.warning("Rich import failed for song %d (chords still saved): %s", result["song_id"], e)
+
         chord_warning = ""
         if result["chords_created"] == 0:
             if ext in ('.mscz', '.mscx'):
@@ -376,7 +376,10 @@ async def import_score(
             "format": source_type,
             "measures_created": result["measures_created"],
             "chords_created": result["chords_created"],
-            "message": f"Imported '{result['title']}' ({result['chords_created']} chords){chord_warning}",
+            "notes_saved": rich_result["notes_saved"] if rich_result else 0,
+            "total_notes": rich_result["actual_notes"] if rich_result else 0,
+            "lyrics_saved": rich_result["lyrics_saved"] if rich_result else 0,
+            "message": f"Imported '{result['title']}' ({result['chords_created']} chords, {rich_result['actual_notes'] if rich_result else 0} notes){chord_warning}",
             "diagnostic": {
                 "measures_with_chords": measures_with_chords,
                 "chords_derived": result["chords_created"],

@@ -51,7 +51,13 @@ class Song(SongBase):
     id: int
     created_at: datetime
     updated_at: datetime
-    
+    has_note_data: Optional[bool] = None
+    has_lyrics: Optional[bool] = None
+    import_format: Optional[str] = None
+    track_count: Optional[int] = None
+    measure_count: Optional[int] = None
+    total_notes: Optional[int] = None
+
     class Config:
         from_attributes = True
 
