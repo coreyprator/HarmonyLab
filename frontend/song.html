@@ -20,7 +20,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v2.2.3</div>
+        <div class="nav-version">v2.3.0</div>
     </nav>
 
     <header>
@@ -100,6 +100,30 @@
                     <option value="B">B major / G# minor</option>
                 </select>
             </div>
+        </div>
+
+        <!-- Song Playback Transport (HL-050) -->
+        <div id="playback-transport" class="playback-transport" style="display:none">
+            <div class="transport-controls">
+                <button id="play-pause-btn" class="transport-btn" title="Play/Pause">&#9654;</button>
+                <button id="stop-btn" class="transport-btn" title="Stop">&#9632;</button>
+                <span id="playback-position" class="transport-position">0:00</span>
+                <span class="transport-separator">|</span>
+                <label class="tempo-label">BPM:
+                    <input type="range" id="tempo-slider" min="40" max="240" value="120" class="tempo-slider">
+                    <span id="tempo-value">120</span>
+                </label>
+                <span class="transport-separator">|</span>
+                <label class="transport-toggle">
+                    <input type="checkbox" id="chords-only-toggle">
+                    Arpeggiated
+                </label>
+            </div>
+        </div>
+
+        <!-- Piano Roll Display (HL-034) -->
+        <div id="piano-roll-container" class="piano-roll-container" style="display:none">
+            <canvas id="piano-roll-canvas" width="1200" height="200"></canvas>
         </div>
 
         <!-- Function Legend (analysis view) -->
@@ -1790,8 +1814,9 @@
             // Authenticated - show page and load content
             document.body.style.display = '';
             window.auth.updateAuthUI();
-            init();
+            await init();
             setupChordAudio();
+            setupPlaybackTransport();
         });
 
         // ==========================================
@@ -1867,6 +1892,424 @@
             // Then open editor if in analysis mode
             originalOpenChordEditor(chordIndex);
         };
+        // ==========================================
+        // SONG PLAYBACK ENGINE (HL-050)
+        // ==========================================
+
+        const HarmonyPlayback = (function() {
+            let part = null;
+            let isPlaying = false;
+            let isPaused = false;
+            let chordEvents = [];
+            let currentHighlight = null;
+            let positionInterval = null;
+            let arpeggiateMode = false;
+            let totalBeats = 0;
+
+            function buildEvents(chords, beatsPerMeasure) {
+                chordEvents = [];
+                for (const chord of chords) {
+                    const measure = chord.measure || 1;
+                    const beat = parseFloat(chord.beat) || 1;
+                    const timeInBeats = (measure - 1) * beatsPerMeasure + (beat - 1);
+                    chordEvents.push({
+                        time: `0:${timeInBeats}:0`,
+                        timeBeats: timeInBeats,
+                        symbol: chord.symbol,
+                        measure: measure,
+                        index: chord.index
+                    });
+                }
+                if (chordEvents.length > 0) {
+                    const last = chordEvents[chordEvents.length - 1];
+                    totalBeats = last.timeBeats + beatsPerMeasure;
+                }
+            }
+
+            function load(chords, bpm, beatsPerMeasure) {
+                stop();
+                Tone.getTransport().bpm.value = bpm;
+                buildEvents(chords, beatsPerMeasure);
+
+                part = new Tone.Part((time, ev) => {
+                    const notes = HarmonyAudio.parseChord(ev.symbol, 3);
+                    if (notes.length === 0) return;
+
+                    if (!HarmonyAudio.isReady()) return;
+
+                    if (arpeggiateMode) {
+                        const delay = 0.08;
+                        notes.forEach((note, i) => {
+                            sampler().triggerAttackRelease(note, '2n', time + i * delay);
+                        });
+                    } else {
+                        sampler().triggerAttackRelease(notes, '2n', time);
+                    }
+
+                    Tone.getDraw().schedule(() => {
+                        highlightChord(ev.index);
+                    }, time);
+                }, chordEvents.map(ev => [ev.time, ev]));
+
+                part.start(0);
+
+                // Schedule stop at end
+                Tone.getTransport().schedule(() => {
+                    stop();
+                }, `0:${totalBeats}:0`);
+
+                // Show transport
+                document.getElementById('playback-transport').style.display = '';
+                document.getElementById('tempo-slider').value = bpm;
+                document.getElementById('tempo-value').textContent = bpm;
+            }
+
+            function sampler() {
+                // Access the internal sampler from HarmonyAudio
+                // We need to use the public API to play
+                return window._harmonyPlaybackSampler;
+            }
+
+            async function play() {
+                if (!audioInitialized) await initAudioIfNeeded();
+
+                // Create a dedicated sampler for playback if needed
+                if (!window._harmonyPlaybackSampler) {
+                    window._harmonyPlaybackSampler = new Tone.Sampler({
+                        urls: {
+                            'A0': 'A0.mp3', 'C1': 'C1.mp3', 'D#1': 'Ds1.mp3', 'F#1': 'Fs1.mp3',
+                            'A1': 'A1.mp3', 'C2': 'C2.mp3', 'D#2': 'Ds2.mp3', 'F#2': 'Fs2.mp3',
+                            'A2': 'A2.mp3', 'C3': 'C3.mp3', 'D#3': 'Ds3.mp3', 'F#3': 'Fs3.mp3',
+                            'A3': 'A3.mp3', 'C4': 'C4.mp3', 'D#4': 'Ds4.mp3', 'F#4': 'Fs4.mp3',
+                            'A4': 'A4.mp3', 'C5': 'C5.mp3', 'D#5': 'Ds5.mp3', 'F#5': 'Fs5.mp3',
+                            'A5': 'A5.mp3', 'C6': 'C6.mp3', 'D#6': 'Ds6.mp3', 'F#6': 'Fs6.mp3',
+                            'A6': 'A6.mp3', 'C7': 'C7.mp3', 'D#7': 'Ds7.mp3', 'F#7': 'Fs7.mp3',
+                            'A7': 'A7.mp3', 'C8': 'C8.mp3'
+                        },
+                        baseUrl: 'https://tonejs.github.io/audio/salamander/',
+                        onload: () => { console.log('Playback sampler loaded'); }
+                    }).toDestination();
+
+                    // Wait for sampler to load
+                    await new Promise(resolve => {
+                        const check = setInterval(() => {
+                            if (window._harmonyPlaybackSampler.loaded) {
+                                clearInterval(check);
+                                resolve();
+                            }
+                        }, 100);
+                    });
+                }
+
+                await Tone.start();
+                if (isPaused) {
+                    Tone.getTransport().start();
+                } else {
+                    Tone.getTransport().start('+0.1');
+                }
+                isPlaying = true;
+                isPaused = false;
+                updatePlayButton();
+                startPositionUpdate();
+            }
+
+            function pause() {
+                Tone.getTransport().pause();
+                isPlaying = false;
+                isPaused = true;
+                updatePlayButton();
+                stopPositionUpdate();
+            }
+
+            function stop() {
+                Tone.getTransport().stop();
+                Tone.getTransport().position = 0;
+                if (part) { part.stop(0); part.dispose(); part = null; }
+                if (window._harmonyPlaybackSampler) {
+                    window._harmonyPlaybackSampler.releaseAll();
+                }
+                isPlaying = false;
+                isPaused = false;
+                updatePlayButton();
+                stopPositionUpdate();
+                clearHighlight();
+                updatePositionDisplay();
+            }
+
+            function togglePlayPause() {
+                if (isPlaying) {
+                    pause();
+                } else {
+                    if (!part && chordEvents.length > 0) {
+                        // Reload if disposed
+                        const bpm = parseInt(document.getElementById('tempo-slider').value) || 120;
+                        const beatsPerMeasure = parseTimeSignature();
+                        loadFromCurrentData(bpm, beatsPerMeasure);
+                    }
+                    play();
+                }
+            }
+
+            function setTempo(bpm) {
+                Tone.getTransport().bpm.value = bpm;
+            }
+
+            function setArpeggiate(val) {
+                arpeggiateMode = val;
+            }
+
+            function highlightChord(index) {
+                clearHighlight();
+                if (window.allChords && window.allChords[index]) {
+                    const el = window.allChords[index].element;
+                    if (el) {
+                        el.classList.add('chord-playing');
+                        currentHighlight = el;
+                    }
+                }
+                // Update piano roll cursor
+                if (chordEvents[index]) {
+                    updatePianoRollCursor(chordEvents[index].timeBeats);
+                }
+            }
+
+            function clearHighlight() {
+                if (currentHighlight) {
+                    currentHighlight.classList.remove('chord-playing');
+                    currentHighlight = null;
+                }
+            }
+
+            function updatePlayButton() {
+                const btn = document.getElementById('play-pause-btn');
+                if (btn) btn.innerHTML = isPlaying ? '&#10074;&#10074;' : '&#9654;';
+            }
+
+            function startPositionUpdate() {
+                stopPositionUpdate();
+                positionInterval = setInterval(updatePositionDisplay, 200);
+            }
+
+            function stopPositionUpdate() {
+                if (positionInterval) {
+                    clearInterval(positionInterval);
+                    positionInterval = null;
+                }
+            }
+
+            function updatePositionDisplay() {
+                const el = document.getElementById('playback-position');
+                if (!el) return;
+                const pos = Tone.getTransport().position;
+                const parts = pos.split(':');
+                const bars = parseInt(parts[0]) || 0;
+                const beats = parseInt(parts[1]) || 0;
+                el.textContent = `${bars + 1}:${beats + 1}`;
+            }
+
+            function getIsPlaying() { return isPlaying; }
+
+            return {
+                load, play, pause, stop, togglePlayPause,
+                setTempo, setArpeggiate, isPlaying: getIsPlaying,
+                get chordEvents() { return chordEvents; },
+                get totalBeats() { return totalBeats; }
+            };
+        })();
+
+        function parseTimeSignature() {
+            const ts = songData?.time_signature || '4/4';
+            const parts = ts.split('/');
+            return parseInt(parts[0]) || 4;
+        }
+
+        function parseTempo() {
+            const tm = songData?.tempo_marking || '120 BPM';
+            const match = tm.match(/(\d+)/);
+            return match ? parseInt(match[1]) : 120;
+        }
+
+        function loadFromCurrentData(bpm, beatsPerMeasure) {
+            if (!analysisData?.chords || analysisData.chords.length === 0) return;
+            const chords = analysisData.chords.map(c => ({
+                symbol: c.symbol,
+                measure: c.measure,
+                beat: c.beat,
+                index: c.index
+            }));
+            HarmonyPlayback.load(chords, bpm, beatsPerMeasure);
+        }
+
+        function setupPlaybackTransport() {
+            if (!analysisData?.chords || analysisData.chords.length === 0) return;
+
+            const bpm = parseTempo();
+            const beatsPerMeasure = parseTimeSignature();
+            loadFromCurrentData(bpm, beatsPerMeasure);
+
+            // Show piano roll
+            setupPianoRoll();
+
+            // Wire controls
+            document.getElementById('play-pause-btn').addEventListener('click', () => {
+                HarmonyPlayback.togglePlayPause();
+            });
+            document.getElementById('stop-btn').addEventListener('click', () => {
+                HarmonyPlayback.stop();
+                // Reload for next play
+                const curBpm = parseInt(document.getElementById('tempo-slider').value) || bpm;
+                loadFromCurrentData(curBpm, beatsPerMeasure);
+            });
+            document.getElementById('tempo-slider').addEventListener('input', (e) => {
+                const val = parseInt(e.target.value);
+                document.getElementById('tempo-value').textContent = val;
+                HarmonyPlayback.setTempo(val);
+            });
+            document.getElementById('chords-only-toggle').addEventListener('change', (e) => {
+                HarmonyPlayback.setArpeggiate(e.target.checked);
+            });
+        }
+
+        // ==========================================
+        // PIANO ROLL (HL-034)
+        // ==========================================
+
+        let pianoRollCtx = null;
+        let pianoRollData = [];
+        let pianoRollCursorBeat = 0;
+
+        function setupPianoRoll() {
+            if (!analysisData?.chords || analysisData.chords.length === 0) return;
+
+            const container = document.getElementById('piano-roll-container');
+            const canvas = document.getElementById('piano-roll-canvas');
+            container.style.display = '';
+
+            // Make canvas responsive
+            canvas.width = container.clientWidth || 1200;
+            canvas.height = 200;
+            pianoRollCtx = canvas.getContext('2d');
+
+            // Build piano roll data from chord tones
+            pianoRollData = [];
+            const beatsPerMeasure = parseTimeSignature();
+
+            for (const chord of analysisData.chords) {
+                const notes = HarmonyAudio.parseChord(chord.symbol, 4);
+                const measure = chord.measure || 1;
+                const beat = parseFloat(chord.beat) || 1;
+                const timeInBeats = (measure - 1) * beatsPerMeasure + (beat - 1);
+
+                // Find duration until next chord
+                const nextChord = analysisData.chords.find(c =>
+                    (c.measure > chord.measure) || (c.measure === chord.measure && parseFloat(c.beat) > parseFloat(chord.beat))
+                );
+                let durationBeats = beatsPerMeasure; // default: one full measure
+                if (nextChord) {
+                    const nextTime = (nextChord.measure - 1) * beatsPerMeasure + (parseFloat(nextChord.beat) || 1) - 1;
+                    durationBeats = nextTime - timeInBeats;
+                }
+
+                for (const noteName of notes) {
+                    const midi = noteNameToMidi(noteName);
+                    pianoRollData.push({
+                        time: timeInBeats,
+                        midi: midi,
+                        duration: durationBeats,
+                        color: chord.color || '#3b82f6',
+                        symbol: chord.symbol
+                    });
+                }
+            }
+
+            renderPianoRoll();
+        }
+
+        function noteNameToMidi(name) {
+            const noteMap = {'C':0,'C#':1,'Db':1,'D':2,'D#':3,'Eb':3,'E':4,'F':5,'F#':6,'Gb':6,'G':7,'G#':8,'Ab':8,'A':9,'A#':10,'Bb':10,'B':11};
+            const match = name.match(/^([A-G][#b]?)(\d+)$/);
+            if (!match) return 60;
+            return (parseInt(match[2]) + 1) * 12 + (noteMap[match[1]] || 0);
+        }
+
+        function renderPianoRoll() {
+            if (!pianoRollCtx || pianoRollData.length === 0) return;
+
+            const canvas = pianoRollCtx.canvas;
+            const W = canvas.width;
+            const H = canvas.height;
+            const ctx = pianoRollCtx;
+
+            ctx.clearRect(0, 0, W, H);
+
+            // Calculate scale
+            const beatsPerMeasure = parseTimeSignature();
+            const totalMeasures = analysisData.total_measures || 32;
+            const totalBeats = totalMeasures * beatsPerMeasure;
+            const pxPerBeat = W / totalBeats;
+
+            // Find MIDI range
+            const midiNotes = pianoRollData.map(n => n.midi);
+            const minMidi = Math.min(...midiNotes) - 2;
+            const maxMidi = Math.max(...midiNotes) + 2;
+            const midiRange = maxMidi - minMidi || 1;
+            const noteHeight = Math.min(H / midiRange, 12);
+
+            // Draw measure grid
+            ctx.strokeStyle = '#374151';
+            ctx.lineWidth = 0.5;
+            for (let m = 0; m <= totalMeasures; m++) {
+                const x = m * beatsPerMeasure * pxPerBeat;
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, H);
+                ctx.stroke();
+
+                // Measure numbers every 4 measures
+                if (m > 0 && m % 4 === 0) {
+                    ctx.fillStyle = '#6b7280';
+                    ctx.font = '10px sans-serif';
+                    ctx.fillText(m.toString(), x + 2, H - 4);
+                }
+            }
+
+            // Draw notes
+            for (const note of pianoRollData) {
+                const x = note.time * pxPerBeat;
+                const y = H - ((note.midi - minMidi) / midiRange) * (H - 20) - 10;
+                const w = Math.max(note.duration * pxPerBeat - 1, 2);
+
+                ctx.fillStyle = note.color || '#3b82f6';
+                ctx.globalAlpha = 0.8;
+                ctx.fillRect(x, y - noteHeight / 2, w, noteHeight - 1);
+                ctx.globalAlpha = 1.0;
+            }
+
+            // Draw cursor
+            if (pianoRollCursorBeat > 0) {
+                const cx = pianoRollCursorBeat * pxPerBeat;
+                ctx.fillStyle = '#ef4444';
+                ctx.fillRect(cx, 0, 2, H);
+            }
+        }
+
+        function updatePianoRollCursor(beat) {
+            pianoRollCursorBeat = beat;
+            renderPianoRoll();
+        }
+
+        // Periodic cursor update during playback
+        setInterval(() => {
+            if (HarmonyPlayback.isPlaying()) {
+                const pos = Tone.getTransport().position;
+                const parts = pos.split(':');
+                const bars = parseInt(parts[0]) || 0;
+                const beats = parseFloat(parts[1]) || 0;
+                const beatsPerMeasure = parseTimeSignature();
+                const totalBeat = bars * beatsPerMeasure + beats;
+                updatePianoRollCursor(totalBeat);
+            }
+        }, 50);
     </script>
     <style>
         /* Audio Panel Styles */
@@ -2098,6 +2541,104 @@
 
         .success {
             color: #22c55e;
+        }
+
+        /* Transport Controls (HL-050) */
+        .playback-transport {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 8px 16px;
+            margin-bottom: 12px;
+        }
+
+        .transport-controls {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .transport-btn {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            color: var(--text);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.15s;
+        }
+
+        .transport-btn:hover {
+            border-color: var(--accent);
+            background: var(--bg-hover);
+        }
+
+        .transport-position {
+            font-family: monospace;
+            font-size: 1rem;
+            color: var(--text);
+            min-width: 40px;
+        }
+
+        .transport-separator {
+            color: var(--border);
+        }
+
+        .tempo-label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .tempo-slider {
+            width: 100px;
+            cursor: pointer;
+        }
+
+        #tempo-value {
+            font-family: monospace;
+            min-width: 28px;
+            color: var(--text);
+        }
+
+        .transport-toggle {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+        }
+
+        /* Chord highlight during playback */
+        .chord-playing {
+            outline: 3px solid var(--accent);
+            outline-offset: 2px;
+            transform: scale(1.05);
+            box-shadow: 0 0 12px rgba(59, 130, 246, 0.5);
+        }
+
+        /* Piano Roll (HL-034) */
+        .piano-roll-container {
+            background: #1a1a2e;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 12px;
+            overflow-x: auto;
+        }
+
+        #piano-roll-canvas {
+            display: block;
+            width: 100%;
+            height: 200px;
         }
     </style>
 </body>
