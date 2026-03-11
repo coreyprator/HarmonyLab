@@ -278,6 +278,42 @@ All routes registered in `main.py` lines 102-115. Total: 45+ endpoints.
 
 ---
 
+## Schema
+
+**Introspection URL:** https://harmonylab-wmrla7fhwa-uc.a.run.app/openapi.json
+**Note:** harmonylab.rentyourcio.com is the frontend (React). Schema is on the backend direct URL.
+**Framework:** FastAPI (auto-generated OpenAPI 3.x)
+
+Phase 0 schema fetch:
+```bash
+curl -s https://harmonylab-wmrla7fhwa-uc.a.run.app/openapi.json | python -c "
+import sys, json
+spec = json.load(sys.stdin)
+paths = spec.get('paths', {})
+for p in sorted(paths.keys()):
+    print(p)
+"
+```
+
+Key endpoint paths (update as routes change):
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| /health | GET | Health check |
+| /api/v1/songs/ | GET, POST | List or create songs |
+| /api/v1/songs/{song_id} | GET, PUT, DELETE | Manage song |
+| /api/v1/songs/{song_id}/notes | GET | Get song note data |
+| /api/v1/songs/{song_id}/imports | GET | Import history for song |
+| /api/v1/imports/score/preview | POST | Preview score file before import |
+| /api/v1/imports/score/import | POST | Import score file (.mscx/.musicxml) |
+| /api/v1/imports/batch | POST | Batch import multiple files |
+| /api/v1/analysis/songs/{song_id} | GET | Analyze song harmony |
+| /api/v1/analysis/songs/{song_id}/patterns | GET | Harmonic patterns (ii-V-I etc.) |
+| /api/v1/analysis/songs/{song_id}/key-centers | GET | Key center analysis |
+| /api/v1/chords/ | GET | List chords |
+| /api/v1/quiz/generate | POST | Generate chord recognition quiz |
+
+---
+
 ## 7. Services
 
 ### Universal Score Parser (`app/services/score_parser.py`) *(added 2026-02-21, updated 2026-02-22)*
