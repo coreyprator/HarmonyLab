@@ -276,6 +276,7 @@ async def get_song_imports(song_id: int, db: DatabaseConnection = Depends(get_db
 
     return {
         'song_id': song_id,
+        'import_count': len(imports),
         'imports': [dict(i) for i in imports],
     }
 
