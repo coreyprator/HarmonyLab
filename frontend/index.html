@@ -18,7 +18,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v2.5.1</div>
+        <div class="nav-version">v2.7.0</div>
     </nav>
 
     <header>
@@ -41,6 +41,11 @@
             <button class="btn btn-primary" onclick="openImportModal()">+ Import Score</button>
             <button class="btn" onclick="openBatchModal()">Batch Import</button>
             <button class="btn" onclick="seedJazzStandards()">Seed Standards</button>
+            <span style="flex:1"></span>
+            <label class="select-all-toggle" id="select-all-toggle" style="display:none;font-size:0.85rem;cursor:pointer;gap:4px;align-items:center">
+                <input type="checkbox" id="select-all-cb" onchange="toggleSelectAll(this.checked)"> Select All
+            </label>
+            <button class="btn btn-danger btn-sm" id="bulk-delete-btn" style="display:none" onclick="bulkDeleteSelected()">Delete Selected (<span id="bulk-count">0</span>)</button>
         </div>
 
         <!-- HL-014: Universal Score Import Modal -->
@@ -194,23 +199,75 @@
             }
         }
 
+        let allSongsData = [];
+
         function renderSongs(songs) {
             const container = document.getElementById('songs-list');
+            allSongsData = songs || [];
             if (!songs || songs.length === 0) {
                 container.innerHTML = '<p class="empty">No songs found.</p>';
+                document.getElementById('select-all-toggle').style.display = 'none';
                 return;
             }
+            document.getElementById('select-all-toggle').style.display = 'flex';
             container.innerHTML = songs.map(s => `
-                <a href="song.html?id=${s.id}" class="song-card">
-                    <div class="song-title">${escHtml(s.title)}${s.version_number > 1 ? `<span class="version-badge">v${s.version_number}</span>` : ''}${s.has_note_data ? ' <span style="font-size:0.7rem;color:var(--tonic)">[notes]</span>' : ''}</div>
-                    <div class="song-meta">
-                        ${s.composer ? `<span>${escHtml(s.composer)}</span>` : ''}
-                        ${s.original_key ? `<span class="key-badge">${escHtml(s.original_key)}</span>` : ''}
-                        ${s.genre ? `<span class="genre-badge">${escHtml(s.genre)}</span>` : ''}
-                        ${s.has_note_data ? `<a href="audit.html?id=${s.id}" class="btn btn-sm" style="font-size:0.7rem;padding:2px 8px;margin-left:auto" onclick="event.stopPropagation()">Audit</a>` : ''}
-                    </div>
-                </a>
+                <div class="song-card-wrapper" data-song-id="${s.id}">
+                    <input type="checkbox" class="song-checkbox" data-id="${s.id}"
+                           onclick="event.stopPropagation(); updateBulkUI()"
+                           style="margin:0 8px 0 0;cursor:pointer;flex-shrink:0">
+                    <a href="song.html?id=${s.id}" class="song-card" style="flex:1">
+                        <div class="song-title">${escHtml(s.title)}${s.version_number > 1 ? `<span class="version-badge">v${s.version_number}</span>` : ''}${s.has_note_data ? ' <span style="font-size:0.7rem;color:var(--tonic)">[notes]</span>' : ''}</div>
+                        <div class="song-meta">
+                            ${s.composer ? `<span>${escHtml(s.composer)}</span>` : ''}
+                            ${s.original_key ? `<span class="key-badge">${escHtml(s.original_key)}</span>` : ''}
+                            ${s.genre ? `<span class="genre-badge">${escHtml(s.genre)}</span>` : ''}
+                            ${s.has_note_data ? `<a href="audit.html?id=${s.id}" class="btn btn-sm" style="font-size:0.7rem;padding:2px 8px;margin-left:auto" onclick="event.stopPropagation()">Audit</a>` : ''}
+                        </div>
+                    </a>
+                </div>
             `).join('');
+            updateBulkUI();
+        }
+
+        function getSelectedSongIds() {
+            return Array.from(document.querySelectorAll('.song-checkbox:checked')).map(cb => parseInt(cb.dataset.id));
+        }
+
+        function updateBulkUI() {
+            const selected = getSelectedSongIds();
+            const btn = document.getElementById('bulk-delete-btn');
+            const count = document.getElementById('bulk-count');
+            btn.style.display = selected.length > 0 ? '' : 'none';
+            count.textContent = selected.length;
+        }
+
+        function toggleSelectAll(checked) {
+            document.querySelectorAll('.song-checkbox').forEach(cb => { cb.checked = checked; });
+            updateBulkUI();
+        }
+
+        async function bulkDeleteSelected() {
+            const ids = getSelectedSongIds();
+            if (ids.length === 0) return;
+            if (!confirm(`Delete ${ids.length} selected song(s)?\n\nThis will remove all chords, notes, and analysis data. This cannot be undone.`)) return;
+
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/songs/bulk/delete`, {
+                    method: 'DELETE',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(ids)
+                });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.detail || 'Bulk delete failed');
+                }
+                const result = await res.json();
+                showToast(`Deleted ${result.deleted} of ${result.requested} songs`, 'success');
+                document.getElementById('select-all-cb').checked = false;
+                loadSongs();
+            } catch (err) {
+                showToast('Delete failed: ' + err.message);
+            }
         }
 
         function escHtml(str) {
@@ -537,6 +594,9 @@
         .ir-warnings { font-size: 0.8rem; color: #f59e0b; margin-top: 6px; }
         .ir-error { font-size: 0.75rem; color: #ef4444; background: rgba(239,68,68,0.1); padding: 8px; border-radius: 4px; margin-top: 6px; font-family: monospace; white-space: pre-wrap; max-height: 150px; overflow-y: auto; }
         .version-badge { font-size: 0.65rem; background: var(--bg-hover); color: var(--text-muted); padding: 1px 5px; border-radius: 3px; margin-left: 4px; }
+        .song-card-wrapper { display: flex; align-items: center; }
+        .song-card-wrapper .song-card { margin: 0; }
+        .select-all-toggle { display: flex; }
     </style>
 </body>
 </html>

@@ -20,7 +20,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v2.5.1</div>
+        <div class="nav-version">v2.7.0</div>
     </nav>
 
     <header>
@@ -124,8 +124,12 @@
 
         <!-- Piano Roll Display (HL-034) -->
         <div id="piano-roll-container" class="piano-roll-container" style="display:none">
-            <canvas id="piano-roll-canvas" width="1200" height="200"></canvas>
+            <div class="piano-roll-wrapper">
+                <div id="piano-roll-labels" class="piano-roll-labels"></div>
+                <canvas id="piano-roll-canvas" width="1200" height="200"></canvas>
+            </div>
         </div>
+        <div id="piano-tooltip" class="piano-tooltip" style="display:none"></div>
 
         <!-- Function Legend (analysis view) -->
         <div class="function-legend" id="function-legend" style="display:none">
@@ -403,6 +407,11 @@
                 <div class="form-group">
                     <label>Notes</label>
                     <textarea id="modal-notes" rows="2" placeholder="Analysis notes..."></textarea>
+                </div>
+                <hr style="border:none;border-top:1px solid var(--border);margin:8px 0">
+                <div class="form-group">
+                    <label>Note Breakdown</label>
+                    <div id="modal-note-breakdown" class="note-breakdown"></div>
                 </div>
             </div>
             <div class="modal-footer">
@@ -1049,7 +1058,77 @@
             document.getElementById('pivot-key-group').style.display =
                 ac.is_pivot ? '' : 'none';
 
+            // Populate note breakdown
+            updateNoteBreakdown(ac.symbol);
+
             document.getElementById('chord-modal').style.display = 'flex';
+        }
+
+        function getChordNotes(symbol) {
+            // Parse chord symbol and return constituent note names
+            const noteNames = ['C','C#','D','Eb','E','F','F#','G','Ab','A','Bb','B'];
+            const noteMap = {'C':0,'C#':1,'Db':1,'D':2,'D#':3,'Eb':3,'E':4,'F':5,'F#':6,'Gb':6,'G':7,'G#':8,'Ab':8,'A':9,'A#':10,'Bb':10,'B':11};
+
+            const normalized = normalizeChordDisplay(symbol);
+            let bass = '';
+            let mainPart = normalized;
+            const slashIdx = normalized.indexOf('/');
+            if (slashIdx > 0) {
+                bass = normalized.slice(slashIdx + 1);
+                mainPart = normalized.slice(0, slashIdx);
+            }
+
+            const rootMatch = mainPart.match(/^([A-G][#b]?)(.*)/);
+            if (!rootMatch) return [];
+            const root = rootMatch[1];
+            const qual = rootMatch[2].toLowerCase();
+            const r = noteMap[root];
+            if (r === undefined) return [];
+
+            // Intervals from root for common chord types
+            let intervals = [0, 4, 7]; // major triad default
+            if (qual.startsWith('m7b5') || qual.startsWith('min7b5')) intervals = [0, 3, 6, 10];
+            else if (qual.startsWith('dim7')) intervals = [0, 3, 6, 9];
+            else if (qual.startsWith('dim')) intervals = [0, 3, 6];
+            else if (qual.startsWith('aug7')) intervals = [0, 4, 8, 10];
+            else if (qual.startsWith('aug')) intervals = [0, 4, 8];
+            else if (qual.startsWith('mmaj7')) intervals = [0, 3, 7, 11];
+            else if (qual.startsWith('maj9') || qual.startsWith('maj9')) intervals = [0, 4, 7, 11, 14];
+            else if (qual.startsWith('maj7') || qual.startsWith('maj7')) intervals = [0, 4, 7, 11];
+            else if (qual.startsWith('m9') || qual.startsWith('min9')) intervals = [0, 3, 7, 10, 14];
+            else if (qual.startsWith('m7') || qual.startsWith('min7') || qual.startsWith('-7')) intervals = [0, 3, 7, 10];
+            else if (qual.startsWith('m6') || qual.startsWith('min6')) intervals = [0, 3, 7, 9];
+            else if (qual.startsWith('m') || qual.startsWith('min') || qual.startsWith('-')) intervals = [0, 3, 7];
+            else if (qual.startsWith('7#9')) intervals = [0, 4, 7, 10, 15];
+            else if (qual.startsWith('7b9')) intervals = [0, 4, 7, 10, 13];
+            else if (qual.startsWith('13')) intervals = [0, 4, 7, 10, 14, 21];
+            else if (qual.startsWith('9')) intervals = [0, 4, 7, 10, 14];
+            else if (qual.startsWith('7') || qual.startsWith('dom')) intervals = [0, 4, 7, 10];
+            else if (qual.startsWith('6')) intervals = [0, 4, 7, 9];
+            else if (qual.startsWith('sus4') || qual.startsWith('sus')) intervals = [0, 5, 7];
+            else if (qual.startsWith('sus2')) intervals = [0, 2, 7];
+            else if (qual.startsWith('alt')) intervals = [0, 4, 8, 10, 13];
+
+            const notes = intervals.map(i => noteNames[(r + i) % 12]);
+            if (bass && noteMap[bass] !== undefined) {
+                const bassNote = noteNames[noteMap[bass] % 12];
+                if (!notes.includes(bassNote)) notes.unshift(bassNote);
+            }
+            return notes;
+        }
+
+        function updateNoteBreakdown(symbol) {
+            const el = document.getElementById('modal-note-breakdown');
+            if (!el) return;
+            const notes = getChordNotes(symbol);
+            if (notes.length === 0) {
+                el.innerHTML = '<span style="color:var(--text-muted)">Unable to determine notes</span>';
+                return;
+            }
+            el.innerHTML = `<div class="breakdown-notes">${notes.map(n =>
+                `<span class="breakdown-note">${n}</span>`
+            ).join(' ')}</div>
+            <div class="breakdown-label" style="font-size:0.8rem;color:var(--text-muted);margin-top:4px">${normalizeChordDisplay(symbol)} = ${notes.join(', ')}</div>`;
         }
 
         function updateAnalysisChordPreview() {
@@ -1060,6 +1139,7 @@
             let symbol = root + quality + ext;
             if (bass) symbol += '/' + bass;
             document.getElementById('modal-symbol-preview').textContent = symbol;
+            updateNoteBreakdown(symbol);
 
             // Recalculate Roman numeral via API
             const keyContext = document.getElementById('modal-key-context').value
@@ -1714,10 +1794,11 @@
             for (const n of notes) {
                 const chords = chordsByMeasure[n.measure_number] || [];
                 const chordStr = chords.join(', ') || '--';
+                const noteName = n.note_name || midiToNoteName(n.midi_note);
                 html += `<tr>
                     <td>${n.measure_number}</td>
-                    <td>${n.beat_position.toFixed(1)}</td>
-                    <td class="note-name">${midiToNoteName(n.midi_note)}</td>
+                    <td>${(n.beat_position || 1).toFixed(1)}</td>
+                    <td class="note-name">${escHtml(noteName)}</td>
                     <td>${n.midi_note}</td>
                     <td>${n.duration || '--'}</td>
                     <td>${escHtml(chordStr)}</td>
@@ -2238,6 +2319,9 @@
             return (parseInt(match[2]) + 1) * 12 + (noteMap[match[1]] || 0);
         }
 
+        // Store layout info for tooltip hit-testing
+        let pianoRollLayout = { minMidi: 0, maxMidi: 127, midiRange: 1, noteHeight: 12, pxPerBeat: 1, H: 200 };
+
         function renderPianoRoll() {
             if (!pianoRollCtx || pianoRollData.length === 0) return;
 
@@ -2260,6 +2344,9 @@
             const maxMidi = Math.max(...midiNotes) + 2;
             const midiRange = maxMidi - minMidi || 1;
             const noteHeight = Math.min(H / midiRange, 12);
+
+            // Store layout for tooltips
+            pianoRollLayout = { minMidi, maxMidi, midiRange, noteHeight, pxPerBeat, H };
 
             // Draw measure grid
             ctx.strokeStyle = '#374151';
@@ -2297,12 +2384,87 @@
                 ctx.fillStyle = '#ef4444';
                 ctx.fillRect(cx, 0, 2, H);
             }
+
+            // Render LHS note labels
+            renderPianoLabels(minMidi, maxMidi, midiRange, H);
+        }
+
+        function renderPianoLabels(minMidi, maxMidi, midiRange, H) {
+            const labelsEl = document.getElementById('piano-roll-labels');
+            if (!labelsEl) return;
+            labelsEl.innerHTML = '';
+            labelsEl.style.height = H + 'px';
+
+            const noteNames = ['C','C#','D','Eb','E','F','F#','G','Ab','A','Bb','B'];
+            for (let midi = minMidi; midi <= maxMidi; midi++) {
+                const noteName = noteNames[midi % 12];
+                const octave = Math.floor(midi / 12) - 1;
+                // Only label natural notes and C notes
+                if (noteName.length > 1 && noteName !== 'Eb' && noteName !== 'Bb' && noteName !== 'Ab') continue;
+                // Skip sharps/flats except for common ones, show all C notes
+                if (noteName.length > 1 && noteName[0] !== 'C') continue;
+
+                const y = H - ((midi - minMidi) / midiRange) * (H - 20) - 10;
+                const label = document.createElement('div');
+                label.className = 'piano-label' + (noteName === 'C' ? ' piano-label-c' : '');
+                label.textContent = noteName + octave;
+                label.style.top = (y - 5) + 'px';
+                labelsEl.appendChild(label);
+            }
         }
 
         function updatePianoRollCursor(beat) {
             pianoRollCursorBeat = beat;
             renderPianoRoll();
         }
+
+        // Piano roll tooltip on hover
+        (function() {
+            const canvas = document.getElementById('piano-roll-canvas');
+            const tooltip = document.getElementById('piano-tooltip');
+            if (!canvas || !tooltip) return;
+
+            canvas.addEventListener('mousemove', (e) => {
+                if (pianoRollData.length === 0) { tooltip.style.display = 'none'; return; }
+
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+                const mx = (e.clientX - rect.left) * scaleX;
+                const my = (e.clientY - rect.top) * scaleY;
+
+                const { minMidi, midiRange, noteHeight, pxPerBeat, H } = pianoRollLayout;
+                const noteNames = ['C','C#','D','Eb','E','F','F#','G','Ab','A','Bb','B'];
+
+                // Hit test against note rectangles
+                let hit = null;
+                for (const note of pianoRollData) {
+                    const x = note.time * pxPerBeat;
+                    const y = H - ((note.midi - minMidi) / midiRange) * (H - 20) - 10;
+                    const w = Math.max(note.duration * pxPerBeat - 1, 2);
+                    if (mx >= x && mx <= x + w && my >= y - noteHeight / 2 && my <= y + noteHeight / 2) {
+                        hit = note;
+                        break;
+                    }
+                }
+
+                if (hit) {
+                    const name = noteNames[hit.midi % 12];
+                    const octave = Math.floor(hit.midi / 12) - 1;
+                    const dur = hit.duration.toFixed(1);
+                    tooltip.textContent = `${name}${octave} (MIDI ${hit.midi}) - ${dur} beats - ${hit.symbol || ''}`;
+                    tooltip.style.display = '';
+                    tooltip.style.left = (e.clientX + 12) + 'px';
+                    tooltip.style.top = (e.clientY - 28) + 'px';
+                } else {
+                    tooltip.style.display = 'none';
+                }
+            });
+
+            canvas.addEventListener('mouseleave', () => {
+                tooltip.style.display = 'none';
+            });
+        })();
 
         // Periodic cursor update during playback
         setInterval(() => {
@@ -2645,6 +2807,53 @@
             display: block;
             width: 100%;
             height: 200px;
+        }
+
+        /* Note breakdown in chord modal */
+        .note-breakdown { padding: 8px 0; }
+        .breakdown-notes { display: flex; gap: 6px; flex-wrap: wrap; }
+        .breakdown-note {
+            background: var(--bg-hover);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 4px 10px;
+            font-weight: 600;
+            font-size: 1rem;
+        }
+
+        /* Piano roll note labels */
+        .piano-roll-wrapper { display: flex; }
+        .piano-roll-labels {
+            width: 40px;
+            flex-shrink: 0;
+            position: relative;
+            background: #1a1a2e;
+            border-right: 1px solid #374151;
+        }
+        .piano-label {
+            position: absolute;
+            right: 4px;
+            font-size: 9px;
+            color: #6b7280;
+            white-space: nowrap;
+        }
+        .piano-label-c {
+            color: #f59e0b;
+            font-weight: 700;
+        }
+
+        /* Piano roll tooltip */
+        .piano-tooltip {
+            position: fixed;
+            background: #1e293b;
+            color: #e2e8f0;
+            border: 1px solid #475569;
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-size: 0.8rem;
+            pointer-events: none;
+            z-index: 1000;
+            white-space: nowrap;
         }
     </style>
 </body>
