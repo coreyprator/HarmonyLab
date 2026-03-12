@@ -113,6 +113,29 @@ async def update_song(
     return await get_song(song_id, db)
 
 
+@router.delete("/bulk/delete")
+async def bulk_delete_songs(
+    song_ids: List[int],
+    db: DatabaseConnection = Depends(get_db)
+):
+    """Delete multiple songs at once. Returns count of deleted songs."""
+    if not song_ids:
+        raise HTTPException(status_code=400, detail="No song IDs provided")
+    if len(song_ids) > 100:
+        raise HTTPException(status_code=400, detail="Maximum 100 songs per bulk delete")
+
+    deleted = 0
+    for sid in song_ids:
+        try:
+            result = db.execute_non_query("DELETE FROM Songs WHERE id = ?", (sid,))
+            if result and result > 0:
+                deleted += 1
+        except Exception:
+            pass
+
+    return {"deleted": deleted, "requested": len(song_ids)}
+
+
 @router.delete("/{song_id}", status_code=204)
 async def delete_song(song_id: int, db: DatabaseConnection = Depends(get_db)):
     """Delete a song (cascades to sections, measures, chords)."""
@@ -283,18 +306,52 @@ async def get_song_imports(song_id: int, db: DatabaseConnection = Depends(get_db
 
 @router.get("/{song_id}/notes")
 async def get_song_notes(song_id: int, db: DatabaseConnection = Depends(get_db)):
-    """Get individual notes (MelodyNotes) for a song, grouped by measure."""
-    # Verify song exists
+    """Get individual notes for a song. Queries song_notes (rich import) first,
+    falls back to MelodyNotes (legacy)."""
     songs = db.execute_query("SELECT id FROM Songs WHERE id = ?", (song_id,))
     if not songs:
         raise HTTPException(status_code=404, detail="Song not found")
 
-    notes = db.execute_query("""
-        SELECT measure_number, beat_position, midi_note, duration, velocity
-        FROM MelodyNotes
-        WHERE song_id = ?
-        ORDER BY measure_number, beat_position
-    """, (song_id,))
+    # Try song_notes table first (rich import data)
+    notes = []
+    try:
+        notes = db.execute_query("""
+            SELECT measure_num, beat, midi_pitch, note_name,
+                   duration_quarters, velocity, is_rest
+            FROM song_notes
+            WHERE song_id = ? AND is_rest = 0
+            ORDER BY measure_num, beat
+        """, (song_id,))
+    except Exception:
+        pass
+
+    if notes:
+        return {
+            "song_id": song_id,
+            "notes": [
+                {
+                    "measure_number": n['measure_num'],
+                    "beat_position": float(n.get('beat') or 1.0),
+                    "midi_note": n['midi_pitch'],
+                    "note_name": n.get('note_name'),
+                    "duration": float(n['duration_quarters']) if n.get('duration_quarters') is not None else 1.0,
+                    "velocity": n.get('velocity'),
+                }
+                for n in notes
+            ],
+            "total_notes": len(notes),
+        }
+
+    # Fallback to legacy MelodyNotes table
+    try:
+        notes = db.execute_query("""
+            SELECT measure_number, beat_position, midi_note, duration, velocity
+            FROM MelodyNotes
+            WHERE song_id = ?
+            ORDER BY measure_number, beat_position
+        """, (song_id,))
+    except Exception:
+        notes = []
 
     if not notes:
         raise HTTPException(status_code=404, detail="No note data for this song")
