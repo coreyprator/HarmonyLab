@@ -2,7 +2,7 @@
 <!-- CHECKPOINT: HL-PK-9F3A -->
 
 **Generated**: 2026-02-15
-**Updated**: 2026-03-12T20:45:00Z — Sprint HL-MEGA-001: v2.7.0 (4 bugs + 5 features)
+**Updated**: 2026-03-12T23:30:00Z — Sprint HL-MEGA-002: v2.8.0 (2 bugs + 2 features)
 **Method**: Full project read-through of every source file, config, schema, workflow, and documentation file.
 **Purpose**: Single-file knowledge recovery for any AI agent resuming work on this project.
 
@@ -17,7 +17,7 @@
 | Repository | https://github.com/coreyprator/harmonylab | `CLAUDE.md` line 65 |
 | Local Path | `G:\My Drive\Code\Python\harmonylab` | `CLAUDE.md` line 66 |
 | Methodology | [coreyprator/project-methodology](https://github.com/coreyprator/project-methodology) v3.14 | `CLAUDE.md` line 67 |
-| Current Version | v2.7.0 | `main.py` VERSION (updated 2026-03-12) |
+| Current Version | v2.8.0 | `main.py` VERSION (updated 2026-03-12) |
 | Latest Revision | harmonylab-00136-j85 (backend), harmonylab-frontend-00070-56p (frontend) | HL-VERSION-FIX-001 2026-03-07 |
 | Production URL | https://harmonylab.rentyourcio.com | `PROJECT_STATUS.md` line 5 |
 | API Docs | https://harmonylab.rentyourcio.com/docs | `PROJECT_STATUS.md` line 189 |
@@ -796,6 +796,8 @@ After v1.3.0 UAT failures, roadmap was re-scoped:
 - v2.5.0 = HL-REIMPORT-FIX-001: Import pipeline fix, file provenance (hash, size, modified date), song versioning (duplicate detection, "(2)" suffix), silent failure prevention. Rich note data via song_notes table (Migration 5a). (deployed 2026-03-08)
 - v2.6.0 = VERSION bump + import_count on imports endpoint. (deployed 2026-03-11)
 - v2.7.0 = HL-MEGA-001: 4 bugs + 5 features (deployed 2026-03-12). Bugs: (1) HL-KEY-FIX-001: Key detection verified correct (C major for Corcovado, not G major). (2) HL-KEYCTR-DISP-001: Key center badge already displayed. (3) HL-TRANSPOSE-FIX-001: Transpose endpoint already functional. (4) HL-NOTES-BUG-001: Fixed notes endpoint to query song_notes table first (327 notes found), fallback to MelodyNotes for legacy data. Root cause: endpoint was only querying MelodyNotes with wrong column names. Features: (5) HL-CHORD-NOTES-001: Note breakdown in chord analysis modal via getChordNotes(). (6) HL-NOTES-CHORD-001: server-provided note_name in Notes table. (7) HL-BULK-DELETE-001: Multi-select checkboxes + DELETE /bulk/delete endpoint. (8) HL-PIANO-LABELS-001: Note name labels (C4, D4...) on piano roll LHS, C notes gold. (9) HL-PIANO-TOOLTIP-001: Canvas mousemove tooltip with note name, octave, MIDI#, duration, chord.
+
+- v2.8.0 = HL-MEGA-002: 2 bugs + 2 features (deployed 2026-03-12). Bugs: (1) BUG-001: Key detection fixed — was using chord symbols only for Krumhansl-Schmuckler, now uses MIDI pitches from song_notes table when available (Corcovado: G major → C major, 0.81 conf). New `_detect_key_from_notes()` method in analysis_service.py. (2) BUG-002: Transpose now re-runs full chord analysis — shifts MIDI pitches by semitones, passes to analyze_song() with key_override=None for fresh key detection (was just renaming the key string). Features: (3) REQ-002: Chord modal shows actual MIDI notes per measure — "Notes in this Measure" table with Beat/Note/MIDI/Duration columns, fetched via GET /songs/{id}/notes?measure=N. (4) REQ-003: Chord assignment transparency — note_count badge ("4n") on each chord tile in analysis view, has_note_data flag in API response.
 
 ### What's Next (updated 2026-03-12)
 | ID | Feature | Priority | Status |
