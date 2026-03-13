@@ -12,11 +12,11 @@ from starlette.middleware.sessions import SessionMiddleware
 from config.settings import settings
 
 # Import routes
-from app.api.routes import songs, sections, vocabulary, measures, chords, progress, quiz, imports, analysis, auth, exports, midi_input
+from app.api.routes import songs, sections, vocabulary, measures, chords, progress, quiz, imports, analysis, auth, exports, midi_input, riffs
 
 logger = logging.getLogger(__name__)
 
-VERSION = "2.10.0"
+VERSION = "2.11.0"
 
 app = FastAPI(
     title="Harmony Lab API",
@@ -119,6 +119,7 @@ app.include_router(imports.router)
 app.include_router(analysis.router)
 app.include_router(exports.router)
 app.include_router(midi_input.router)
+app.include_router(riffs.router)
 
 
 if __name__ == "__main__":
