@@ -460,10 +460,36 @@ def _parse_midi(file_path: str, filename: str) -> ParsedScore:
         for i, c in enumerate(midi.chords)
     ]
 
+    # Convert MIDI notes to ScoreNote for song_notes population (HL-006E)
+    def _beats_to_duration_type(beats: float) -> str:
+        if beats >= 3.0:
+            return 'whole'
+        elif beats >= 1.5:
+            return 'half'
+        elif beats >= 0.75:
+            return 'quarter'
+        elif beats >= 0.375:
+            return 'eighth'
+        elif beats >= 0.1875:
+            return '16th'
+        return '32nd'
+
+    notes = [
+        ScoreNote(
+            measure_number=n.measure_number,
+            beat_position=n.beat_position,
+            midi_pitch=n.midi_pitch,
+            duration_type=_beats_to_duration_type(n.duration_beats),
+            voice=1,
+        )
+        for n in midi.notes
+    ]
+
     return ParsedScore(
         title=title,
         key=None,
         time_signature=midi.time_signature,
         tempo=midi.tempo,
         chords=chords,
+        notes=notes,
     )

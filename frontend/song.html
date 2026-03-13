@@ -20,7 +20,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v2.8.0</div>
+        <div class="nav-version">v2.10.0</div>
     </nav>
 
     <header>
@@ -138,6 +138,21 @@
             <span class="legend-item"><span class="legend-dot dominant"></span> Dominant (V, vii)</span>
             <span class="legend-item"><span class="legend-dot secondary"></span> Secondary Dom</span>
             <span class="legend-item"><span class="legend-dot chromatic"></span> Chromatic</span>
+        </div>
+
+        <!-- HL-006C: RLHF Toggle Panel -->
+        <div id="rlhf-panel" class="rlhf-panel" style="display:none">
+            <div class="rlhf-controls">
+                <label class="rlhf-toggle-label">
+                    <input type="checkbox" id="rlhf-toggle" onchange="toggleRLHF(this.checked)">
+                    Enable RLHF corrections
+                </label>
+                <span class="rlhf-hint">Learn from my edits</span>
+                <button id="rlhf-revert-btn" class="btn btn-sm btn-danger" style="display:none"
+                        onclick="revertRLHF()">Revert</button>
+            </div>
+            <div id="rlhf-banner" class="rlhf-banner" style="display:none"></div>
+            <div id="rlhf-version" class="rlhf-version" style="display:none"></div>
         </div>
 
         <!-- Pattern info -->
@@ -463,6 +478,8 @@
             switchView('analysis');
             // Load rhythm analysis (FAIL 4)
             loadRhythmAnalysis();
+            // HL-006C: Check RLHF status
+            checkRLHFStatus();
             // Init MIDI (FAIL 5)
             initMIDI();
         }
@@ -769,6 +786,30 @@
                         : 'No MIDI notes in this measure';
                     ncEl.style.display = '';
                 }
+
+                // HL-006B: Provenance badge
+                if (currentView === 'analysis' && ac.chord_source) {
+                    let provEl = card.querySelector('.provenance-badge');
+                    if (!provEl) {
+                        provEl = document.createElement('div');
+                        provEl.className = 'provenance-badge';
+                        card.appendChild(provEl);
+                    }
+                    if (ac.chord_source === 'score') {
+                        provEl.textContent = 'S';
+                        provEl.className = 'provenance-badge prov-score';
+                        provEl.title = 'From your score notation';
+                    } else if (ac.chord_source === 'override') {
+                        provEl.textContent = '\u2713';
+                        provEl.className = 'provenance-badge prov-override';
+                        provEl.title = 'Your correction';
+                    } else {
+                        provEl.textContent = 'A';
+                        provEl.className = 'provenance-badge prov-algorithm';
+                        provEl.title = 'Computed from MIDI notes';
+                    }
+                    provEl.style.display = '';
+                }
             }
 
             // Render patterns
@@ -963,6 +1004,7 @@
 
             document.getElementById('analysis-controls').style.display = isAnalysis ? '' : 'none';
             document.getElementById('function-legend').style.display = isAnalysis ? '' : 'none';
+            document.getElementById('rlhf-panel').style.display = isAnalysis ? '' : 'none';
             document.getElementById('patterns-info').style.display =
                 isAnalysis && analysisData?.patterns?.length ? '' : 'none';
 
@@ -1120,11 +1162,34 @@
                         actualNotesEl.innerHTML = '<span style="color:var(--text-muted)">Could not load notes</span>';
                     });
 
+                // HL-006B: Source provenance line
+                const source = ac.chord_source || 'algorithm';
+                const sourceLabels = {
+                    'score': 'From your score notation',
+                    'algorithm': 'Computed from MIDI notes',
+                    'override': 'Your correction (overrides algorithm)',
+                };
+                const sourceLabel = sourceLabels[source] || source;
+
                 // REQ-003: Chord assignment reasoning
                 const noteCount = ac.note_count || 0;
-                reasoningEl.innerHTML = `<div>Algorithm: Chord symbols from score import, analyzed with music21 Krumhansl-Schmuckler</div>` +
-                    `<div>Notes in measure: <strong>${noteCount}</strong></div>` +
-                    (noteCount === 0 ? '<div style="color:#f59e0b">No MIDI notes in this measure</div>' : '');
+                let reasoningHtml = `<div><strong>Source:</strong> ${sourceLabel}</div>`;
+                reasoningHtml += `<div>Algorithm: Chord symbols from score import, analyzed with music21 Krumhansl-Schmuckler</div>`;
+                reasoningHtml += `<div>Notes in measure: <strong>${noteCount}</strong></div>`;
+                if (noteCount === 0) {
+                    reasoningHtml += '<div style="color:#f59e0b">No MIDI notes in this measure</div>';
+                }
+
+                // HL-006D: Rootless voicing explanation
+                if (ac.is_rootless && source === 'algorithm') {
+                    const rootNote = ac.symbol ? ac.symbol.match(/^[A-G][#b]?/)?.[0] : '?';
+                    reasoningHtml += `<div style="margin-top:6px;padding:6px 8px;background:var(--bg-hover);border-radius:4px;border-left:3px solid #f59e0b">`;
+                    reasoningHtml += `<strong>Jazz voicing:</strong> root ${rootNote} not present in piano notes.<br>`;
+                    reasoningHtml += `Standard practice when the bass player covers the root.<br>`;
+                    reasoningHtml += `Chord identified from the 3rd, 5th, and 7th.`;
+                    reasoningHtml += `</div>`;
+                }
+                reasoningEl.innerHTML = reasoningHtml;
             } else {
                 measureLabel.textContent = '';
                 actualNotesEl.innerHTML = '<span style="color:var(--text-muted)">No measure data</span>';
@@ -1920,6 +1985,109 @@
         }
 
         // ==========================================
+        // HL-006C: RLHF TOGGLE + REVERT
+        // ==========================================
+
+        let rlhfActive = false;
+
+        async function checkRLHFStatus() {
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/analysis/songs/${songId}/rlhf/status`);
+                if (!res.ok) return;
+                const data = await res.json();
+                rlhfActive = data.active;
+                const toggle = document.getElementById('rlhf-toggle');
+                if (toggle) toggle.checked = data.active;
+                updateRLHFUI(data);
+            } catch (e) {
+                console.warn('RLHF status check failed:', e);
+            }
+        }
+
+        function updateRLHFUI(data) {
+            const banner = document.getElementById('rlhf-banner');
+            const revertBtn = document.getElementById('rlhf-revert-btn');
+            const versionEl = document.getElementById('rlhf-version');
+
+            if (data.active) {
+                const n = data.overrides_applied || 0;
+                banner.textContent = `RLHF active \u2014 ${n} chord${n !== 1 ? 's' : ''} influenced by your corrections.`;
+                banner.style.display = '';
+                revertBtn.style.display = '';
+                versionEl.textContent = `Algorithm: v${data.algorithm_version || '1.1'} | RLHF: v1.0 (${n} correction${n !== 1 ? 's' : ''})`;
+                versionEl.style.display = '';
+            } else {
+                banner.style.display = 'none';
+                revertBtn.style.display = 'none';
+                versionEl.style.display = 'none';
+            }
+        }
+
+        async function toggleRLHF(enabled) {
+            if (enabled) {
+                try {
+                    const res = await fetch(`${API_BASE}/api/v1/analysis/songs/${songId}/rlhf/activate`, {
+                        method: 'POST'
+                    });
+                    if (!res.ok) {
+                        const err = await res.json().catch(() => ({}));
+                        alert(err.detail || 'RLHF activation failed');
+                        document.getElementById('rlhf-toggle').checked = false;
+                        return;
+                    }
+                    const data = await res.json();
+                    rlhfActive = true;
+                    updateRLHFUI({
+                        active: true,
+                        overrides_applied: data.overrides_applied,
+                        algorithm_version: data.algorithm_version
+                    });
+                    // Re-render with RLHF-influenced analysis
+                    if (data.analysis) {
+                        analysisData = data.analysis;
+                        renderAnalysis();
+                    }
+                } catch (e) {
+                    console.error('RLHF activation error:', e);
+                    document.getElementById('rlhf-toggle').checked = false;
+                }
+            } else {
+                await revertRLHF();
+            }
+        }
+
+        async function revertRLHF() {
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/analysis/songs/${songId}/rlhf/revert`, {
+                    method: 'POST'
+                });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    alert(err.detail || 'RLHF revert failed');
+                    return;
+                }
+                const data = await res.json();
+                rlhfActive = false;
+                document.getElementById('rlhf-toggle').checked = false;
+                updateRLHFUI({ active: false });
+
+                // Show revert confirmation
+                const banner = document.getElementById('rlhf-banner');
+                banner.textContent = 'Reverted to algorithm analysis.';
+                banner.style.display = '';
+                setTimeout(() => { banner.style.display = 'none'; }, 3000);
+
+                // Re-render with restored algorithm analysis
+                if (data.analysis) {
+                    analysisData = data.analysis;
+                    renderAnalysis();
+                }
+            } catch (e) {
+                console.error('RLHF revert error:', e);
+            }
+        }
+
+        // ==========================================
         // DELETE SONG
         // ==========================================
 
@@ -2611,6 +2779,7 @@
         /* Chord card hover effect when audio enabled */
         .chord-card {
             transition: transform 0.1s, box-shadow 0.1s;
+            position: relative;
         }
 
         .chord-card:hover {
@@ -2886,6 +3055,62 @@
             color: var(--text-muted);
             text-align: center;
             margin-top: 2px;
+        }
+        /* HL-006B: Provenance badges */
+        .provenance-badge {
+            position: absolute;
+            top: 2px;
+            right: 3px;
+            font-size: 0.55rem;
+            font-weight: bold;
+            width: 14px;
+            height: 14px;
+            line-height: 14px;
+            text-align: center;
+            border-radius: 50%;
+        }
+        .prov-score { background: #6b7280; color: #fff; }
+        .prov-algorithm { background: #3b82f6; color: #fff; }
+        .prov-override { background: #f59e0b; color: #000; }
+        /* HL-006C: RLHF panel */
+        .rlhf-panel {
+            padding: 8px 16px;
+            border: 1px solid var(--border, #374151);
+            border-radius: 6px;
+            margin-bottom: 8px;
+            background: var(--bg-secondary, #1e1e2e);
+        }
+        .rlhf-controls {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .rlhf-toggle-label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .rlhf-hint {
+            color: var(--text-muted, #9ca3af);
+            font-size: 0.85rem;
+            font-style: italic;
+        }
+        .rlhf-banner {
+            margin-top: 6px;
+            padding: 6px 10px;
+            background: #f59e0b22;
+            border-left: 3px solid #f59e0b;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            color: #f59e0b;
+        }
+        .rlhf-version {
+            margin-top: 4px;
+            font-size: 0.8rem;
+            color: var(--text-muted, #9ca3af);
         }
         .breakdown-notes { display: flex; gap: 6px; flex-wrap: wrap; }
         .breakdown-note {

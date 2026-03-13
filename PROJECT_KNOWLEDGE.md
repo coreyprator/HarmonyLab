@@ -2,7 +2,7 @@
 <!-- CHECKPOINT: HL-PK-9F3A -->
 
 **Generated**: 2026-02-15
-**Updated**: 2026-03-12T23:30:00Z — Sprint HL-MEGA-002: v2.8.0 (2 bugs + 2 features)
+**Updated**: 2026-03-13T04:00:00Z — Sprint HL-ALGO-RLHF-001: v2.10.0 (jazz algorithm v1.1, RLHF toggle, provenance, rootless detection)
 **Method**: Full project read-through of every source file, config, schema, workflow, and documentation file.
 **Purpose**: Single-file knowledge recovery for any AI agent resuming work on this project.
 
@@ -17,7 +17,7 @@
 | Repository | https://github.com/coreyprator/harmonylab | `CLAUDE.md` line 65 |
 | Local Path | `G:\My Drive\Code\Python\harmonylab` | `CLAUDE.md` line 66 |
 | Methodology | [coreyprator/project-methodology](https://github.com/coreyprator/project-methodology) v3.14 | `CLAUDE.md` line 67 |
-| Current Version | v2.8.0 | `main.py` VERSION (updated 2026-03-12) |
+| Current Version | v2.10.0 | `main.py` VERSION (updated 2026-03-13) |
 | Latest Revision | harmonylab-00136-j85 (backend), harmonylab-frontend-00070-56p (frontend) | HL-VERSION-FIX-001 2026-03-07 |
 | Production URL | https://harmonylab.rentyourcio.com | `PROJECT_STATUS.md` line 5 |
 | API Docs | https://harmonylab.rentyourcio.com/docs | `PROJECT_STATUS.md` line 189 |
@@ -799,7 +799,9 @@ After v1.3.0 UAT failures, roadmap was re-scoped:
 
 - v2.8.0 = HL-MEGA-002: 2 bugs + 2 features (deployed 2026-03-12). Bugs: (1) BUG-001: Key detection fixed — was using chord symbols only for Krumhansl-Schmuckler, now uses MIDI pitches from song_notes table when available (Corcovado: G major → C major, 0.81 conf). New `_detect_key_from_notes()` method in analysis_service.py. (2) BUG-002: Transpose now re-runs full chord analysis — shifts MIDI pitches by semitones, passes to analyze_song() with key_override=None for fresh key detection (was just renaming the key string). Features: (3) REQ-002: Chord modal shows actual MIDI notes per measure — "Notes in this Measure" table with Beat/Note/MIDI/Duration columns, fetched via GET /songs/{id}/notes?measure=N. (4) REQ-003: Chord assignment transparency — note_count badge ("4n") on each chord tile in analysis view, has_note_data flag in API response.
 
-### What's Next (updated 2026-03-12)
+- v2.10.0 = HL-ALGO-RLHF-001: Jazz algorithm v1.1 + RLHF toggle + provenance (deployed 2026-03-13). 2 bugs + 3 features: (1) BUG-004/HL-006E: MIDI note count badges fixed — MIDI import now extracts individual notes via `extract_notes_from_track()` in midi_parser.py, wired through score_parser → song_notes table. MelodyNotes fallback added in analysis route. (2) BUG-003/HL-006A: Jazz chord detection v1.1 — 5 algorithm changes: jazz 7th bias (7th chords score +100 over triads when extensions present), rootless voicing detection (bass-less 3-5-7 → infer root, base score 1100), duration-weighted scoring (proportional to beat duration, <0.25 beats = 0.1), beat-position weighting (beat 1 = 2.0x, beat 3 = 1.5x, off-beats = 0.75x), cadence-weighted key detection (last 4 measures 3x, final measure 6x). (3) REQ-004/HL-006B: Chord provenance badges — S (grey) for score, A (blue) for algorithm, gold check for override. Source line in chord modal. (4) REQ-006/HL-006D: Rootless voicing explanation — shows in chord modal when root absent from MIDI notes and chord detected via rootless matching. (5) REQ-005/HL-006C: RLHF feedback loop — toggle OFF by default, cross-song learning from ChordAnalysisOverrides (pitch class set → correction evidence), activate/revert endpoints, rlhf_sessions table (Migration 7a), version display (Algorithm v1.1 | RLHF v1.0).
+
+### What's Next (updated 2026-03-13)
 | ID | Feature | Priority | Status |
 |----|---------|----------|--------|
 | HL-003 | Show intervals on chord display | P2 | Open |

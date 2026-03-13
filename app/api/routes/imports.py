@@ -228,8 +228,8 @@ async def reparse_notes(
     Useful for songs imported before note extraction was added.
     """
     ext = _ext(file.filename)
-    if ext not in ('.mscz', '.mscx', '.musicxml', '.xml', '.mxl'):
-        raise HTTPException(status_code=400, detail="File must be .mscz, .mscx, or .musicxml")
+    if ext not in ('.mscz', '.mscx', '.musicxml', '.xml', '.mxl', '.mid', '.midi'):
+        raise HTTPException(status_code=400, detail="File must be .mscz, .mscx, .musicxml, .mid, or .midi")
 
     db = DatabaseConnection(settings)
 

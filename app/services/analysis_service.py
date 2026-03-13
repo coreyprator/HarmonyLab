@@ -26,7 +26,9 @@ class HarmonicAnalyzer:
         self.current_key = None
 
     def analyze_progression(self, chords: List[str], key_override: str = None,
-                             midi_notes: List[int] = None) -> Dict:
+                             midi_notes: List[int] = None,
+                             note_measures: List[int] = None,
+                             total_measures: int = 0) -> Dict:
         """Analyze full chord progression.
 
         Args:
@@ -35,6 +37,8 @@ class HarmonicAnalyzer:
             midi_notes: Optional list of MIDI pitch values from song_notes.
                         When provided, used for key detection instead of chords
                         (more accurate for imported scores).
+            note_measures: Optional list of measure numbers corresponding to midi_notes.
+            total_measures: Total measure count for cadence weighting.
         """
 
         # Detect or use override key
@@ -42,7 +46,8 @@ class HarmonicAnalyzer:
             self.current_key = key.Key(key_override)
             confidence = 1.0
         elif midi_notes:
-            self.current_key, confidence = self._detect_key_from_notes(midi_notes)
+            self.current_key, confidence = self._detect_key_from_notes(
+                midi_notes, note_measures, total_measures)
         else:
             self.current_key, confidence = self._detect_key(chords)
 
@@ -94,14 +99,36 @@ class HarmonicAnalyzer:
             logger.warning(f"Key detection failed: {e}")
             return key.Key('C'), 0.0
 
-    def _detect_key_from_notes(self, midi_notes: List[int]) -> tuple:
-        """Detect key from MIDI pitch values using Krumhansl-Schmuckler."""
+    def _detect_key_from_notes(self, midi_notes: List[int],
+                               note_measures: List[int] = None,
+                               total_measures: int = 0) -> tuple:
+        """Detect key from MIDI pitch values using Krumhansl-Schmuckler.
+
+        HL-006A Change 5: Cadence weighting — notes in last 4 measures
+        get 3x weight, root of final chord gets additional 2x.
+        """
         try:
-            from music21 import note as m21note
+            from music21 import note as m21note, duration as m21dur
             s = stream.Stream()
-            for midi_pitch in midi_notes[:200]:
+
+            # Determine cadence zone (last 4 measures)
+            max_measure = total_measures
+            if note_measures:
+                max_measure = max(max_measure, max(note_measures))
+            cadence_start = max(1, max_measure - 3)
+
+            for i, midi_pitch in enumerate(midi_notes[:200]):
                 try:
                     n = m21note.Note(midi_pitch)
+                    # HL-006A Change 5: Cadence weighting
+                    if note_measures and i < len(note_measures):
+                        m = note_measures[i]
+                        if m >= cadence_start:
+                            # 3x weight for last 4 measures (use longer duration as proxy)
+                            n.duration = m21dur.Duration(3.0)
+                            # Extra weight for very last measure
+                            if m == max_measure:
+                                n.duration = m21dur.Duration(6.0)
                     s.append(n)
                 except Exception:
                     continue
@@ -362,7 +389,10 @@ class HarmonicAnalyzer:
 
 
 def analyze_song(chords: List[str], key_override: str = None,
-                  midi_notes: List[int] = None) -> Dict:
+                  midi_notes: List[int] = None,
+                  note_measures: List[int] = None,
+                  total_measures: int = 0) -> Dict:
     """Main entry point for song analysis."""
     analyzer = HarmonicAnalyzer()
-    return analyzer.analyze_progression(chords, key_override, midi_notes)
+    return analyzer.analyze_progression(
+        chords, key_override, midi_notes, note_measures, total_measures)

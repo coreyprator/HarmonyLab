@@ -132,6 +132,9 @@ def run_migrations():
     # Migration 5: Full note data import tables (HL-REIMPORT)
     _migration_5_note_import_tables(db)
 
+    # Migration 7: RLHF sessions table (HL-006C)
+    _migration_7_rlhf_sessions(db)
+
     logger.info("Migrations complete.")
 
 
@@ -396,3 +399,36 @@ def _migration_5_note_import_tables(db):
             db.execute_non_query("ALTER TABLE Songs ADD base_title NVARCHAR(200) NULL")
     except Exception as e:
         logger.warning(f"  Migration 6c warning: {e}")
+
+
+def _migration_7_rlhf_sessions(db):
+    """HL-006C: RLHF sessions table for toggle + undo support."""
+
+    # 7a: rlhf_sessions table
+    try:
+        count = db.execute_scalar(
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'rlhf_sessions'"
+        )
+        if count == 0:
+            logger.info("  Migration 7a: Creating rlhf_sessions table...")
+            db.execute_non_query("""
+                CREATE TABLE rlhf_sessions (
+                    id NVARCHAR(36) PRIMARY KEY,
+                    song_id INT NOT NULL REFERENCES Songs(id) ON DELETE CASCADE,
+                    activated_at DATETIME2 NOT NULL DEFAULT GETDATE(),
+                    activated_by NVARCHAR(100) NOT NULL DEFAULT 'user',
+                    overrides_applied INT NOT NULL DEFAULT 0,
+                    algorithm_version NVARCHAR(20) NOT NULL DEFAULT '1.1',
+                    status NVARCHAR(20) NOT NULL DEFAULT 'active',
+                    algorithm_snapshot NVARCHAR(MAX) NULL,
+                    reverted_at DATETIME2 NULL
+                )
+            """)
+            db.execute_non_query(
+                "CREATE INDEX ix_rlhf_sessions_song ON rlhf_sessions(song_id, status)"
+            )
+            logger.info("  Migration 7a: rlhf_sessions created.")
+        else:
+            logger.info("  Migration 7a: rlhf_sessions already exists.")
+    except Exception as e:
+        logger.warning(f"  Migration 7a warning: {e}")

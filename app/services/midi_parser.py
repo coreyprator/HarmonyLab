@@ -12,7 +12,7 @@ time-window chord grouping algorithm.
 """
 import logging
 from mido import MidiFile, tempo2bpm
-from typing import List, Optional, Tuple, Dict
+from typing import Any, List, Optional, Tuple, Dict
 from pydantic import BaseModel
 from collections import defaultdict
 
@@ -29,12 +29,23 @@ DEFAULT_CHORD_WINDOW_BEATS: float = 2.0
 MIN_NOTES_FOR_CHORD: int = 2
 
 
+class NoteData(BaseModel):
+    """Individual note data from MIDI."""
+    measure_number: int
+    beat_position: float
+    midi_pitch: int
+    duration_beats: float
+    velocity: int
+
+
 class ChordData(BaseModel):
     """Parsed chord data from MIDI."""
     measure_number: int
     beat_position: float
     chord_symbol: str
     midi_notes: List[int]  # Original notes for verification
+    is_rootless: bool = False  # HL-006A: rootless voicing detected
+    chord_source: str = "algorithm"  # HL-006B: provenance tracking
 
 
 class SectionData(BaseModel):
@@ -51,6 +62,7 @@ class ParsedSong(BaseModel):
     time_signature: str
     total_measures: int
     chords: List[ChordData]
+    notes: List[NoteData] = []
 
 
 # Standard chord templates (intervals from root in semitones)
@@ -122,48 +134,101 @@ for _ct, _tmpl in CHORD_TEMPLATES.items():
     _TEMPLATES_MOD12[_ct] = _mod
 
 
-def identify_chord(notes: List[int]) -> Tuple[str, str]:
+# HL-006A: Chord types that are 7th chords or extensions (for jazz bias)
+_7TH_OR_EXTENSION = {
+    'Maj7', 'm7', '7', 'ø7', 'dim7', 'mMaj7',
+    '9', 'Maj9', 'm9', '11', 'm11', '13', 'Maj13',
+    '7b9', '7#9', '7b13', '7#11', '7alt',
+    '6/9', 'm6/9', '7sus4', '9sus4',
+}
+
+
+def _beat_weight(beat_position: float) -> float:
+    """HL-006A Change 4: Beat position weighting multiplier."""
+    beat = round(beat_position, 2)
+    if abs(beat - 1.0) < 0.1:
+        return 2.0
+    elif abs(beat - 3.0) < 0.1:
+        return 1.5
+    elif abs(beat - 2.0) < 0.1 or abs(beat - 4.0) < 0.1:
+        return 1.0
+    else:
+        return 0.75  # off-beats
+
+
+def _duration_weight(duration_beats: float) -> float:
+    """HL-006A Change 3: Duration weighting."""
+    if duration_beats < 0.25:
+        return 0.1  # ornaments, grace notes
+    return max(duration_beats, 0.1)
+
+
+def identify_chord(
+    notes: List[int],
+    note_details: Optional[List[Dict]] = None,
+) -> Tuple[str, str, bool]:
     """Identify a chord from MIDI notes using rotation-based root detection.
 
-    Instead of assuming the lowest sounding note is the root, this tries
-    every unique pitch class as a candidate root and picks the template
-    match with the highest score.  This correctly handles inversions
-    (e.g. C/E → C major, not E-something).
+    HL-006A v1.1 algorithm:
+    - Jazz 7th bias: prefer 7th chord over triad when both match equally
+    - Rootless voicing tolerance: allow root-absent matching for 7th chords
+    - Duration weighting: weight pitch classes by note duration
+    - Beat position weighting: weight by beat position
 
-    For two-note groups (dyads), interval-based heuristics are used
-    instead of template subset matching, which would produce false
-    positives like "Gsus4" or "Gdim7".
+    Args:
+        notes: List of MIDI note numbers.
+        note_details: Optional list of dicts with 'midi_pitch', 'duration_beats',
+                      'beat_position' for weighted analysis.
 
-    Returns ``(root_name, chord_type)``.
+    Returns ``(root_name, chord_type, is_rootless)``.
     """
     if not notes:
-        return ("", "")
+        return ("", "", False)
 
-    pitch_classes = sorted(set(n % 12 for n in notes))
+    # Build weighted pitch class profile (Changes 3 & 4)
+    pc_weights: Dict[int, float] = defaultdict(float)
+    if note_details:
+        for nd in note_details:
+            pc = nd['midi_pitch'] % 12
+            dur_w = _duration_weight(nd.get('duration_beats', 1.0))
+            beat_w = _beat_weight(nd.get('beat_position', 1.0))
+            pc_weights[pc] += dur_w * beat_w
+    else:
+        for n in notes:
+            pc_weights[n % 12] += 1.0
+
+    pitch_classes = sorted(pc_weights.keys())
     num_pcs = len(pitch_classes)
-    bass_pc = min(notes) % 12  # lowest sounding note
+    bass_pc = min(notes) % 12
 
     if num_pcs < 2:
-        return (NOTE_NAMES[pitch_classes[0]], "")
+        return (NOTE_NAMES[pitch_classes[0]], "", False)
+
+    # Find the dominant pitch class by weight (candidate for root)
+    weighted_root_pc = max(pc_weights, key=pc_weights.get)
 
     # ----- Try every pitch class as a candidate root -----
     best_root: Optional[str] = None
     best_type = ""
-    best_score = -1
+    best_score = -1.0
+    best_rootless = False
 
     for root_pc in pitch_classes:
         intervals = sorted(set((pc - root_pc) % 12 for pc in pitch_classes))
 
-        # --- Exact template match (highest priority) ---
+        # --- Exact template match ---
         for chord_type, template in _TEMPLATES_MOD12.items():
             if intervals == template:
-                # Prefer root-position voicings (root == bass)
                 root_pos_bonus = 50 if root_pc == bass_pc else 0
-                score = 1000 + len(template) * 10 + root_pos_bonus
+                weight_bonus = 20 if root_pc == weighted_root_pc else 0
+                # Change 1: Jazz 7th bias — 7th chords and extensions get +100
+                jazz_bonus = 100 if chord_type in _7TH_OR_EXTENSION else 0
+                score = 1000 + len(template) * 10 + root_pos_bonus + weight_bonus + jazz_bonus
                 if score > best_score:
                     best_score = score
                     best_root = NOTE_NAMES[root_pc]
                     best_type = chord_type
+                    best_rootless = False
 
         # --- Subset match — only when ≥ 3 pitch classes ---
         if num_pcs >= 3 and best_score < 1000:
@@ -171,39 +236,71 @@ def identify_chord(notes: List[int]) -> Tuple[str, str]:
                 if set(intervals).issubset(set(template)) and len(intervals) > 1:
                     coverage = len(intervals) / len(template)
                     root_pos_bonus = 10 if root_pc == bass_pc else 0
-                    score = int(coverage * 100) + len(template) + root_pos_bonus
+                    jazz_bonus = 50 if chord_type in _7TH_OR_EXTENSION else 0
+                    score = int(coverage * 100) + len(template) + root_pos_bonus + jazz_bonus
                     if score > best_score:
                         best_score = score
                         best_root = NOTE_NAMES[root_pc]
                         best_type = chord_type
+                        best_rootless = False
+
+    # --- Change 2: Rootless voicing tolerance ---
+    # Try rootless when no exact match found, OR when the best match is a
+    # dim/aug triad (these are almost always part of a larger chord in jazz).
+    _triad_only = best_type in ('dim', 'aug', 'sus2', 'sus4') and best_score < 1130
+    if num_pcs >= 3 and (best_score < 1000 or _triad_only):
+        for absent_root_pc in range(12):
+            if absent_root_pc in pitch_classes:
+                continue  # root is present, skip
+            # What intervals would we have if absent_root_pc were the root?
+            intervals_with_root = sorted(set(
+                [(pc - absent_root_pc) % 12 for pc in pitch_classes] + [0]
+            ))
+            for chord_type, template in _TEMPLATES_MOD12.items():
+                if chord_type not in _7TH_OR_EXTENSION:
+                    continue  # rootless only for 7th+ chords
+                if len(template) < 4:
+                    continue  # need at least 4-note template
+                if intervals_with_root == template:
+                    # Check: at least 3 chord tones present (excluding root)
+                    present_tones = set((pc - absent_root_pc) % 12 for pc in pitch_classes)
+                    template_tones = set(template) - {0}
+                    if len(present_tones & template_tones) >= 3:
+                        # Score above triads (1030) but below full 7th matches (1140)
+                        rootless_score = 1100 + len(template) * 10
+                        if rootless_score > best_score:
+                            best_score = rootless_score
+                            best_root = NOTE_NAMES[absent_root_pc]
+                            best_type = chord_type
+                            best_rootless = True
 
     if best_root:
-        return (best_root, best_type)
+        return (best_root, best_type, best_rootless)
 
     # ----- Fallback for 2-note dyads -----
     if num_pcs == 2:
         interval = (pitch_classes[1] - pitch_classes[0]) % 12
-        if interval == 7:       # Perfect 5th
-            return (NOTE_NAMES[pitch_classes[0]], "")
-        elif interval == 5:     # Perfect 4th (inverted P5)
-            return (NOTE_NAMES[pitch_classes[1]], "")
-        elif interval == 4:     # Major 3rd
-            return (NOTE_NAMES[pitch_classes[0]], "")
-        elif interval == 3:     # Minor 3rd
-            return (NOTE_NAMES[pitch_classes[0]], "m")
-        elif interval == 8:     # Minor 6th (inverted M3)
-            return (NOTE_NAMES[pitch_classes[1]], "")
-        elif interval == 9:     # Major 6th (inverted m3)
-            return (NOTE_NAMES[pitch_classes[1]], "m")
+        if interval == 7:
+            return (NOTE_NAMES[pitch_classes[0]], "", False)
+        elif interval == 5:
+            return (NOTE_NAMES[pitch_classes[1]], "", False)
+        elif interval == 4:
+            return (NOTE_NAMES[pitch_classes[0]], "", False)
+        elif interval == 3:
+            return (NOTE_NAMES[pitch_classes[0]], "m", False)
+        elif interval == 8:
+            return (NOTE_NAMES[pitch_classes[1]], "", False)
+        elif interval == 9:
+            return (NOTE_NAMES[pitch_classes[1]], "m", False)
 
     # ----- Last resort: bass note as root -----
     root_name = NOTE_NAMES[bass_pc]
     intervals_from_bass = sorted(set((pc - bass_pc) % 12 for pc in pitch_classes))
     if 3 in intervals_from_bass:
-        return (root_name, "m")
+        return (root_name, "m", False)
     elif 4 in intervals_from_bass:
-        return (root_name, "")
-    return (root_name, "")
+        return (root_name, "", False)
+    return (root_name, "", False)
 
 
 def parse_midi_file(
@@ -297,7 +394,19 @@ def parse_midi_file(
             chord_window_beats,
         )
 
-    total_measures = max((c.measure_number for c in chords_data), default=0)
+    # ------------------------------------------------------------------
+    # Extract individual notes (HL-006E: needed for note count badges)
+    # ------------------------------------------------------------------
+    notes_data = extract_notes_from_track(
+        best_track,
+        midi.ticks_per_beat,
+        time_sig_num,
+    )
+
+    total_measures = max(
+        max((c.measure_number for c in chords_data), default=0),
+        max((n.measure_number for n in notes_data), default=0),
+    )
 
     return ParsedSong(
         title=None,  # MIDI files rarely carry a title meta-event
@@ -305,6 +414,7 @@ def parse_midi_file(
         time_signature=time_signature,
         total_measures=total_measures,
         chords=chords_data,
+        notes=notes_data,
     )
 
 
@@ -331,14 +441,28 @@ def extract_chords_from_track(
     """
     window_ticks = int(ticks_per_beat * chord_window_beats)
 
-    # Collect every (onset_tick, midi_note) pair first so we can reason
-    # about timing cleanly.
-    note_events: List[Tuple[int, int]] = []
+    # Collect all events with absolute times for duration computation
+    all_events: List[Tuple[int, Any]] = []
     current_time = 0
     for msg in track:
         current_time += msg.time
+        all_events.append((current_time, msg))
+
+    # Build note-on events and a duration map
+    note_events: List[Tuple[int, int, int]] = []  # (onset_tick, midi_note, velocity)
+    # Track note-off times for duration computation
+    note_on_times: Dict[int, int] = {}  # pitch → onset_tick
+    note_durations: Dict[Tuple[int, int], float] = {}  # (onset_tick, pitch) → duration_beats
+
+    for tick, msg in all_events:
         if msg.type == 'note_on' and msg.velocity > 0:
-            note_events.append((current_time, msg.note))
+            note_events.append((tick, msg.note, msg.velocity))
+            note_on_times[msg.note] = tick
+        elif msg.type == 'note_off' or (msg.type == 'note_on' and msg.velocity == 0):
+            if msg.note in note_on_times:
+                onset = note_on_times.pop(msg.note)
+                dur_ticks = max(tick - onset, 1)
+                note_durations[(onset, msg.note)] = dur_ticks / ticks_per_beat
 
     if not note_events:
         return []
@@ -349,12 +473,13 @@ def extract_chords_from_track(
     chords: List[ChordData] = []
     window_start = note_events[0][0]
     window_notes: List[int] = []
+    window_details: List[Dict] = []  # HL-006A: note details for weighted analysis
 
     def _flush_window(window_start_tick: int) -> None:
         """Emit a chord from the current window if enough notes exist."""
         if len(window_notes) < MIN_NOTES_FOR_CHORD:
             return
-        root, chord_type = identify_chord(window_notes[:])
+        root, chord_type, is_rootless = identify_chord(window_notes[:], window_details[:])
         if not root:
             return
         beats_elapsed = window_start_tick / ticks_per_beat
@@ -365,20 +490,91 @@ def extract_chords_from_track(
             beat_position=round(beat_position, 2),
             chord_symbol=f"{root}{chord_type}",
             midi_notes=window_notes[:],
+            is_rootless=is_rootless,
         ))
 
-    for onset, note in note_events:
+    for onset, note, velocity in note_events:
         if onset - window_start >= window_ticks and window_notes:
             # Current note is outside the window — flush accumulated notes
             _flush_window(window_start)
             window_notes = []
+            window_details = []
             window_start = onset
         elif not window_notes:
             window_start = onset
 
         window_notes.append(note)
+        # HL-006A: Compute beat position and duration for weighting
+        beats_elapsed = onset / ticks_per_beat
+        beat_pos = (beats_elapsed % beats_per_measure) + 1
+        dur = note_durations.get((onset, note), 1.0)
+        window_details.append({
+            'midi_pitch': note,
+            'duration_beats': dur,
+            'beat_position': beat_pos,
+        })
 
     # Flush the final window
     _flush_window(window_start)
 
     return chords
+
+
+# -----------------------------------------------------------------------
+# Individual note extraction (HL-006E)
+# -----------------------------------------------------------------------
+def extract_notes_from_track(
+    track,
+    ticks_per_beat: int,
+    beats_per_measure: int,
+) -> List[NoteData]:
+    """Extract individual notes with onset, duration, and velocity from a MIDI track.
+
+    Pairs note_on/note_off events to compute durations. Returns one NoteData
+    per sounding note (velocity > 0).
+    """
+    # Build (absolute_tick, msg) list
+    events: List[Tuple[int, Any]] = []
+    current_time = 0
+    for msg in track:
+        current_time += msg.time
+        events.append((current_time, msg))
+
+    # Pair note-on → note-off for duration
+    active: Dict[int, Tuple[int, int]] = {}  # pitch → (onset_tick, velocity)
+    notes: List[NoteData] = []
+
+    for tick, msg in events:
+        if msg.type == 'note_on' and msg.velocity > 0:
+            active[msg.note] = (tick, msg.velocity)
+        elif msg.type == 'note_off' or (msg.type == 'note_on' and msg.velocity == 0):
+            if msg.note in active:
+                onset_tick, velocity = active.pop(msg.note)
+                duration_ticks = max(tick - onset_tick, 1)
+                beats_elapsed = onset_tick / ticks_per_beat
+                measure_number = int(beats_elapsed / beats_per_measure) + 1
+                beat_position = (beats_elapsed % beats_per_measure) + 1
+                duration_beats = duration_ticks / ticks_per_beat
+                notes.append(NoteData(
+                    measure_number=measure_number,
+                    beat_position=round(beat_position, 4),
+                    midi_pitch=msg.note,
+                    duration_beats=round(duration_beats, 4),
+                    velocity=velocity,
+                ))
+
+    # Flush notes still active at end of track (assume duration = 1 beat)
+    for pitch, (onset_tick, velocity) in active.items():
+        beats_elapsed = onset_tick / ticks_per_beat
+        measure_number = int(beats_elapsed / beats_per_measure) + 1
+        beat_position = (beats_elapsed % beats_per_measure) + 1
+        notes.append(NoteData(
+            measure_number=measure_number,
+            beat_position=round(beat_position, 4),
+            midi_pitch=pitch,
+            duration_beats=1.0,
+            velocity=velocity,
+        ))
+
+    notes.sort(key=lambda n: (n.measure_number, n.beat_position, n.midi_pitch))
+    return notes

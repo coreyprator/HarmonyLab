@@ -10,6 +10,7 @@ from app.db.connection import DatabaseConnection, get_db
 import json
 import re
 import logging
+import uuid
 
 router = APIRouter(prefix="/api/v1/analysis", tags=["analysis"])
 logger = logging.getLogger(__name__)
@@ -179,6 +180,22 @@ async def transpose_song(
     except Exception:
         pass
 
+    # HL-006E: Fallback to MelodyNotes
+    if not notes_per_measure:
+        try:
+            legacy_rows = db.execute_query("""
+                SELECT midi_note, measure_number FROM MelodyNotes
+                WHERE song_id = ?
+                ORDER BY measure_number, beat_position
+            """, (song_id,))
+            if legacy_rows:
+                transposed_midi = [r['midi_note'] + semitones for r in legacy_rows]
+                for r in legacy_rows:
+                    m = r['measure_number']
+                    notes_per_measure[m] = notes_per_measure.get(m, 0) + 1
+        except Exception:
+            pass
+
     # Re-analyze with transposed chords and shifted notes
     # Pass transposed notes for key detection (no key override — let algorithm detect)
     result = analyze_song(transposed_symbols, key_override=None, midi_notes=transposed_midi)
@@ -223,7 +240,7 @@ async def get_analysis(
             return _apply_overrides(result, song_id, db)
 
     # Verify song exists
-    songs = db.execute_query("SELECT id, original_key FROM Songs WHERE id = ?", (song_id,))
+    songs = db.execute_query("SELECT id, original_key, source_file_type FROM Songs WHERE id = ?", (song_id,))
     if not songs:
         raise HTTPException(status_code=404, detail="Song not found")
 
@@ -269,6 +286,7 @@ async def get_analysis(
 
     # Fetch MIDI notes for note-based key detection (more accurate than chord-only)
     midi_notes = None
+    note_measures = None
     notes_per_measure = {}
     try:
         note_rows = db.execute_query("""
@@ -278,22 +296,53 @@ async def get_analysis(
         """, (song_id,))
         if note_rows:
             midi_notes = [r['midi_pitch'] for r in note_rows]
+            note_measures = [r['measure_num'] for r in note_rows]
             for r in note_rows:
                 m = r['measure_num']
                 notes_per_measure[m] = notes_per_measure.get(m, 0) + 1
     except Exception:
         pass
 
-    # Run analysis
-    result = analyze_song(chord_symbols, key_override, midi_notes)
+    # HL-006E: Fallback to MelodyNotes if song_notes is empty
+    if not notes_per_measure:
+        try:
+            legacy_rows = db.execute_query("""
+                SELECT midi_note, measure_number FROM MelodyNotes
+                WHERE song_id = ?
+                ORDER BY measure_number, beat_position
+            """, (song_id,))
+            if legacy_rows:
+                midi_notes = [r['midi_note'] for r in legacy_rows]
+                note_measures = [r['measure_number'] for r in legacy_rows]
+                for r in legacy_rows:
+                    m = r['measure_number']
+                    notes_per_measure[m] = notes_per_measure.get(m, 0) + 1
+        except Exception:
+            pass
+
+    # Run analysis (HL-006A: pass measure data for cadence weighting)
+    max_chord_measure = max((c['measure_number'] for c in chords), default=0)
+    result = analyze_song(chord_symbols, key_override, midi_notes,
+                          note_measures, max_chord_measure)
     result['has_note_data'] = midi_notes is not None
 
-    # Enrich with measure/beat positions and note counts
+    # HL-006B: Determine chord provenance from source file type
+    source_type = songs[0].get('source_file_type', '')
+    if source_type == 'MIDI':
+        chord_source = 'algorithm'
+    elif source_type in ('MuseScore', 'MusicXML'):
+        chord_source = 'score'
+    else:
+        chord_source = 'algorithm'
+    result['chord_source'] = chord_source
+
+    # Enrich with measure/beat positions, note counts, and provenance
     for i, ch in enumerate(result.get('chords', [])):
         if i < len(chord_positions):
             ch['measure'] = chord_positions[i]['measure']
             ch['beat'] = chord_positions[i]['beat']
             ch['note_count'] = notes_per_measure.get(chord_positions[i]['measure'], 0)
+            ch['chord_source'] = chord_source  # HL-006B
 
     # Add total measures count
     measure_count = db.execute_scalar("""
@@ -425,6 +474,196 @@ async def list_overrides(
     return {"overrides": overrides}
 
 
+@router.get("/songs/{song_id}/rlhf/status")
+async def get_rlhf_status(
+    song_id: int,
+    db: DatabaseConnection = Depends(get_db),
+):
+    """Check RLHF status for a song."""
+    try:
+        session = db.execute_query(
+            "SELECT id, overrides_applied, algorithm_version, status, activated_at "
+            "FROM rlhf_sessions WHERE song_id = ? AND status = 'active' "
+            "ORDER BY activated_at DESC",
+            (song_id,)
+        )
+        if session:
+            return {
+                "active": True,
+                "session_id": session[0]['id'],
+                "overrides_applied": session[0]['overrides_applied'],
+                "algorithm_version": session[0]['algorithm_version'],
+            }
+    except Exception:
+        pass
+    return {"active": False, "session_id": None, "overrides_applied": 0}
+
+
+@router.post("/songs/{song_id}/rlhf/activate")
+async def activate_rlhf(
+    song_id: int,
+    db: DatabaseConnection = Depends(get_db),
+):
+    """Activate RLHF corrections for a song.
+
+    Cross-song learning: finds overrides across all songs where the same
+    chord symbol + key context was corrected, then applies evidence-based
+    corrections to unoverridden chords in the current song.
+    """
+    # Check for already-active session
+    existing = db.execute_query(
+        "SELECT id FROM rlhf_sessions WHERE song_id = ? AND status = 'active'",
+        (song_id,)
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail="RLHF already active for this song")
+
+    # Get current algorithm analysis (baseline)
+    cached = db.execute_query(
+        "SELECT analysis_json FROM SongAnalysis WHERE song_id = ?", (song_id,)
+    )
+    if not cached or not cached[0].get('analysis_json'):
+        raise HTTPException(status_code=404, detail="No analysis found — run analysis first")
+
+    algorithm_result = json.loads(cached[0]['analysis_json'])
+
+    # Get this song's existing overrides (already applied separately)
+    song_overrides = db.execute_query(
+        "SELECT chord_index FROM ChordAnalysisOverrides WHERE song_id = ?",
+        (song_id,)
+    )
+    song_override_indices = {o['chord_index'] for o in song_overrides}
+
+    # Build cross-song evidence: chord_symbol + key_context → {roman: count}
+    # Query all overrides across all songs (excluding current song)
+    all_overrides = db.execute_query("""
+        SELECT o.song_id, o.chord_index, o.roman_override, o.function_override,
+               sa.analysis_json
+        FROM ChordAnalysisOverrides o
+        JOIN SongAnalysis sa ON o.song_id = sa.song_id
+        WHERE o.song_id != ? AND o.roman_override IS NOT NULL
+    """, (song_id,))
+
+    # Build evidence map: (chord_symbol, key_context) → {roman: count}
+    evidence = {}
+    for ov in all_overrides:
+        try:
+            ov_analysis = json.loads(ov['analysis_json'])
+            ov_chords = ov_analysis.get('chords', [])
+            for ch in ov_chords:
+                if ch.get('index') == ov['chord_index']:
+                    key = (ch.get('symbol', ''), ch.get('key_context', ''))
+                    if key not in evidence:
+                        evidence[key] = {}
+                    roman = ov['roman_override']
+                    evidence[key][roman] = evidence[key].get(roman, 0) + 1
+                    break
+        except Exception:
+            continue
+
+    # Apply RLHF evidence to current song's chords
+    influenced_count = 0
+    chords = algorithm_result.get('chords', [])
+    for ch in chords:
+        idx = ch.get('index')
+        if idx in song_override_indices:
+            continue  # Already has a direct override
+
+        key = (ch.get('symbol', ''), ch.get('key_context', ''))
+        if key not in evidence:
+            continue
+
+        corrections = evidence[key]
+        total = sum(corrections.values())
+        if total == 0:
+            continue
+
+        # Find best correction
+        best_roman, best_count = max(corrections.items(), key=lambda x: x[1])
+        rlhf_score = best_count / total
+
+        # Only apply if strong enough evidence (> 0.5 rlhf_score)
+        # Blend: 0.7 * algo + 0.3 * rlhf — since algo is "current" and rlhf is
+        # "suggested", we apply when 0.3 * rlhf_score tips the balance
+        if rlhf_score >= 0.5 and best_roman != ch.get('roman'):
+            ch['algorithm_result'] = ch.get('roman', '')
+            ch['roman'] = best_roman
+            ch['rlhf_influenced'] = True
+            ch['chord_source'] = 'override'
+            influenced_count += 1
+
+    # Store session with algorithm snapshot (for revert)
+    session_id = str(uuid.uuid4())
+    algorithm_snapshot = cached[0]['analysis_json']  # Pre-RLHF state
+
+    db.execute_non_query("""
+        INSERT INTO rlhf_sessions
+            (id, song_id, overrides_applied, algorithm_version, status, algorithm_snapshot)
+        VALUES (?, ?, ?, '1.1', 'active', ?)
+    """, (session_id, song_id, influenced_count, algorithm_snapshot))
+
+    # Update cached analysis with RLHF-modified result
+    rlhf_json = json.dumps(algorithm_result)
+    db.execute_non_query("""
+        UPDATE SongAnalysis SET analysis_json = ?, updated_at = GETDATE()
+        WHERE song_id = ?
+    """, (rlhf_json, song_id))
+
+    # Apply direct overrides on top and return
+    result = _apply_overrides(algorithm_result, song_id, db)
+
+    return {
+        "status": "activated",
+        "session_id": session_id,
+        "overrides_applied": influenced_count,
+        "algorithm_version": "1.1",
+        "rlhf_version": "1.0",
+        "analysis": result,
+    }
+
+
+@router.post("/songs/{song_id}/rlhf/revert")
+async def revert_rlhf(
+    song_id: int,
+    db: DatabaseConnection = Depends(get_db),
+):
+    """Revert RLHF corrections, restoring pure algorithm results."""
+    # Find active session
+    sessions = db.execute_query(
+        "SELECT id, algorithm_snapshot FROM rlhf_sessions "
+        "WHERE song_id = ? AND status = 'active' ORDER BY activated_at DESC",
+        (song_id,)
+    )
+    if not sessions:
+        raise HTTPException(status_code=404, detail="No active RLHF session to revert")
+
+    session = sessions[0]
+    snapshot = session.get('algorithm_snapshot')
+
+    if snapshot:
+        # Restore the pre-RLHF algorithm analysis
+        db.execute_non_query("""
+            UPDATE SongAnalysis SET analysis_json = ?, updated_at = GETDATE()
+            WHERE song_id = ?
+        """, (snapshot, song_id))
+
+    # Mark session as reverted
+    db.execute_non_query("""
+        UPDATE rlhf_sessions SET status = 'reverted', reverted_at = GETDATE()
+        WHERE id = ?
+    """, (session['id'],))
+
+    # Return the restored analysis
+    result = json.loads(snapshot) if snapshot else {}
+    result = _apply_overrides(result, song_id, db)
+
+    return {
+        "status": "reverted",
+        "message": "Reverted to algorithm analysis.",
+        "analysis": result,
+    }
+
+
 def _apply_overrides(result: dict, song_id: int, db: DatabaseConnection) -> dict:
     """Apply user overrides to analysis result."""
     overrides = db.execute_query(
@@ -441,6 +680,7 @@ def _apply_overrides(result: dict, song_id: int, db: DatabaseConnection) -> dict
             if o.get('roman_override'):
                 chord['roman'] = o['roman_override']
                 chord['is_override'] = True
+                chord['chord_source'] = 'override'  # HL-006B
             if o.get('function_override'):
                 chord['function'] = o['function_override']
                 chord['color'] = HarmonicAnalyzer.FUNCTION_COLORS.get(
