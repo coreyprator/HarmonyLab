@@ -14,13 +14,14 @@
         <a href="index.html" class="nav-brand">HarmonyLab</a>
         <div class="nav-links">
             <a href="index.html" class="nav-link">Songs</a>
+            <a href="riffs.html" class="nav-link">Riffs</a>
             <a href="quiz.html" class="nav-link">Quiz</a>
             <a href="progress.html" class="nav-link">Progress</a>
         </div>
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v2.10.0</div>
+        <div class="nav-version">v2.11.0</div>
     </nav>
 
     <header>
@@ -118,6 +119,11 @@
                 <label class="transport-toggle">
                     <input type="checkbox" id="chords-only-toggle">
                     Arpeggiated
+                </label>
+                <span class="transport-separator">|</span>
+                <label class="transport-toggle">
+                    <input type="checkbox" id="score-mode-toggle">
+                    Score
                 </label>
             </div>
         </div>
@@ -2350,6 +2356,7 @@
                 Tone.getTransport().stop();
                 Tone.getTransport().position = 0;
                 if (part) { part.stop(0); part.dispose(); part = null; }
+                if (scorePart) { scorePart.stop(0); scorePart.dispose(); scorePart = null; }
                 if (window._harmonyPlaybackSampler) {
                     window._harmonyPlaybackSampler.releaseAll();
                 }
@@ -2434,9 +2441,82 @@
 
             function getIsPlaying() { return isPlaying; }
 
+            // HL-035: Score (note-level) playback mode
+            let scoreMode = false;
+            let scorePart = null;
+            let scoreNotesCache = null;
+
+            function setScoreMode(val) { scoreMode = val; }
+
+            function midiToNoteName(midi) {
+                const names = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+                const octave = Math.floor(midi / 12) - 1;
+                return names[midi % 12] + octave;
+            }
+
+            async function loadScoreNotes(songId, transpose) {
+                if (scoreNotesCache && scoreNotesCache.songId === songId && scoreNotesCache.transpose === transpose) {
+                    return scoreNotesCache.notes;
+                }
+                const res = await fetch(`${API_BASE}/api/v1/songs/${songId}/notes`);
+                if (!res.ok) return [];
+                const data = await res.json();
+                const raw = data.notes || data;
+                const notes = raw.map(n => ({
+                    measure: n.measure_number,
+                    beat: n.beat_position,
+                    midi: n.midi_note + (transpose || 0),
+                    duration: n.duration || 0.5,
+                    velocity: n.velocity || 64,
+                }));
+                scoreNotesCache = { songId, transpose, notes };
+                return notes;
+            }
+
+            function loadScore(notes, bpm, beatsPerMeasure) {
+                stop();
+                if (!notes || notes.length === 0) return;
+
+                Tone.getTransport().bpm.value = bpm;
+
+                const events = notes.map(n => {
+                    const timeInBeats = (n.measure - 1) * beatsPerMeasure + (n.beat - 1);
+                    return {
+                        time: `0:${timeInBeats}:0`,
+                        timeBeats: timeInBeats,
+                        note: midiToNoteName(n.midi),
+                        duration: Math.max(n.duration, 0.1),
+                        velocity: n.velocity / 127,
+                    };
+                });
+
+                const lastBeat = Math.max(...events.map(e => e.timeBeats)) + beatsPerMeasure;
+                totalBeats = lastBeat;
+
+                scorePart = new Tone.Part((time, ev) => {
+                    if (!sampler()?.loaded) return;
+                    try {
+                        const durSec = (ev.duration * 60) / Tone.getTransport().bpm.value;
+                        sampler().triggerAttackRelease(ev.note, durSec, time, ev.velocity);
+                    } catch(e) {
+                        // Some note names may be out of range
+                    }
+                }, events.map(ev => [ev.time, ev]));
+
+                scorePart.start(0);
+
+                Tone.getTransport().schedule(() => { stop(); }, `0:${totalBeats}:0`);
+
+                document.getElementById('playback-transport').style.display = '';
+                document.getElementById('tempo-slider').value = bpm;
+                document.getElementById('tempo-value').textContent = bpm;
+            }
+
             return {
                 load, play, pause, stop, togglePlayPause,
-                setTempo, setArpeggiate, isPlaying: getIsPlaying,
+                setTempo, setArpeggiate, setScoreMode, loadScore,
+                loadScoreNotes, isPlaying: getIsPlaying,
+                get scoreMode() { return scoreMode; },
                 get chordEvents() { return chordEvents; },
                 get totalBeats() { return totalBeats; }
             };
@@ -2479,11 +2559,16 @@
             document.getElementById('play-pause-btn').addEventListener('click', () => {
                 HarmonyPlayback.togglePlayPause();
             });
-            document.getElementById('stop-btn').addEventListener('click', () => {
+            document.getElementById('stop-btn').addEventListener('click', async () => {
                 HarmonyPlayback.stop();
                 // Reload for next play
                 const curBpm = parseInt(document.getElementById('tempo-slider').value) || bpm;
-                loadFromCurrentData(curBpm, beatsPerMeasure);
+                if (HarmonyPlayback.scoreMode && songId) {
+                    const notes = await HarmonyPlayback.loadScoreNotes(songId, currentTranspose);
+                    if (notes.length > 0) HarmonyPlayback.loadScore(notes, curBpm, beatsPerMeasure);
+                } else {
+                    loadFromCurrentData(curBpm, beatsPerMeasure);
+                }
             });
             document.getElementById('tempo-slider').addEventListener('input', (e) => {
                 const val = parseInt(e.target.value);
@@ -2492,6 +2577,20 @@
             });
             document.getElementById('chords-only-toggle').addEventListener('change', (e) => {
                 HarmonyPlayback.setArpeggiate(e.target.checked);
+            });
+            document.getElementById('score-mode-toggle').addEventListener('change', async (e) => {
+                HarmonyPlayback.setScoreMode(e.target.checked);
+                HarmonyPlayback.stop();
+                if (e.target.checked && songId) {
+                    const notes = await HarmonyPlayback.loadScoreNotes(songId, currentTranspose);
+                    if (notes.length > 0) {
+                        const curBpm = parseInt(document.getElementById('tempo-slider').value) || bpm;
+                        HarmonyPlayback.loadScore(notes, curBpm, beatsPerMeasure);
+                    }
+                } else {
+                    const curBpm = parseInt(document.getElementById('tempo-slider').value) || bpm;
+                    loadFromCurrentData(curBpm, beatsPerMeasure);
+                }
             });
         }
 

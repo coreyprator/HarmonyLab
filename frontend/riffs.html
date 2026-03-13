@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jazz Riff Library — HarmonyLab</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <script src="js/audio.js"></script>
+</head>
+<body style="display: none;">
+    <nav class="main-nav">
+        <a href="index.html" class="nav-brand">HarmonyLab</a>
+        <div class="nav-links">
+            <a href="index.html" class="nav-link">Songs</a>
+            <a href="riffs.html" class="nav-link active">Riffs</a>
+            <a href="quiz.html" class="nav-link">Quiz</a>
+            <a href="progress.html" class="nav-link">Progress</a>
+        </div>
+        <div id="auth-container" class="nav-auth">
+            <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
+        </div>
+        <div class="nav-version">v2.11.0</div>
+    </nav>
+
+    <header>
+        <div class="header-content">
+            <h1>Jazz Riff Library</h1>
+        </div>
+        <p class="subtitle">Common jazz phrases, licks, and patterns</p>
+    </header>
+
+    <main>
+        <div class="toolbar">
+            <select id="key-filter" class="filter-select" onchange="filterRiffs()">
+                <option value="">All Keys</option>
+                <option value="C major">C major</option>
+                <option value="Bb">Bb major</option>
+                <option value="G minor">G minor</option>
+                <option value="D dorian">D dorian</option>
+            </select>
+            <select id="tag-filter" class="filter-select" onchange="filterRiffs()">
+                <option value="">All Tags</option>
+                <option value="ii-V-I">ii-V-I</option>
+                <option value="bebop">Bebop</option>
+                <option value="blues">Blues</option>
+                <option value="chromatic">Chromatic</option>
+                <option value="modal">Modal</option>
+                <option value="standard">Standards</option>
+                <option value="tritone">Tritone</option>
+                <option value="Coltrane">Coltrane</option>
+                <option value="Parker">Parker</option>
+            </select>
+            <span id="riff-count" class="toolbar-info"></span>
+        </div>
+
+        <div id="riff-grid" class="riff-grid"></div>
+        <div id="loading" class="loading-message">Loading riffs...</div>
+    </main>
+
+    <style>
+        .riff-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+            gap: 16px;
+            padding: 0 20px 40px;
+        }
+        .riff-card {
+            background: var(--bg-card, #1e1e2e);
+            border: 1px solid var(--border-color, #333);
+            border-radius: 10px;
+            padding: 16px;
+            transition: border-color 0.2s;
+        }
+        .riff-card:hover {
+            border-color: var(--accent, #3b82f6);
+        }
+        .riff-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+        .riff-name {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-primary, #e0e0e0);
+            flex: 1;
+        }
+        .riff-play-btn {
+            background: var(--accent, #3b82f6);
+            color: #fff;
+            border: none;
+            border-radius: 50%;
+            width: 36px;
+            height: 36px;
+            font-size: 1rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+        .riff-play-btn:hover { background: #2563eb; }
+        .riff-play-btn.playing { background: #ef4444; }
+        .riff-meta {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 8px;
+        }
+        .riff-badge {
+            font-size: 0.75rem;
+            padding: 2px 8px;
+            border-radius: 12px;
+            background: var(--bg-hover, #2a2a3e);
+            color: var(--text-secondary, #a0a0b0);
+        }
+        .riff-badge.key-badge {
+            background: #1e3a5f;
+            color: #60a5fa;
+        }
+        .riff-badge.context-badge {
+            background: #3b1f3b;
+            color: #c084fc;
+        }
+        .riff-description {
+            font-size: 0.85rem;
+            color: var(--text-secondary, #a0a0b0);
+            line-height: 1.4;
+            margin-bottom: 8px;
+        }
+        .riff-tags {
+            display: flex;
+            gap: 4px;
+            flex-wrap: wrap;
+        }
+        .riff-tag {
+            font-size: 0.7rem;
+            padding: 1px 6px;
+            border-radius: 8px;
+            background: var(--bg-hover, #2a2a3e);
+            color: var(--text-muted, #666);
+        }
+        .toolbar-info {
+            font-size: 0.85rem;
+            color: var(--text-secondary, #a0a0b0);
+            margin-left: auto;
+        }
+        .loading-message {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-muted, #666);
+        }
+    </style>
+
+    <script>
+        const API_BASE = 'https://harmonylab-wmrla7fhwa-uc.a.run.app';
+        let allRiffs = [];
+        let currentlyPlaying = null;
+        let playbackSampler = null;
+
+        const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+        function midiToNote(midi) {
+            return NOTE_NAMES[midi % 12] + (Math.floor(midi / 12) - 1);
+        }
+
+        async function loadRiffs() {
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/riffs/`);
+                const data = await res.json();
+                allRiffs = data.riffs || [];
+                renderRiffs(allRiffs);
+            } catch (e) {
+                document.getElementById('loading').textContent = 'Failed to load riffs.';
+                console.error(e);
+            }
+        }
+
+        function filterRiffs() {
+            const key = document.getElementById('key-filter').value;
+            const tag = document.getElementById('tag-filter').value;
+            let filtered = allRiffs;
+            if (key) filtered = filtered.filter(r => r.key.toLowerCase().includes(key.toLowerCase()));
+            if (tag) filtered = filtered.filter(r => r.tags.some(t => t.toLowerCase().includes(tag.toLowerCase())));
+            renderRiffs(filtered);
+        }
+
+        function renderRiffs(riffs) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('riff-count').textContent = `${riffs.length} riff${riffs.length !== 1 ? 's' : ''}`;
+            const grid = document.getElementById('riff-grid');
+            grid.innerHTML = '';
+
+            for (const riff of riffs) {
+                const card = document.createElement('div');
+                card.className = 'riff-card';
+                card.innerHTML = `
+                    <div class="riff-header">
+                        <span class="riff-name">${riff.name}</span>
+                        <button class="riff-play-btn" id="play-${riff.id}" onclick="togglePlay('${riff.id}')" title="Play">&#9654;</button>
+                    </div>
+                    <div class="riff-meta">
+                        <span class="riff-badge key-badge">${riff.key}</span>
+                        <span class="riff-badge context-badge">${riff.context}</span>
+                        <span class="riff-badge">${riff.tempo} BPM</span>
+                    </div>
+                    <div class="riff-description">${riff.description}</div>
+                    <div class="riff-tags">
+                        ${riff.tags.map(t => `<span class="riff-tag">${t}</span>`).join('')}
+                    </div>
+                `;
+                grid.appendChild(card);
+            }
+        }
+
+        async function ensureSampler() {
+            if (playbackSampler && playbackSampler.loaded) return;
+            await Tone.start();
+            playbackSampler = new Tone.Sampler({
+                urls: {
+                    'A0': 'A0.mp3', 'C1': 'C1.mp3', 'D#1': 'Ds1.mp3', 'F#1': 'Fs1.mp3',
+                    'A1': 'A1.mp3', 'C2': 'C2.mp3', 'D#2': 'Ds2.mp3', 'F#2': 'Fs2.mp3',
+                    'A2': 'A2.mp3', 'C3': 'C3.mp3', 'D#3': 'Ds3.mp3', 'F#3': 'Fs3.mp3',
+                    'A3': 'A3.mp3', 'C4': 'C4.mp3', 'D#4': 'Ds4.mp3', 'F#4': 'Fs4.mp3',
+                    'A4': 'A4.mp3', 'C5': 'C5.mp3', 'D#5': 'Ds5.mp3', 'F#5': 'Fs5.mp3',
+                    'A5': 'A5.mp3', 'C6': 'C6.mp3', 'D#6': 'Ds6.mp3', 'F#6': 'Fs6.mp3',
+                    'A6': 'A6.mp3', 'C7': 'C7.mp3', 'D#7': 'Ds7.mp3', 'F#7': 'Fs7.mp3',
+                    'A7': 'A7.mp3', 'C8': 'C8.mp3'
+                },
+                baseUrl: 'https://tonejs.github.io/audio/salamander/',
+            }).toDestination();
+            await new Promise(resolve => {
+                const check = setInterval(() => {
+                    if (playbackSampler.loaded) { clearInterval(check); resolve(); }
+                }, 100);
+            });
+        }
+
+        async function togglePlay(riffId) {
+            // Stop if already playing this riff
+            if (currentlyPlaying === riffId) {
+                stopPlayback();
+                return;
+            }
+
+            stopPlayback();
+            const riff = allRiffs.find(r => r.id === riffId);
+            if (!riff) return;
+
+            await ensureSampler();
+
+            currentlyPlaying = riffId;
+            const btn = document.getElementById(`play-${riffId}`);
+            if (btn) { btn.innerHTML = '&#9632;'; btn.classList.add('playing'); }
+
+            const bpm = riff.tempo || 120;
+            const now = Tone.now();
+            const secPerBeat = 60 / bpm;
+
+            let maxTime = 0;
+            for (const note of riff.notes) {
+                const startTime = now + (note.beat - 1) * secPerBeat;
+                const dur = note.duration * secPerBeat;
+                const noteName = midiToNote(note.midi);
+                try {
+                    playbackSampler.triggerAttackRelease(noteName, dur, startTime, 0.8);
+                } catch (e) { /* out of range */ }
+                const endTime = (note.beat - 1 + note.duration) * secPerBeat;
+                if (endTime > maxTime) maxTime = endTime;
+            }
+
+            // Auto-stop after riff ends
+            setTimeout(() => {
+                if (currentlyPlaying === riffId) stopPlayback();
+            }, (maxTime + 0.5) * 1000);
+        }
+
+        function stopPlayback() {
+            if (playbackSampler) playbackSampler.releaseAll();
+            if (currentlyPlaying) {
+                const btn = document.getElementById(`play-${currentlyPlaying}`);
+                if (btn) { btn.innerHTML = '&#9654;'; btn.classList.remove('playing'); }
+            }
+            currentlyPlaying = null;
+        }
+
+        // Auth check
+        async function checkAuth() {
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/auth/me`, { credentials: 'include' });
+                if (res.ok) {
+                    const user = await res.json();
+                    document.getElementById('auth-container').innerHTML =
+                        `<span class="nav-user">${user.display_name || user.email}</span>
+                         <a href="${API_BASE}/api/v1/auth/logout" class="btn btn-sm">Sign out</a>`;
+                }
+            } catch (e) {}
+        }
+
+        // Init
+        document.addEventListener('DOMContentLoaded', async () => {
+            document.body.style.display = '';
+            checkAuth();
+            await loadRiffs();
+        });
+    </script>
+</body>
+</html>
