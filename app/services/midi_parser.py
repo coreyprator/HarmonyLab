@@ -11,6 +11,7 @@ Supports both block-chord and arpeggiated MIDI styles via a configurable
 time-window chord grouping algorithm.
 """
 import logging
+import mido
 from mido import MidiFile, tempo2bpm
 from typing import Any, List, Optional, Tuple, Dict
 from pydantic import BaseModel
@@ -341,31 +342,17 @@ def parse_midi_file(
     time_signature = f"{time_sig_num}/{time_sig_denom}"
 
     # ------------------------------------------------------------------
-    # Choose the best track for chord extraction
+    # Merge all tracks into a single combined track for chord extraction.
+    # Many MIDI files split RH melody and LH bass/chords across tracks;
+    # combining them gives the algorithm the full harmonic picture.
     # ------------------------------------------------------------------
-    # Primary strategy: track with the most total note-on events (works
-    # for both block-chord AND arpeggiated files).
-    # Fallback: first track that contains any notes.
-    # ------------------------------------------------------------------
-    best_track = None
-    best_note_count = 0
+    merged_track = mido.merge_tracks(midi.tracks)
+    total_note_count = sum(
+        1 for msg in merged_track
+        if msg.type == 'note_on' and msg.velocity > 0
+    )
 
-    for track in midi.tracks:
-        note_count = sum(
-            1 for msg in track
-            if msg.type == 'note_on' and msg.velocity > 0
-        )
-        if note_count > best_note_count:
-            best_note_count = note_count
-            best_track = track
-
-    if best_track is None:
-        for track in midi.tracks:
-            if any(msg.type in ('note_on', 'note_off') for msg in track):
-                best_track = track
-                break
-
-    if best_track is None:
+    if total_note_count == 0:
         logger.warning("MIDI file contains no note events — returning empty song")
         return ParsedSong(
             title=None,
@@ -376,10 +363,10 @@ def parse_midi_file(
         )
 
     # ------------------------------------------------------------------
-    # Extract chords using the windowed algorithm
+    # Extract chords using the windowed algorithm (merged tracks)
     # ------------------------------------------------------------------
     chords_data = extract_chords_from_track(
-        best_track,
+        merged_track,
         midi.ticks_per_beat,
         time_sig_num,
         chord_window_beats=chord_window_beats,
@@ -388,17 +375,18 @@ def parse_midi_file(
     if not chords_data:
         logger.warning(
             "MIDI chord extraction produced 0 chords. "
-            "Track had %d note-on events. "
+            "Merged tracks had %d note-on events. "
             "Consider adjusting chord_window_beats (current: %.2f).",
-            best_note_count,
+            total_note_count,
             chord_window_beats,
         )
 
     # ------------------------------------------------------------------
     # Extract individual notes (HL-006E: needed for note count badges)
+    # Also use merged track so all voices appear in note data.
     # ------------------------------------------------------------------
     notes_data = extract_notes_from_track(
-        best_track,
+        merged_track,
         midi.ticks_per_beat,
         time_sig_num,
     )

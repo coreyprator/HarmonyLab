@@ -336,6 +336,20 @@ async def get_analysis(
         chord_source = 'algorithm'
     result['chord_source'] = chord_source
 
+    # HL-006D: Build per-measure pitch class sets for rootless detection
+    measure_pitch_classes = {}
+    if chord_source == 'algorithm' and midi_notes and note_measures:
+        for pitch, meas in zip(midi_notes, note_measures):
+            if meas not in measure_pitch_classes:
+                measure_pitch_classes[meas] = set()
+            measure_pitch_classes[meas].add(pitch % 12)
+
+    # Map note names to pitch classes for root detection
+    _ROOT_PC = {'C': 0, 'C#': 1, 'D-': 1, 'Db': 1, 'D': 2, 'D#': 3,
+                'E-': 3, 'Eb': 3, 'E': 4, 'F': 5, 'F#': 6, 'G-': 6,
+                'Gb': 6, 'G': 7, 'G#': 8, 'A-': 8, 'Ab': 8, 'A': 9,
+                'A#': 10, 'B-': 10, 'Bb': 10, 'B': 11}
+
     # Enrich with measure/beat positions, note counts, and provenance
     for i, ch in enumerate(result.get('chords', [])):
         if i < len(chord_positions):
@@ -343,6 +357,24 @@ async def get_analysis(
             ch['beat'] = chord_positions[i]['beat']
             ch['note_count'] = notes_per_measure.get(chord_positions[i]['measure'], 0)
             ch['chord_source'] = chord_source  # HL-006B
+
+            # HL-006D: Detect rootless voicing for MIDI algorithm chords
+            ch['is_rootless'] = False
+            if chord_source == 'algorithm' and measure_pitch_classes:
+                symbol = ch.get('symbol', '')
+                root_match = re.match(r'^([A-G][#b]?)', symbol)
+                if root_match:
+                    root_name = root_match.group(1)
+                    root_pc = _ROOT_PC.get(root_name)
+                    meas = chord_positions[i]['measure']
+                    pcs = measure_pitch_classes.get(meas, set())
+                    # Rootless: root pitch class absent from measure notes,
+                    # and chord has extension (7th/9th/etc.)
+                    if root_pc is not None and pcs and root_pc not in pcs:
+                        quality = symbol[len(root_name):]
+                        has_extension = any(x in quality for x in ('7', '9', '11', '13'))
+                        if has_extension:
+                            ch['is_rootless'] = True
 
     # Add total measures count
     measure_count = db.execute_scalar("""
