@@ -20,7 +20,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v2.7.0</div>
+        <div class="nav-version">v2.8.0</div>
     </nav>
 
     <header>
@@ -410,8 +410,16 @@
                 </div>
                 <hr style="border:none;border-top:1px solid var(--border);margin:8px 0">
                 <div class="form-group">
-                    <label>Note Breakdown</label>
+                    <label>Theoretical Tones</label>
                     <div id="modal-note-breakdown" class="note-breakdown"></div>
+                </div>
+                <div class="form-group">
+                    <label>Notes in this Measure <span id="modal-measure-label" style="font-size:0.8rem;color:var(--text-muted)"></span></label>
+                    <div id="modal-actual-notes" style="max-height:200px;overflow-y:auto"></div>
+                </div>
+                <div class="form-group" id="chord-reasoning-group">
+                    <label>Assignment Reasoning</label>
+                    <div id="modal-chord-reasoning" style="font-size:0.85rem;color:var(--text-muted)"></div>
                 </div>
             </div>
             <div class="modal-footer">
@@ -746,6 +754,21 @@
                 if (ac.is_pivot) {
                     card.classList.add('is-pivot');
                 }
+
+                // Note count badge (REQ-003)
+                if (currentView === 'analysis' && ac.note_count !== undefined) {
+                    let ncEl = card.querySelector('.note-count-badge');
+                    if (!ncEl) {
+                        ncEl = document.createElement('div');
+                        ncEl.className = 'note-count-badge';
+                        card.appendChild(ncEl);
+                    }
+                    ncEl.textContent = ac.note_count > 0 ? `${ac.note_count}n` : '--';
+                    ncEl.title = ac.note_count > 0
+                        ? `${ac.note_count} notes in measure`
+                        : 'No MIDI notes in this measure';
+                    ncEl.style.display = '';
+                }
             }
 
             // Render patterns
@@ -1058,8 +1081,55 @@
             document.getElementById('pivot-key-group').style.display =
                 ac.is_pivot ? '' : 'none';
 
-            // Populate note breakdown
+            // Populate theoretical note breakdown
             updateNoteBreakdown(ac.symbol);
+
+            // Fetch actual MIDI notes for this measure (REQ-002)
+            const measureNum = ac.measure;
+            const measureLabel = document.getElementById('modal-measure-label');
+            const actualNotesEl = document.getElementById('modal-actual-notes');
+            const reasoningEl = document.getElementById('modal-chord-reasoning');
+
+            if (measureNum) {
+                measureLabel.textContent = `(Measure ${measureNum})`;
+                actualNotesEl.innerHTML = '<span style="color:var(--text-muted)">Loading...</span>';
+                fetch(`${API_BASE}/api/v1/songs/${songId}/notes?measure=${measureNum}`)
+                    .then(r => r.ok ? r.json() : null)
+                    .then(data => {
+                        if (data && data.notes && data.notes.length > 0) {
+                            let html = '<table style="width:100%;font-size:0.82rem;border-collapse:collapse">';
+                            html += '<tr style="border-bottom:1px solid var(--border);color:var(--text-muted)">';
+                            html += '<th style="text-align:left;padding:2px 6px">Beat</th>';
+                            html += '<th style="text-align:left;padding:2px 6px">Note</th>';
+                            html += '<th style="text-align:left;padding:2px 6px">MIDI</th>';
+                            html += '<th style="text-align:left;padding:2px 6px">Duration</th></tr>';
+                            data.notes.forEach(n => {
+                                html += `<tr style="border-bottom:1px solid var(--border-light,#333)">`;
+                                html += `<td style="padding:2px 6px">${n.beat_position}</td>`;
+                                html += `<td style="padding:2px 6px">${n.note_name || midiToNoteName(n.midi_note)}</td>`;
+                                html += `<td style="padding:2px 6px">${n.midi_note}</td>`;
+                                html += `<td style="padding:2px 6px">${n.duration}q</td></tr>`;
+                            });
+                            html += '</table>';
+                            actualNotesEl.innerHTML = html;
+                        } else {
+                            actualNotesEl.innerHTML = '<span style="color:var(--text-muted)">No note data for this measure</span>';
+                        }
+                    })
+                    .catch(() => {
+                        actualNotesEl.innerHTML = '<span style="color:var(--text-muted)">Could not load notes</span>';
+                    });
+
+                // REQ-003: Chord assignment reasoning
+                const noteCount = ac.note_count || 0;
+                reasoningEl.innerHTML = `<div>Algorithm: Chord symbols from score import, analyzed with music21 Krumhansl-Schmuckler</div>` +
+                    `<div>Notes in measure: <strong>${noteCount}</strong></div>` +
+                    (noteCount === 0 ? '<div style="color:#f59e0b">No MIDI notes in this measure</div>' : '');
+            } else {
+                measureLabel.textContent = '';
+                actualNotesEl.innerHTML = '<span style="color:var(--text-muted)">No measure data</span>';
+                reasoningEl.innerHTML = '';
+            }
 
             document.getElementById('chord-modal').style.display = 'flex';
         }
@@ -2811,6 +2881,12 @@
 
         /* Note breakdown in chord modal */
         .note-breakdown { padding: 8px 0; }
+        .note-count-badge {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            text-align: center;
+            margin-top: 2px;
+        }
         .breakdown-notes { display: flex; gap: 6px; flex-wrap: wrap; }
         .breakdown-note {
             background: var(--bg-hover);

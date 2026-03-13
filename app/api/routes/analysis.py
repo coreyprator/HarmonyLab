@@ -162,15 +162,28 @@ async def transpose_song(
     # Transpose each chord symbol
     transposed_symbols = [transpose_chord_symbol(c['chord_symbol'], semitones) for c in chords]
 
-    # Transpose the key too
-    songs = db.execute_query("SELECT original_key FROM Songs WHERE id = ?", (song_id,))
-    original_key = (songs[0].get('original_key') or 'C') if songs else 'C'
-    transposed_key = transpose_chord_symbol(original_key.split()[0], semitones)
+    # Fetch and transpose MIDI notes for note-based key detection
+    transposed_midi = None
+    notes_per_measure = {}
+    try:
+        note_rows = db.execute_query("""
+            SELECT midi_pitch, measure_num FROM song_notes
+            WHERE song_id = ? AND is_rest = 0
+            ORDER BY measure_num, beat
+        """, (song_id,))
+        if note_rows:
+            transposed_midi = [r['midi_pitch'] + semitones for r in note_rows]
+            for r in note_rows:
+                m = r['measure_num']
+                notes_per_measure[m] = notes_per_measure.get(m, 0) + 1
+    except Exception:
+        pass
 
-    # Re-analyze with transposed chords
-    result = analyze_song(transposed_symbols, transposed_key)
+    # Re-analyze with transposed chords and shifted notes
+    # Pass transposed notes for key detection (no key override — let algorithm detect)
+    result = analyze_song(transposed_symbols, key_override=None, midi_notes=transposed_midi)
 
-    # Enrich with measure/beat positions
+    # Enrich with measure/beat positions and note counts
     chord_positions = [
         {"measure": c['measure_number'], "beat": float(c.get('beat_position') or 1.0)}
         for c in chords
@@ -179,6 +192,11 @@ async def transpose_song(
         if i < len(chord_positions):
             ch['measure'] = chord_positions[i]['measure']
             ch['beat'] = chord_positions[i]['beat']
+            ch['note_count'] = notes_per_measure.get(chord_positions[i]['measure'], 0)
+
+    # Report original key from Songs table
+    songs = db.execute_query("SELECT original_key FROM Songs WHERE id = ?", (song_id,))
+    original_key = (songs[0].get('original_key') or 'C') if songs else 'C'
 
     result['transposed_semitones'] = semitones
     result['original_key'] = original_key
@@ -249,14 +267,33 @@ async def get_analysis(
     if existing and existing[0].get('manual_key_override'):
         key_override = existing[0]['manual_key_override']
 
-    # Run analysis
-    result = analyze_song(chord_symbols, key_override)
+    # Fetch MIDI notes for note-based key detection (more accurate than chord-only)
+    midi_notes = None
+    notes_per_measure = {}
+    try:
+        note_rows = db.execute_query("""
+            SELECT midi_pitch, measure_num FROM song_notes
+            WHERE song_id = ? AND is_rest = 0
+            ORDER BY measure_num, beat
+        """, (song_id,))
+        if note_rows:
+            midi_notes = [r['midi_pitch'] for r in note_rows]
+            for r in note_rows:
+                m = r['measure_num']
+                notes_per_measure[m] = notes_per_measure.get(m, 0) + 1
+    except Exception:
+        pass
 
-    # Enrich with measure/beat positions
+    # Run analysis
+    result = analyze_song(chord_symbols, key_override, midi_notes)
+    result['has_note_data'] = midi_notes is not None
+
+    # Enrich with measure/beat positions and note counts
     for i, ch in enumerate(result.get('chords', [])):
         if i < len(chord_positions):
             ch['measure'] = chord_positions[i]['measure']
             ch['beat'] = chord_positions[i]['beat']
+            ch['note_count'] = notes_per_measure.get(chord_positions[i]['measure'], 0)
 
     # Add total measures count
     measure_count = db.execute_scalar("""

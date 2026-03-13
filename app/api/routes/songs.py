@@ -305,9 +305,13 @@ async def get_song_imports(song_id: int, db: DatabaseConnection = Depends(get_db
 
 
 @router.get("/{song_id}/notes")
-async def get_song_notes(song_id: int, db: DatabaseConnection = Depends(get_db)):
+async def get_song_notes(
+    song_id: int,
+    measure: int = None,
+    db: DatabaseConnection = Depends(get_db),
+):
     """Get individual notes for a song. Queries song_notes (rich import) first,
-    falls back to MelodyNotes (legacy)."""
+    falls back to MelodyNotes (legacy). Optional measure filter."""
     songs = db.execute_query("SELECT id FROM Songs WHERE id = ?", (song_id,))
     if not songs:
         raise HTTPException(status_code=404, detail="Song not found")
@@ -315,13 +319,22 @@ async def get_song_notes(song_id: int, db: DatabaseConnection = Depends(get_db))
     # Try song_notes table first (rich import data)
     notes = []
     try:
-        notes = db.execute_query("""
-            SELECT measure_num, beat, midi_pitch, note_name,
-                   duration_quarters, velocity, is_rest
-            FROM song_notes
-            WHERE song_id = ? AND is_rest = 0
-            ORDER BY measure_num, beat
-        """, (song_id,))
+        if measure is not None:
+            notes = db.execute_query("""
+                SELECT measure_num, beat, midi_pitch, note_name,
+                       duration_quarters, velocity, is_rest
+                FROM song_notes
+                WHERE song_id = ? AND is_rest = 0 AND measure_num = ?
+                ORDER BY beat
+            """, (song_id, measure))
+        else:
+            notes = db.execute_query("""
+                SELECT measure_num, beat, midi_pitch, note_name,
+                       duration_quarters, velocity, is_rest
+                FROM song_notes
+                WHERE song_id = ? AND is_rest = 0
+                ORDER BY measure_num, beat
+            """, (song_id,))
     except Exception:
         pass
 
