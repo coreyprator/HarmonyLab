@@ -256,6 +256,8 @@ async def get_analysis(
         )
         if cached and cached[0].get('analysis_json'):
             result = json.loads(cached[0]['analysis_json'])
+            # HL-MEGA-003: Enrich with live note counts (may have changed since cache)
+            result = _enrich_note_counts(result, song_id, db)
             return _apply_overrides(result, song_id, db)
 
     # Verify song exists
@@ -713,6 +715,39 @@ async def revert_rlhf(
         "message": "Reverted to algorithm analysis.",
         "analysis": result,
     }
+
+
+def _enrich_note_counts(result: dict, song_id: int, db: DatabaseConnection) -> dict:
+    """HL-MEGA-003: Refresh note counts from live DB (song_notes → MelodyNotes fallback)."""
+    notes_per_measure = {}
+    try:
+        rows = db.execute_query("""
+            SELECT measure_num, COUNT(*) as cnt FROM song_notes
+            WHERE song_id = ? AND is_rest = 0
+            GROUP BY measure_num
+        """, (song_id,))
+        for r in rows:
+            notes_per_measure[r['measure_num']] = r['cnt']
+    except Exception:
+        pass
+    if not notes_per_measure:
+        try:
+            rows = db.execute_query("""
+                SELECT measure_number, COUNT(*) as cnt FROM MelodyNotes
+                WHERE song_id = ?
+                GROUP BY measure_number
+            """, (song_id,))
+            for r in rows:
+                notes_per_measure[r['measure_number']] = r['cnt']
+        except Exception:
+            pass
+    if notes_per_measure:
+        result['has_note_data'] = True
+        for ch in result.get('chords', []):
+            m = ch.get('measure')
+            if m is not None:
+                ch['note_count'] = notes_per_measure.get(m, 0)
+    return result
 
 
 def _apply_overrides(result: dict, song_id: int, db: DatabaseConnection) -> dict:

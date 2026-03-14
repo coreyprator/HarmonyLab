@@ -21,7 +21,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v2.13.0</div>
+        <div class="nav-version">v2.14.0</div>
     </nav>
 
     <header>
@@ -83,6 +83,7 @@
                 <button id="reanalyze-btn" class="btn btn-sm">Re-analyze</button>
                 <span id="detected-key" class="detected-key"></span>
                 <span id="confidence" class="confidence"></span>
+                <span id="song-stats" class="song-stats"></span>
             </div>
             <div class="transpose-controls" id="transpose-controls">
                 <label>Transpose to:</label>
@@ -745,6 +746,18 @@
                 `Key: ${analysisData.detected_key}`;
             const conf = Math.round((analysisData.confidence || 0) * 100);
             document.getElementById('confidence').textContent = `(${conf}% confidence)`;
+
+            // HL-MEGA-003 Item 2: Show total note count + measures in header
+            const statsEl = document.getElementById('song-stats');
+            if (statsEl) {
+                const chords = analysisData.chords || [];
+                const totalNotes = chords.reduce((sum, c) => sum + (c.note_count || 0), 0);
+                const totalMeasures = analysisData.total_measures || 0;
+                const parts = [];
+                if (totalNotes > 0) parts.push(`${totalNotes} notes`);
+                if (totalMeasures > 0) parts.push(`${totalMeasures} measures`);
+                statsEl.textContent = parts.length > 0 ? `| ${parts.join(' | ')}` : '';
+            }
 
             // Color-code each chord card
             const analyzedChords = analysisData.chords || [];
