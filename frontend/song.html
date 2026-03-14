@@ -21,7 +21,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v2.11.0</div>
+        <div class="nav-version">v2.12.0</div>
     </nav>
 
     <header>
@@ -778,8 +778,8 @@
                     card.classList.add('is-pivot');
                 }
 
-                // Note count badge (REQ-003)
-                if (currentView === 'analysis' && ac.note_count !== undefined) {
+                // Note count badge (REQ-003) — show in both analysis and chords views
+                if (ac.note_count !== undefined) {
                     let ncEl = card.querySelector('.note-count-badge');
                     if (!ncEl) {
                         ncEl = document.createElement('div');
@@ -2368,14 +2368,20 @@
                 updatePositionDisplay();
             }
 
-            function togglePlayPause() {
+            async function togglePlayPause() {
                 if (isPlaying) {
                     pause();
                 } else {
-                    if (!part && chordEvents.length > 0) {
-                        // Reload if disposed
-                        const bpm = parseInt(document.getElementById('tempo-slider').value) || 120;
-                        const beatsPerMeasure = parseTimeSignature();
+                    const bpm = parseInt(document.getElementById('tempo-slider').value) || 120;
+                    const beatsPerMeasure = parseTimeSignature();
+                    if (scoreMode) {
+                        // Reload score notes if disposed by stop()
+                        if (!scorePart && songId) {
+                            const notes = await loadScoreNotes(songId, currentTranspose);
+                            if (notes.length > 0) loadScore(notes, bpm, beatsPerMeasure);
+                        }
+                    } else if (!part && chordEvents.length > 0) {
+                        // Reload chord data if disposed
                         loadFromCurrentData(bpm, beatsPerMeasure);
                     }
                     play();
@@ -2414,7 +2420,12 @@
 
             function updatePlayButton() {
                 const btn = document.getElementById('play-pause-btn');
-                if (btn) btn.innerHTML = isPlaying ? '&#10074;&#10074;' : '&#9654;';
+                if (!btn) return;
+                if (isPlaying) {
+                    btn.innerHTML = '&#10074;&#10074;';
+                } else {
+                    btn.innerHTML = scoreMode ? '&#9654; Score' : '&#9654;';
+                }
             }
 
             function startPositionUpdate() {

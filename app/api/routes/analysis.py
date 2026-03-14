@@ -46,8 +46,9 @@ def transpose_chord_symbol(symbol: str, semitones: int) -> str:
     if pc is None:
         return symbol
     new_pc = (pc + semitones) % 12
-    # Use flats for flat keys, sharps otherwise
-    use_flats = accidental == 'b' or semitones < 0
+    # Use flats for "black key" pitch classes (conventional jazz spelling):
+    # Db(1), Eb(3), Gb(6), Ab(8), Bb(10) — never D#, G#, etc.
+    use_flats = new_pc in (1, 3, 6, 8, 10)
     new_root = NOTE_NAMES_FLAT[new_pc] if use_flats else NOTE_NAMES_SHARP[new_pc]
     return new_root + quality + bass_part
 
