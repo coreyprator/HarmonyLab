@@ -2,7 +2,7 @@
 <!-- CHECKPOINT: HL-PK-9F3A -->
 
 **Generated**: 2026-02-15
-**Updated**: 2026-03-14T16:30:00Z — Sprint HL-TRANSPOSE-001: v2.13.0 (transpose chord symbol display, roman numeral flat conversion, piano roll re-render)
+**Updated**: 2026-03-14T20:20:00Z — Sprint HL-MEGA-003: v2.14.0 (note count enrichment for MuseScore imports, header stats display, Darren review doc)
 **Method**: Full project read-through of every source file, config, schema, workflow, and documentation file.
 **Purpose**: Single-file knowledge recovery for any AI agent resuming work on this project.
 
@@ -17,8 +17,8 @@
 | Repository | https://github.com/coreyprator/harmonylab | `CLAUDE.md` line 65 |
 | Local Path | `G:\My Drive\Code\Python\harmonylab` | `CLAUDE.md` line 66 |
 | Methodology | [coreyprator/project-methodology](https://github.com/coreyprator/project-methodology) v3.14 | `CLAUDE.md` line 67 |
-| Current Version | v2.13.0 | `main.py` VERSION (updated 2026-03-14) |
-| Latest Revision | harmonylab-00164-6qw (backend), harmonylab-frontend-00080-44c (frontend) | HL-TRANSPOSE-001 2026-03-14 |
+| Current Version | v2.14.0 | `main.py` VERSION (updated 2026-03-14) |
+| Latest Revision | harmonylab-00165+ (backend), harmonylab-frontend-00081-j96 (frontend) | HL-MEGA-003 2026-03-14 |
 | Production URL | https://harmonylab.rentyourcio.com | `PROJECT_STATUS.md` line 5 |
 | API Docs | https://harmonylab.rentyourcio.com/docs | `PROJECT_STATUS.md` line 189 |
 | CLAUDE.md Last Updated | 2026-02-07 | `CLAUDE.md` line 269 |
