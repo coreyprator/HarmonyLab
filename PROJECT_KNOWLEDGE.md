@@ -2,7 +2,7 @@
 <!-- CHECKPOINT: HL-PK-9F3A -->
 
 **Generated**: 2026-02-15
-**Updated**: 2026-03-13T15:20:00Z — Sprint HL-CLOSEOUT-001: v2.11.0 (score playback, jazz riff library, admin closes)
+**Updated**: 2026-03-14T01:00:00Z — Sprint HL-REGRESSIONS-001: v2.12.0 (transpose spelling, score playback fix, note count badge)
 **Method**: Full project read-through of every source file, config, schema, workflow, and documentation file.
 **Purpose**: Single-file knowledge recovery for any AI agent resuming work on this project.
 
@@ -17,7 +17,7 @@
 | Repository | https://github.com/coreyprator/harmonylab | `CLAUDE.md` line 65 |
 | Local Path | `G:\My Drive\Code\Python\harmonylab` | `CLAUDE.md` line 66 |
 | Methodology | [coreyprator/project-methodology](https://github.com/coreyprator/project-methodology) v3.14 | `CLAUDE.md` line 67 |
-| Current Version | v2.11.0 | `main.py` VERSION (updated 2026-03-13) |
+| Current Version | v2.12.0 | `main.py` VERSION (updated 2026-03-14) |
 | Latest Revision | harmonylab-00136-j85 (backend), harmonylab-frontend-00070-56p (frontend) | HL-VERSION-FIX-001 2026-03-07 |
 | Production URL | https://harmonylab.rentyourcio.com | `PROJECT_STATUS.md` line 5 |
 | API Docs | https://harmonylab.rentyourcio.com/docs | `PROJECT_STATUS.md` line 189 |
@@ -803,7 +803,9 @@ After v1.3.0 UAT failures, roadmap was re-scoped:
 
 - v2.11.0 = HL-CLOSEOUT-001: Admin closes + score playback + jazz riff library (deployed 2026-03-13). Group A (5 admin closes): HL-034 melody display, HL-036 chord playback, HL-050 full song audio, HL-REIMP-001 import pipeline, HL-AUDIT-UI-FIX-001 audit page — all verified live and walked to done/closed. Group B (2 status resolutions): HL-033 full score capture (327 notes, 48 measures), HL-042 ii-V-I recognition (patterns endpoint detects ii-V-i on MIDI) — both verified working and closed. Group C (2 new features): (1) HL-035: Note-level score playback — Score mode toggle in playback transport fetches MIDI notes from /api/v1/songs/{id}/notes, schedules individual pitches via Tone.Part with Salamander sampler, respects currentTranspose offset, duration calculated from BPM. (2) HL-048: Jazz riff library — /api/v1/riffs/ endpoint with 10 curated riffs (ii-V-I, bebop scale, Parker turnaround, tritone sub, Coltrane changes, blues scale, rhythm changes, Autumn Leaves ii-V, modal vamp, chromatic approach), each with MIDI note data for Tone.js playback. Frontend riffs.html with card grid, key/tag filtering, play button per riff. Riffs nav link added to all pages.
 
-### What's Next (updated 2026-03-13)
+- v2.12.0 = HL-REGRESSIONS-001: 3 regression fixes (deployed 2026-03-14). (1) Fix 1: Note count badges now display in both "analysis" and "chords" views (was only showing in analysis view, PL couldn't see badges in chords view). (2) Fix 2: Transpose chord symbol spelling — `transpose_chord_symbol()` now uses flat names for pitch classes 1/3/6/8/10 (Db/Eb/Gb/Ab/Bb), fixing roman numeral nonsense like `#IIMaj9` which should be `IIIMaj9`. Root cause: original logic used sharps for natural-root chords transposed up. (3) Fix 3: Score playback rework — `togglePlayPause()` now reloads `scorePart` when in score mode after stop (was only reloading chord `part`), play button shows "Score" label when in score mode.
+
+### What's Next (updated 2026-03-14)
 | ID | Feature | Priority | Status |
 |----|---------|----------|--------|
 | HL-003 | Show intervals on chord display | P2 | Open |
