@@ -201,6 +201,19 @@ async def transpose_song(
     # Pass transposed notes for key detection (no key override — let algorithm detect)
     result = analyze_song(transposed_symbols, key_override=None, midi_notes=transposed_midi)
 
+    # HL-TRANSPOSE-001: Convert sharp roman numerals to flat equivalents
+    # music21 produces #III, #IV etc. for chromatic chords — jazz convention uses bIV, bV
+    _SHARP_TO_FLAT = {
+        '#I': 'bII', '#II': 'bIII', '#III': 'bIV',
+        '#IV': 'bV', '#V': 'bVI', '#VI': 'bVII',
+    }
+    for ch in result.get('chords', []):
+        roman = ch.get('roman', '')
+        for sharp, flat in _SHARP_TO_FLAT.items():
+            if roman.startswith(sharp):
+                ch['roman'] = flat + roman[len(sharp):]
+                break
+
     # Enrich with measure/beat positions and note counts
     chord_positions = [
         {"measure": c['measure_number'], "beat": float(c.get('beat_position') or 1.0)}
