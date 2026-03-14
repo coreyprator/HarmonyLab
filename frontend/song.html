@@ -21,7 +21,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v2.12.0</div>
+        <div class="nav-version">v2.13.0</div>
     </nav>
 
     <header>
@@ -619,7 +619,9 @@
                                 beat_position: chord.beat_position,
                                 chord_order: chord.chord_order,
                                 symbol: chord.chord_symbol,
+                                originalSymbol: chord.chord_symbol,
                                 element: card,
+                                symbolElement: symbolSpan,
                                 romanElement: romanSpan
                             });
                             chordIndex++;
@@ -757,6 +759,14 @@
                 card.className = 'chord-card chord-function-' + ac.function;
                 if (ac.is_override) card.classList.add('is-override');
 
+                // HL-TRANSPOSE-001: Update chord symbol display for transposed chords
+                if (ac.symbol && chordInfo.symbolElement) {
+                    const displaySymbol = currentTranspose !== 0 ? ac.symbol : chordInfo.originalSymbol;
+                    chordInfo.symbolElement.textContent = normalizeChordDisplay(displaySymbol);
+                    chordInfo.symbol = displaySymbol;
+                    card.dataset.symbol = displaySymbol;
+                }
+
                 // Show roman numeral
                 romanEl.textContent = ac.roman;
                 romanEl.style.display = currentView === 'analysis' ? '' : 'none';
@@ -820,6 +830,9 @@
 
             // Render patterns
             renderPatterns(analysisData.patterns || []);
+
+            // HL-TRANSPOSE-001: Re-render piano roll with transposed chord tones
+            if (typeof setupPianoRoll === 'function') setupPianoRoll();
 
             // Pre-select current key in transpose dropdown
             const keySelect = document.getElementById('transpose-key-select');
