@@ -1,10 +1,9 @@
-# SESSION_CLOSEOUT.md — HL-CLOSEOUT-001 (PTH-HC01)
+# SESSION_CLOSEOUT.md — HL-REGRESSIONS-001 (PTH-HM03)
 
-> **Sprint ID**: HL-CLOSEOUT-001
-> **Session Date**: 2026-03-13
-> **Version**: v2.10.0 → v2.11.0
-> **Bootstrap**: v1.5.8 (BOOT-1.5.8-A7C3)
-> **Production URL**: https://harmony.rentyourcio.com
+> **Sprint ID**: HL-REGRESSIONS-001
+> **Session Date**: 2026-03-14
+> **Version**: v2.11.0 → v2.12.0
+> **Bootstrap**: v1.5.8
 > **Backend URL**: https://harmonylab-wmrla7fhwa-uc.a.run.app
 
 ---
@@ -13,60 +12,27 @@
 
 | # | Deliverable | Status | Evidence |
 |---|-------------|--------|----------|
-| 1 | Group A: 5 items admin-closed (HL-034, HL-036, HL-050, HL-REIMP-001, HL-AUDIT-UI-FIX-001) | DONE | All verified live, MetaPM status: closed |
-| 2 | Group B: 2 items verified (HL-033, HL-042) | DONE | Endpoints returning correct data, MetaPM status: closed |
-| 3 | HL-035: Full score playback (Score toggle) | DONE | song.html Score mode plays individual MIDI notes via Tone.Part |
-| 4 | HL-048: Jazz riff library | DONE | riffs.html + /api/v1/riffs/ — 10 riffs with playback |
-| 5 | v2.11.0 deployed | DONE | Backend rev harmonylab-00156-6z8, Frontend rev harmonylab-frontend-00078-2rf |
-| 6 | Canary gate 7/7 | PASS | Health, CORS, songs, analysis, auth, riffs, score endpoints verified |
-| 7 | UAT submitted | DONE | ID 330B2EC0-3639-4ECE-A783-68811EFE7E20 |
+| 1 | Fix 1: Note count badges in both views | DONE | Removed currentView gate, API returns note_count for all chords |
+| 2 | Fix 2: Transpose flat spelling | DONE | Eb13=III13 (was D#13=#II13), AbMaj9=VIMaj9 (was G#Maj9=#VMaj9) |
+| 3 | Fix 3: Score playback rework | DONE | togglePlayPause reloads scorePart, play button shows Score label |
+| 4 | v2.12.0 deployed | DONE | Backend harmonylab-00161-xh5, Frontend harmonylab-frontend-00079-wz4 |
+| 5 | Canary 5/5 | PASS | Version, note counts, transpose, notes endpoint |
+| 6 | UAT submitted | DONE | 16747974-8919-4378-B87A-228AF4FA2D04 |
 
 ---
 
-## Commits (this sprint)
+## Commits
 
 | SHA | Description |
 |-----|-------------|
-| `2b0a772` | v2.11.0: HL-CLOSEOUT-001 — score playback, jazz riff library, admin closes |
-
----
-
-## Files Created/Modified
-
-### New Files
-| File | Purpose |
-|------|---------|
-| `app/api/routes/riffs.py` | Jazz Riff Library API with 10 curated riffs |
-| `frontend/riffs.html` | Riff library page with Tone.js playback |
-
-### Modified Files
-| File | Changes |
-|------|---------|
-| `main.py` | v2.11.0, riffs router |
-| `frontend/song.html` | Score toggle, note-level playback |
-| `frontend/index.html` | Riffs nav, v2.11.0 |
-| `frontend/quiz.html` | Riffs nav, v2.11.0 |
-| `frontend/progress.html` | Riffs nav, v2.11.0 |
-| `frontend/audit.html` | Riffs nav, v2.11.0 |
-| `PROJECT_KNOWLEDGE.md` | v2.11.0 history |
-
----
-
-## Known Issues
-
-| Issue | Severity | Notes |
-|-------|----------|-------|
-| Score mode requires note data | Info | Songs without MIDI notes (chord-only imports) won't produce score playback |
-| Riffs in-memory only | Low | No DB persistence; edits require code changes to riffs.py |
-| HL-035, HL-048 at cc_complete | Info | Pending CAI UAT pass to walk to done |
+| `50e827e` | v2.12.0: HL-REGRESSIONS-001 — transpose spelling, score playback, note count badge |
+| `6875ef1` | docs: update PROJECT_KNOWLEDGE.md for v2.12.0 |
 
 ---
 
 ## MetaPM Handoff
 
-- UAT ID: 330B2EC0-3639-4ECE-A783-68811EFE7E20
-- HL-035: cc_complete
-- HL-048: cc_complete
-- All other items: done/closed
+- UAT ID: 16747974-8919-4378-B87A-228AF4FA2D04
+- Handoff ID: F5420FB7-8354-4BCD-8151-2476114EF7D4
 
-Full details: `handoffs/outbox/SESSION_CLOSEOUT_2026-03-13.md`
+Full details: `handoffs/outbox/SESSION_CLOSEOUT_2026-03-14.md`
