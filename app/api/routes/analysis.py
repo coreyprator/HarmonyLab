@@ -203,16 +203,21 @@ async def transpose_song(
 
     # HL-TRANSPOSE-001: Convert sharp roman numerals to flat equivalents
     # music21 produces #III, #IV etc. for chromatic chords — jazz convention uses bIV, bV
-    _SHARP_TO_FLAT = {
-        '#I': 'bII', '#II': 'bIII', '#III': 'bIV',
-        '#IV': 'bV', '#V': 'bVI', '#VI': 'bVII',
+    # Handles both uppercase (major) and lowercase (minor) roman numerals
+    _SHARP_TO_FLAT_RE = re.compile(
+        r'^#(VII|VI|V|IV|III|II|I|vii|vi|v|iv|iii|ii|i)(.*)'
+    )
+    _DEGREE_NEXT = {
+        'I': 'II', 'II': 'III', 'III': 'IV', 'IV': 'V', 'V': 'VI', 'VI': 'VII', 'VII': 'I',
+        'i': 'ii', 'ii': 'iii', 'iii': 'iv', 'iv': 'v', 'v': 'vi', 'vi': 'vii', 'vii': 'i',
     }
     for ch in result.get('chords', []):
         roman = ch.get('roman', '')
-        for sharp, flat in _SHARP_TO_FLAT.items():
-            if roman.startswith(sharp):
-                ch['roman'] = flat + roman[len(sharp):]
-                break
+        m = _SHARP_TO_FLAT_RE.match(roman)
+        if m:
+            degree, suffix = m.group(1), m.group(2)
+            flat_degree = _DEGREE_NEXT.get(degree, degree)
+            ch['roman'] = 'b' + flat_degree + suffix
 
     # Enrich with measure/beat positions and note counts
     chord_positions = [
