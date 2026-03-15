@@ -21,7 +21,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v2.14.0</div>
+        <div class="nav-version">v2.15.0</div>
     </nav>
 
     <header>
@@ -105,7 +105,7 @@
             </div>
         </div>
 
-        <!-- Song Playback Transport (HL-050) -->
+        <!-- Song Playback Transport (HL-035/036/050 rework) -->
         <div id="playback-transport" class="playback-transport" style="display:none">
             <div class="transport-controls">
                 <button id="play-pause-btn" class="transport-btn" title="Play/Pause">&#9654;</button>
@@ -117,15 +117,13 @@
                     <span id="tempo-value">120</span>
                 </label>
                 <span class="transport-separator">|</span>
-                <label class="transport-toggle">
-                    <input type="checkbox" id="chords-only-toggle">
-                    Arpeggiated
-                </label>
-                <span class="transport-separator">|</span>
-                <label class="transport-toggle">
-                    <input type="checkbox" id="score-mode-toggle">
-                    Score
-                </label>
+                <span class="transport-mode-label">Mode:</span>
+                <button id="mode-chords-btn" class="mode-btn mode-btn-active" title="Play arpeggiated chord voicings">Chords</button>
+                <button id="mode-score-btn" class="mode-btn" title="Play melody from score notes">Score</button>
+                <button id="mode-fullsong-btn" class="mode-btn" title="Play melody + chords together">Full Song</button>
+            </div>
+            <div id="playback-no-notes" class="playback-warning" style="display:none">
+                No note data &mdash; upload a MIDI file to use Score or Full Song mode.
             </div>
         </div>
 
@@ -402,6 +400,18 @@
                 <div class="form-group">
                     <label>Roman Numeral Override</label>
                     <input type="text" id="modal-roman" placeholder="e.g. V/vi">
+                </div>
+                <!-- HL-006 Item 4a: Secondary dominant interpretation toggle for dom7 chords -->
+                <div class="form-group" id="secondary-dominant-group" style="display:none">
+                    <label>Interpret as:</label>
+                    <div class="secondary-dominant-toggle">
+                        <button id="interp-algorithm-btn" class="interp-btn interp-btn-active" onclick="setSecondaryDominantInterp('algorithm')">
+                            <span id="interp-algorithm-label">IV7</span>
+                        </button>
+                        <button id="interp-v7v-btn" class="interp-btn" onclick="setSecondaryDominantInterp('v7v')">
+                            V7/V (Secondary Dominant)
+                        </button>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label>Function Override</label>
@@ -1155,6 +1165,18 @@
             document.getElementById('pivot-key-group').style.display =
                 ac.is_pivot ? '' : 'none';
 
+            // HL-006 Item 4a: Secondary dominant interpretation toggle
+            const secGroup = document.getElementById('secondary-dominant-group');
+            if (ac.secondary_dominant_candidate) {
+                secGroup.style.display = '';
+                document.getElementById('interp-algorithm-label').textContent = ac.roman || 'Algorithm';
+                // Reset button states
+                document.getElementById('interp-algorithm-btn').classList.add('interp-btn-active');
+                document.getElementById('interp-v7v-btn').classList.remove('interp-btn-active');
+            } else {
+                secGroup.style.display = 'none';
+            }
+
             // Populate theoretical note breakdown
             updateNoteBreakdown(ac.symbol);
 
@@ -1475,6 +1497,25 @@
         function closeChordModal() {
             document.getElementById('chord-modal').style.display = 'none';
             editingChordIndex = null;
+        }
+
+        // HL-006 Item 4a: Secondary dominant interpretation toggle handler
+        function setSecondaryDominantInterp(mode) {
+            const algBtn = document.getElementById('interp-algorithm-btn');
+            const v7vBtn = document.getElementById('interp-v7v-btn');
+            if (mode === 'v7v') {
+                algBtn.classList.remove('interp-btn-active');
+                v7vBtn.classList.add('interp-btn-active');
+                // Pre-fill roman override with V7/V
+                document.getElementById('modal-roman').value = 'V7/V';
+                document.getElementById('modal-function').value = 'secondary';
+            } else {
+                algBtn.classList.add('interp-btn-active');
+                v7vBtn.classList.remove('interp-btn-active');
+                // Clear override — revert to algorithm
+                document.getElementById('modal-roman').value = '';
+                document.getElementById('modal-function').value = '';
+            }
         }
 
         async function saveOverride() {
@@ -2250,87 +2291,25 @@
             originalOpenChordEditor(chordIndex);
         };
         // ==========================================
-        // SONG PLAYBACK ENGINE (HL-050)
+        // SONG PLAYBACK ENGINE (HL-035/036/050 rework)
+        // 3 modes: 'chords' | 'score' | 'fullsong'
         // ==========================================
 
         const HarmonyPlayback = (function() {
-            let part = null;
+            // Playback state
+            let playbackMode = 'chords'; // 'chords' | 'score' | 'fullsong'
+            let part = null;        // Chords part
+            let scorePart = null;   // Score (melody) part
             let isPlaying = false;
             let isPaused = false;
             let chordEvents = [];
             let currentHighlight = null;
             let positionInterval = null;
-            let arpeggiateMode = false;
             let totalBeats = 0;
+            let scoreNotesCache = null;
 
-            function buildEvents(chords, beatsPerMeasure) {
-                chordEvents = [];
-                for (const chord of chords) {
-                    const measure = chord.measure || 1;
-                    const beat = parseFloat(chord.beat) || 1;
-                    const timeInBeats = (measure - 1) * beatsPerMeasure + (beat - 1);
-                    chordEvents.push({
-                        time: `0:${timeInBeats}:0`,
-                        timeBeats: timeInBeats,
-                        symbol: chord.symbol,
-                        measure: measure,
-                        index: chord.index
-                    });
-                }
-                if (chordEvents.length > 0) {
-                    const last = chordEvents[chordEvents.length - 1];
-                    totalBeats = last.timeBeats + beatsPerMeasure;
-                }
-            }
-
-            function load(chords, bpm, beatsPerMeasure) {
-                stop();
-                Tone.getTransport().bpm.value = bpm;
-                buildEvents(chords, beatsPerMeasure);
-
-                part = new Tone.Part((time, ev) => {
-                    const notes = HarmonyAudio.parseChord(ev.symbol, 3);
-                    if (notes.length === 0) return;
-
-                    if (!HarmonyAudio.isReady()) return;
-
-                    if (arpeggiateMode) {
-                        const delay = 0.08;
-                        notes.forEach((note, i) => {
-                            sampler().triggerAttackRelease(note, '2n', time + i * delay);
-                        });
-                    } else {
-                        sampler().triggerAttackRelease(notes, '2n', time);
-                    }
-
-                    Tone.getDraw().schedule(() => {
-                        highlightChord(ev.index);
-                    }, time);
-                }, chordEvents.map(ev => [ev.time, ev]));
-
-                part.start(0);
-
-                // Schedule stop at end
-                Tone.getTransport().schedule(() => {
-                    stop();
-                }, `0:${totalBeats}:0`);
-
-                // Show transport
-                document.getElementById('playback-transport').style.display = '';
-                document.getElementById('tempo-slider').value = bpm;
-                document.getElementById('tempo-value').textContent = bpm;
-            }
-
-            function sampler() {
-                // Access the internal sampler from HarmonyAudio
-                // We need to use the public API to play
-                return window._harmonyPlaybackSampler;
-            }
-
-            async function play() {
-                if (!audioInitialized) await initAudioIfNeeded();
-
-                // Create a dedicated sampler for playback if needed
+            // ── Sampler ──────────────────────────────────────────────────────
+            async function ensureSampler() {
                 if (!window._harmonyPlaybackSampler) {
                     window._harmonyPlaybackSampler = new Tone.Sampler({
                         urls: {
@@ -2344,20 +2323,190 @@
                             'A7': 'A7.mp3', 'C8': 'C8.mp3'
                         },
                         baseUrl: 'https://tonejs.github.io/audio/salamander/',
-                        onload: () => { console.log('Playback sampler loaded'); }
                     }).toDestination();
-
-                    // Wait for sampler to load
                     await new Promise(resolve => {
                         const check = setInterval(() => {
                             if (window._harmonyPlaybackSampler.loaded) {
-                                clearInterval(check);
-                                resolve();
+                                clearInterval(check); resolve();
                             }
                         }, 100);
                     });
                 }
+                return window._harmonyPlaybackSampler;
+            }
 
+            function getSampler() { return window._harmonyPlaybackSampler; }
+
+            // ── Helpers ───────────────────────────────────────────────────────
+            function midiToNoteName(midi) {
+                const names = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+                const octave = Math.floor(midi / 12) - 1;
+                return names[midi % 12] + octave;
+            }
+
+            function chordMidiNotes(symbol, octave) {
+                // Use HarmonyAudio's parseChord (returns note-name strings like 'C3')
+                // but rebuild at a specific octave for left/right hand separation
+                return HarmonyAudio.parseChord(symbol, octave);
+            }
+
+            function buildChordEvents(chords, beatsPerMeasure) {
+                chordEvents = [];
+                for (const chord of chords) {
+                    const measure = chord.measure || 1;
+                    const beat = parseFloat(chord.beat_position || chord.beat) || 1;
+                    const timeInBeats = (measure - 1) * beatsPerMeasure + (beat - 1);
+                    chordEvents.push({
+                        time: `0:${timeInBeats}:0`,
+                        timeBeats: timeInBeats,
+                        symbol: chord.symbol,
+                        measure: measure,
+                        index: chord.index ?? chordEvents.length
+                    });
+                }
+                if (chordEvents.length > 0) {
+                    const last = chordEvents[chordEvents.length - 1];
+                    totalBeats = last.timeBeats + beatsPerMeasure;
+                }
+            }
+
+            async function loadScoreNotes(songId, transpose) {
+                if (scoreNotesCache?.songId === songId && scoreNotesCache?.transpose === transpose) {
+                    return scoreNotesCache.notes;
+                }
+                const res = await fetch(`${API_BASE}/api/v1/songs/${songId}/notes`);
+                if (!res.ok) return [];
+                const data = await res.json();
+                const raw = data.notes || data;
+                if (!raw?.length) return [];
+                const notes = raw.map(n => ({
+                    measure: n.measure_number,
+                    beat: n.beat_position,
+                    midi: n.midi_note + (transpose || 0),
+                    duration: Math.max(n.duration || 0.5, 0.1),
+                    velocity: (n.velocity || 64) / 127,
+                }));
+                scoreNotesCache = { songId, transpose, notes };
+                return notes;
+            }
+
+            // ── Load modes ───────────────────────────────────────────────────
+
+            // CHORDS mode: arpeggiate chord voicings in left-hand register
+            function loadChords(chords, bpm, beatsPerMeasure) {
+                _stopParts();
+                Tone.getTransport().bpm.value = bpm;
+                buildChordEvents(chords, beatsPerMeasure);
+
+                part = new Tone.Part((time, ev) => {
+                    const s = getSampler();
+                    if (!s?.loaded) return;
+                    const notes = chordMidiNotes(ev.symbol, 3); // octave 3 = left-hand
+                    if (!notes.length) return;
+                    // Arpeggiate: 80ms between notes
+                    const delay = 0.08;
+                    notes.forEach((note, i) => {
+                        s.triggerAttackRelease(note, '2n', time + i * delay);
+                    });
+                    Tone.getDraw().schedule(() => { highlightChord(ev.index); }, time);
+                }, chordEvents.map(ev => [ev.time, ev]));
+
+                part.start(0);
+                Tone.getTransport().schedule(() => { stop(); }, `0:${totalBeats}:0`);
+                _showTransport(bpm);
+            }
+
+            // SCORE mode: play melody notes from /notes endpoint
+            function loadScore(notes, bpm, beatsPerMeasure) {
+                _stopParts();
+                if (!notes?.length) {
+                    _showNoNotesWarning();
+                    return;
+                }
+                Tone.getTransport().bpm.value = bpm;
+
+                const events = notes.map(n => {
+                    const timeInBeats = (n.measure - 1) * beatsPerMeasure + (n.beat - 1);
+                    return {
+                        time: `0:${timeInBeats}:0`,
+                        timeBeats: timeInBeats,
+                        note: midiToNoteName(n.midi),
+                        duration: n.duration,
+                        velocity: n.velocity,
+                    };
+                });
+                totalBeats = Math.max(...events.map(e => e.timeBeats)) + beatsPerMeasure;
+
+                scorePart = new Tone.Part((time, ev) => {
+                    const s = getSampler();
+                    if (!s?.loaded) return;
+                    try {
+                        const durSec = (ev.duration * 60) / Tone.getTransport().bpm.value;
+                        s.triggerAttackRelease(ev.note, durSec, time, ev.velocity);
+                    } catch(_) {}
+                }, events.map(ev => [ev.time, ev]));
+
+                scorePart.start(0);
+                Tone.getTransport().schedule(() => { stop(); }, `0:${totalBeats}:0`);
+                _showTransport(bpm);
+            }
+
+            // FULL SONG mode: melody (right hand, higher octave) + chords (left hand)
+            function loadFullSong(notes, chords, bpm, beatsPerMeasure) {
+                _stopParts();
+                if (!notes?.length) {
+                    _showNoNotesWarning();
+                    return;
+                }
+                Tone.getTransport().bpm.value = bpm;
+                buildChordEvents(chords, beatsPerMeasure);
+
+                // Right hand: melody at normal midi pitch (octave from midi data)
+                const melodyEvents = notes.map(n => {
+                    const timeInBeats = (n.measure - 1) * beatsPerMeasure + (n.beat - 1);
+                    return {
+                        time: `0:${timeInBeats}:0`,
+                        note: midiToNoteName(n.midi),
+                        duration: n.duration,
+                        velocity: n.velocity,
+                    };
+                });
+                const melodyBeats = Math.max(...melodyEvents.map(e =>
+                    parseFloat(e.time.split(':')[1]))) + beatsPerMeasure;
+
+                scorePart = new Tone.Part((time, ev) => {
+                    const s = getSampler();
+                    if (!s?.loaded) return;
+                    try {
+                        const durSec = (ev.duration * 60) / Tone.getTransport().bpm.value;
+                        s.triggerAttackRelease(ev.note, durSec, time, ev.velocity);
+                    } catch(_) {}
+                }, melodyEvents.map(ev => [ev.time, ev]));
+                scorePart.start(0);
+
+                // Left hand: chord arpeggios one octave lower (octave 2)
+                part = new Tone.Part((time, ev) => {
+                    const s = getSampler();
+                    if (!s?.loaded) return;
+                    const notes = chordMidiNotes(ev.symbol, 2); // octave 2 = left-hand low
+                    if (!notes.length) return;
+                    const delay = 0.08;
+                    notes.forEach((note, i) => {
+                        s.triggerAttackRelease(note, '2n', time + i * delay);
+                    });
+                    Tone.getDraw().schedule(() => { highlightChord(ev.index); }, time);
+                }, chordEvents.map(ev => [ev.time, ev]));
+                part.start(0);
+
+                totalBeats = Math.max(melodyBeats, totalBeats);
+                Tone.getTransport().schedule(() => { stop(); }, `0:${totalBeats}:0`);
+                _showTransport(bpm);
+            }
+
+            // ── Transport controls ────────────────────────────────────────────
+            async function play() {
+                if (!audioInitialized) await initAudioIfNeeded();
+                await ensureSampler();
                 await Tone.start();
                 if (isPaused) {
                     Tone.getTransport().start();
@@ -2381,11 +2530,8 @@
             function stop() {
                 Tone.getTransport().stop();
                 Tone.getTransport().position = 0;
-                if (part) { part.stop(0); part.dispose(); part = null; }
-                if (scorePart) { scorePart.stop(0); scorePart.dispose(); scorePart = null; }
-                if (window._harmonyPlaybackSampler) {
-                    window._harmonyPlaybackSampler.releaseAll();
-                }
+                _stopParts();
+                getSampler()?.releaseAll();
                 isPlaying = false;
                 isPaused = false;
                 updatePlayButton();
@@ -2394,44 +2540,63 @@
                 updatePositionDisplay();
             }
 
+            function _stopParts() {
+                if (part) { try { part.stop(0); part.dispose(); } catch(_) {} part = null; }
+                if (scorePart) { try { scorePart.stop(0); scorePart.dispose(); } catch(_) {} scorePart = null; }
+            }
+
             async function togglePlayPause() {
                 if (isPlaying) {
                     pause();
+                    return;
+                }
+                const bpm = parseInt(document.getElementById('tempo-slider').value) || 120;
+                const beatsPerMeasure = parseTimeSignature();
+
+                if (playbackMode === 'score') {
+                    if (!scorePart && songId) {
+                        const notes = await loadScoreNotes(songId, currentTranspose);
+                        loadScore(notes, bpm, beatsPerMeasure);
+                        if (!scorePart) return; // no notes — warning already shown
+                    }
+                } else if (playbackMode === 'fullsong') {
+                    if (!scorePart && songId) {
+                        const notes = await loadScoreNotes(songId, currentTranspose);
+                        const chords = (analysisData?.chords || []).map(c => ({
+                            symbol: c.symbol, measure: c.measure,
+                            beat_position: c.beat, index: c.index
+                        }));
+                        loadFullSong(notes, chords, bpm, beatsPerMeasure);
+                        if (!scorePart) return;
+                    }
                 } else {
-                    const bpm = parseInt(document.getElementById('tempo-slider').value) || 120;
-                    const beatsPerMeasure = parseTimeSignature();
-                    if (scoreMode) {
-                        // Reload score notes if disposed by stop()
-                        if (!scorePart && songId) {
-                            const notes = await loadScoreNotes(songId, currentTranspose);
-                            if (notes.length > 0) loadScore(notes, bpm, beatsPerMeasure);
-                        }
-                    } else if (!part && chordEvents.length > 0) {
-                        // Reload chord data if disposed
+                    // chords mode
+                    if (!part && chordEvents.length > 0) {
                         loadFromCurrentData(bpm, beatsPerMeasure);
                     }
-                    play();
                 }
+                play();
+            }
+
+            function setMode(mode) {
+                if (mode === playbackMode) return;
+                stop();
+                playbackMode = mode;
+                updateModeButtons();
+                updatePlayButton();
             }
 
             function setTempo(bpm) {
                 Tone.getTransport().bpm.value = bpm;
             }
 
-            function setArpeggiate(val) {
-                arpeggiateMode = val;
-            }
-
+            // ── UI helpers ────────────────────────────────────────────────────
             function highlightChord(index) {
                 clearHighlight();
-                if (window.allChords && window.allChords[index]) {
+                if (window.allChords?.[index]) {
                     const el = window.allChords[index].element;
-                    if (el) {
-                        el.classList.add('chord-playing');
-                        currentHighlight = el;
-                    }
+                    if (el) { el.classList.add('chord-playing'); currentHighlight = el; }
                 }
-                // Update piano roll cursor
                 if (chordEvents[index]) {
                     updatePianoRollCursor(chordEvents[index].timeBeats);
                 }
@@ -2447,11 +2612,26 @@
             function updatePlayButton() {
                 const btn = document.getElementById('play-pause-btn');
                 if (!btn) return;
-                if (isPlaying) {
-                    btn.innerHTML = '&#10074;&#10074;';
-                } else {
-                    btn.innerHTML = scoreMode ? '&#9654; Score' : '&#9654;';
-                }
+                btn.innerHTML = isPlaying ? '&#10074;&#10074;' : '&#9654;';
+            }
+
+            function updateModeButtons() {
+                ['chords', 'score', 'fullsong'].forEach(m => {
+                    const btn = document.getElementById(`mode-${m}-btn`);
+                    if (btn) btn.classList.toggle('mode-btn-active', m === playbackMode);
+                });
+            }
+
+            function _showTransport(bpm) {
+                document.getElementById('playback-transport').style.display = '';
+                document.getElementById('playback-no-notes').style.display = 'none';
+                document.getElementById('tempo-slider').value = bpm;
+                document.getElementById('tempo-value').textContent = bpm;
+            }
+
+            function _showNoNotesWarning() {
+                document.getElementById('playback-transport').style.display = '';
+                document.getElementById('playback-no-notes').style.display = '';
             }
 
             function startPositionUpdate() {
@@ -2460,10 +2640,7 @@
             }
 
             function stopPositionUpdate() {
-                if (positionInterval) {
-                    clearInterval(positionInterval);
-                    positionInterval = null;
-                }
+                if (positionInterval) { clearInterval(positionInterval); positionInterval = null; }
             }
 
             function updatePositionDisplay() {
@@ -2477,83 +2654,12 @@
             }
 
             function getIsPlaying() { return isPlaying; }
-
-            // HL-035: Score (note-level) playback mode
-            let scoreMode = false;
-            let scorePart = null;
-            let scoreNotesCache = null;
-
-            function setScoreMode(val) { scoreMode = val; }
-
-            function midiToNoteName(midi) {
-                const names = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
-                const octave = Math.floor(midi / 12) - 1;
-                return names[midi % 12] + octave;
-            }
-
-            async function loadScoreNotes(songId, transpose) {
-                if (scoreNotesCache && scoreNotesCache.songId === songId && scoreNotesCache.transpose === transpose) {
-                    return scoreNotesCache.notes;
-                }
-                const res = await fetch(`${API_BASE}/api/v1/songs/${songId}/notes`);
-                if (!res.ok) return [];
-                const data = await res.json();
-                const raw = data.notes || data;
-                const notes = raw.map(n => ({
-                    measure: n.measure_number,
-                    beat: n.beat_position,
-                    midi: n.midi_note + (transpose || 0),
-                    duration: n.duration || 0.5,
-                    velocity: n.velocity || 64,
-                }));
-                scoreNotesCache = { songId, transpose, notes };
-                return notes;
-            }
-
-            function loadScore(notes, bpm, beatsPerMeasure) {
-                stop();
-                if (!notes || notes.length === 0) return;
-
-                Tone.getTransport().bpm.value = bpm;
-
-                const events = notes.map(n => {
-                    const timeInBeats = (n.measure - 1) * beatsPerMeasure + (n.beat - 1);
-                    return {
-                        time: `0:${timeInBeats}:0`,
-                        timeBeats: timeInBeats,
-                        note: midiToNoteName(n.midi),
-                        duration: Math.max(n.duration, 0.1),
-                        velocity: n.velocity / 127,
-                    };
-                });
-
-                const lastBeat = Math.max(...events.map(e => e.timeBeats)) + beatsPerMeasure;
-                totalBeats = lastBeat;
-
-                scorePart = new Tone.Part((time, ev) => {
-                    if (!sampler()?.loaded) return;
-                    try {
-                        const durSec = (ev.duration * 60) / Tone.getTransport().bpm.value;
-                        sampler().triggerAttackRelease(ev.note, durSec, time, ev.velocity);
-                    } catch(e) {
-                        // Some note names may be out of range
-                    }
-                }, events.map(ev => [ev.time, ev]));
-
-                scorePart.start(0);
-
-                Tone.getTransport().schedule(() => { stop(); }, `0:${totalBeats}:0`);
-
-                document.getElementById('playback-transport').style.display = '';
-                document.getElementById('tempo-slider').value = bpm;
-                document.getElementById('tempo-value').textContent = bpm;
-            }
+            function getMode() { return playbackMode; }
 
             return {
-                load, play, pause, stop, togglePlayPause,
-                setTempo, setArpeggiate, setScoreMode, loadScore,
-                loadScoreNotes, isPlaying: getIsPlaying,
-                get scoreMode() { return scoreMode; },
+                load: loadChords, loadScore, loadFullSong, loadScoreNotes,
+                play, pause, stop, togglePlayPause, setMode, setTempo,
+                isPlaying: getIsPlaying, getMode,
                 get chordEvents() { return chordEvents; },
                 get totalBeats() { return totalBeats; }
             };
@@ -2592,18 +2698,15 @@
             // Show piano roll
             setupPianoRoll();
 
-            // Wire controls
+            // Wire transport controls
             document.getElementById('play-pause-btn').addEventListener('click', () => {
                 HarmonyPlayback.togglePlayPause();
             });
-            document.getElementById('stop-btn').addEventListener('click', async () => {
+            document.getElementById('stop-btn').addEventListener('click', () => {
                 HarmonyPlayback.stop();
-                // Reload for next play
-                const curBpm = parseInt(document.getElementById('tempo-slider').value) || bpm;
-                if (HarmonyPlayback.scoreMode && songId) {
-                    const notes = await HarmonyPlayback.loadScoreNotes(songId, currentTranspose);
-                    if (notes.length > 0) HarmonyPlayback.loadScore(notes, curBpm, beatsPerMeasure);
-                } else {
+                // Reload chords part for next play (score/fullsong reload on demand in togglePlayPause)
+                if (HarmonyPlayback.getMode() === 'chords') {
+                    const curBpm = parseInt(document.getElementById('tempo-slider').value) || bpm;
                     loadFromCurrentData(curBpm, beatsPerMeasure);
                 }
             });
@@ -2612,23 +2715,31 @@
                 document.getElementById('tempo-value').textContent = val;
                 HarmonyPlayback.setTempo(val);
             });
-            document.getElementById('chords-only-toggle').addEventListener('change', (e) => {
-                HarmonyPlayback.setArpeggiate(e.target.checked);
-            });
-            document.getElementById('score-mode-toggle').addEventListener('change', async (e) => {
-                HarmonyPlayback.setScoreMode(e.target.checked);
-                HarmonyPlayback.stop();
-                if (e.target.checked && songId) {
-                    const notes = await HarmonyPlayback.loadScoreNotes(songId, currentTranspose);
-                    if (notes.length > 0) {
-                        const curBpm = parseInt(document.getElementById('tempo-slider').value) || bpm;
-                        HarmonyPlayback.loadScore(notes, curBpm, beatsPerMeasure);
-                    }
-                } else {
-                    const curBpm = parseInt(document.getElementById('tempo-slider').value) || bpm;
+
+            // Wire mode buttons
+            async function switchMode(mode) {
+                HarmonyPlayback.setMode(mode);
+                const curBpm = parseInt(document.getElementById('tempo-slider').value) || bpm;
+                if (mode === 'chords') {
                     loadFromCurrentData(curBpm, beatsPerMeasure);
+                    document.getElementById('playback-transport').style.display = '';
+                    document.getElementById('playback-no-notes').style.display = 'none';
+                } else if (mode === 'score') {
+                    const notes = await HarmonyPlayback.loadScoreNotes(songId, currentTranspose);
+                    HarmonyPlayback.loadScore(notes, curBpm, beatsPerMeasure);
+                } else if (mode === 'fullsong') {
+                    const notes = await HarmonyPlayback.loadScoreNotes(songId, currentTranspose);
+                    const chords = (analysisData?.chords || []).map(c => ({
+                        symbol: c.symbol, measure: c.measure,
+                        beat_position: c.beat, index: c.index
+                    }));
+                    HarmonyPlayback.loadFullSong(notes, chords, curBpm, beatsPerMeasure);
                 }
-            });
+            }
+
+            document.getElementById('mode-chords-btn').addEventListener('click', () => switchMode('chords'));
+            document.getElementById('mode-score-btn').addEventListener('click', () => switchMode('score'));
+            document.getElementById('mode-fullsong-btn').addEventListener('click', () => switchMode('fullsong'));
         }
 
         // ==========================================
@@ -3159,6 +3270,72 @@
             align-items: center;
             gap: 4px;
             cursor: pointer;
+        }
+
+        /* Playback mode buttons */
+        .transport-mode-label {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+        }
+
+        .mode-btn {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            padding: 4px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.82rem;
+            transition: all 0.15s;
+        }
+
+        .mode-btn:hover {
+            border-color: var(--accent);
+            color: var(--text);
+        }
+
+        .mode-btn-active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #fff;
+            font-weight: 600;
+        }
+
+        .playback-warning {
+            font-size: 0.82rem;
+            color: #f59e0b;
+            padding: 4px 0 0 0;
+            margin-top: 4px;
+        }
+
+        /* Secondary dominant interpretation toggle */
+        .secondary-dominant-toggle {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .interp-btn {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            padding: 4px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.82rem;
+            transition: all 0.15s;
+        }
+
+        .interp-btn:hover {
+            border-color: var(--accent);
+            color: var(--text);
+        }
+
+        .interp-btn-active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #fff;
+            font-weight: 600;
         }
 
         /* Chord highlight during playback */

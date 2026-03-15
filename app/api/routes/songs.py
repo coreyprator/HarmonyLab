@@ -383,3 +383,38 @@ async def get_song_notes(
         ],
         "total_notes": len(notes),
     }
+
+
+@router.get("/{song_id}/chords")
+async def get_song_chords(song_id: int, db: DatabaseConnection = Depends(get_db)):
+    """HL-036: Get all chords for a song with measure and beat_position fields for playback."""
+    songs = db.execute_query("SELECT id FROM Songs WHERE id = ?", (song_id,))
+    if not songs:
+        raise HTTPException(status_code=404, detail="Song not found")
+
+    try:
+        chords = db.execute_query("""
+            SELECT c.id, c.beat_position, c.chord_symbol, c.roman_numeral,
+                   m.measure_number
+            FROM Chords c
+            JOIN Measures m ON c.measure_id = m.id
+            WHERE m.song_id = ?
+            ORDER BY m.measure_number, c.beat_position
+        """, (song_id,))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to query chords: {str(e)}")
+
+    return {
+        "song_id": song_id,
+        "chords": [
+            {
+                "id": c["id"],
+                "measure": c["measure_number"],
+                "beat_position": float(c.get("beat_position") or 1.0),
+                "symbol": c["chord_symbol"],
+                "roman": c.get("roman_numeral"),
+            }
+            for c in (chords or [])
+        ],
+        "total": len(chords or []),
+    }
