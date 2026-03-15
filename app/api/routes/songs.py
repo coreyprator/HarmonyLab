@@ -387,11 +387,17 @@ async def get_song_notes(
 
 @router.get("/{song_id}/chords")
 async def get_song_chords(song_id: int, db: DatabaseConnection = Depends(get_db)):
-    """HL-036: Get all chords for a song with measure and beat_position fields for playback."""
+    """HL-036: Get all chords for a song with measure and beat_position fields for playback.
+    Primary source: Chords table (joined via Measures).
+    Fallback: SongAnalysis JSON blob (algorithm-analyzed songs without DB chord rows).
+    """
+    import json as _json
     songs = db.execute_query("SELECT id FROM Songs WHERE id = ?", (song_id,))
     if not songs:
         raise HTTPException(status_code=404, detail="Song not found")
 
+    # Primary: Chords table
+    chords = []
     try:
         chords = db.execute_query("""
             SELECT c.id, c.beat_position, c.chord_symbol, c.roman_numeral,
@@ -401,20 +407,51 @@ async def get_song_chords(song_id: int, db: DatabaseConnection = Depends(get_db)
             WHERE m.song_id = ?
             ORDER BY m.measure_number, c.beat_position
         """, (song_id,))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to query chords: {str(e)}")
+    except Exception:
+        chords = []
 
-    return {
-        "song_id": song_id,
-        "chords": [
-            {
-                "id": c["id"],
-                "measure": c["measure_number"],
-                "beat_position": float(c.get("beat_position") or 1.0),
-                "symbol": c["chord_symbol"],
-                "roman": c.get("roman_numeral"),
-            }
-            for c in (chords or [])
-        ],
-        "total": len(chords or []),
-    }
+    if chords:
+        return {
+            "song_id": song_id,
+            "source": "db",
+            "chords": [
+                {
+                    "id": c["id"],
+                    "measure": c["measure_number"],
+                    "beat_position": float(c.get("beat_position") or 1.0),
+                    "symbol": c["chord_symbol"],
+                    "roman": c.get("roman_numeral"),
+                }
+                for c in chords
+            ],
+            "total": len(chords),
+        }
+
+    # Fallback: SongAnalysis JSON blob
+    try:
+        cached = db.execute_query(
+            "SELECT analysis_json FROM SongAnalysis WHERE song_id = ?", (song_id,)
+        )
+        if cached and cached[0].get("analysis_json"):
+            analysis = _json.loads(cached[0]["analysis_json"])
+            analysis_chords = analysis.get("chords", [])
+            if analysis_chords:
+                return {
+                    "song_id": song_id,
+                    "source": "analysis_cache",
+                    "chords": [
+                        {
+                            "id": None,
+                            "measure": c.get("measure", 1),
+                            "beat_position": float(c.get("beat") or 1.0),
+                            "symbol": c.get("symbol"),
+                            "roman": c.get("roman"),
+                        }
+                        for c in analysis_chords
+                    ],
+                    "total": len(analysis_chords),
+                }
+    except Exception:
+        pass
+
+    return {"song_id": song_id, "source": "none", "chords": [], "total": 0}
