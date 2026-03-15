@@ -258,6 +258,8 @@ async def get_analysis(
             result = json.loads(cached[0]['analysis_json'])
             # HL-MEGA-003: Enrich with live note counts (may have changed since cache)
             result = _enrich_note_counts(result, song_id, db)
+            # HL-006: Apply secondary dominant flags (cache predates this detection)
+            result = _enrich_secondary_dominants(result)
             return _apply_overrides(result, song_id, db)
 
     # Verify song exists
@@ -747,6 +749,44 @@ def _enrich_note_counts(result: dict, song_id: int, db: DatabaseConnection) -> d
             m = ch.get('measure')
             if m is not None:
                 ch['note_count'] = notes_per_measure.get(m, 0)
+    return result
+
+
+def _enrich_secondary_dominants(result: dict) -> dict:
+    """HL-006: Flag dom7 chords as secondary dominant candidates on cached results.
+    Replicates HarmonicAnalyzer._detect_secondary_dominants() for stale cache entries."""
+    import re
+    _NOTE_SEMI = {
+        'C': 0, 'C#': 1, 'Db': 1, 'D': 2, 'D#': 3, 'Eb': 3, 'E': 4,
+        'F': 5, 'F#': 6, 'Gb': 6, 'G': 7, 'G#': 8, 'Ab': 8, 'A': 9,
+        'A#': 10, 'Bb': 10, 'B': 11,
+    }
+
+    def get_root_semitone(symbol):
+        m = re.match(r'^([A-G][#b]?)', symbol or '')
+        if not m:
+            return None
+        return _NOTE_SEMI.get(m.group(1))
+
+    def is_dom7_quality(symbol):
+        if not symbol:
+            return False
+        quality = re.sub(r'^[A-G][#b]?', '', symbol)
+        return bool(re.match(r'^(7|7b9|7#9|7#11|9|13|7alt|7sus4|9sus4)', quality))
+
+    chords = result.get('chords', [])
+    for i, ch in enumerate(chords):
+        sym = ch.get('symbol', '')
+        if not is_dom7_quality(sym):
+            continue
+        ch['secondary_dominant_candidate'] = True
+        if i < len(chords) - 1:
+            nxt_sym = chords[i + 1].get('symbol', '')
+            root = get_root_semitone(sym)
+            nxt_root = get_root_semitone(nxt_sym)
+            if root is not None and nxt_root is not None:
+                if (root - nxt_root) % 12 == 7:
+                    ch['secondary_dominant_target'] = nxt_sym
     return result
 
 
