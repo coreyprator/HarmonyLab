@@ -108,21 +108,20 @@ class HarmonicAnalyzer:
                 return True
             return False
 
-        for i in range(len(analyzed) - 1):
-            ch = analyzed[i]
-            nxt = analyzed[i + 1]
+        for i, ch in enumerate(analyzed):
             sym = ch.get('symbol', '')
-            nxt_sym = nxt.get('symbol', '')
             if not is_dom7_quality(sym):
                 continue
-            root = get_root_semitone(sym)
-            nxt_root = get_root_semitone(nxt_sym)
-            if root is None or nxt_root is None:
-                continue
-            # Check P5 resolution: root - nxt_root == 7 semitones (mod 12)
-            if (root - nxt_root) % 12 == 7:
-                ch['secondary_dominant_candidate'] = True
-                ch['secondary_dominant_target'] = nxt_sym
+            # All dom7 chords are secondary dominant candidates — show the toggle
+            ch['secondary_dominant_candidate'] = True
+            # Detect P5 target (next chord that this resolves to)
+            if i < len(analyzed) - 1:
+                nxt_sym = analyzed[i + 1].get('symbol', '')
+                root = get_root_semitone(sym)
+                nxt_root = get_root_semitone(nxt_sym)
+                if root is not None and nxt_root is not None:
+                    if (root - nxt_root) % 12 == 7:
+                        ch['secondary_dominant_target'] = nxt_sym
         return analyzed
 
     def _detect_key(self, chords: List[str]) -> tuple:
