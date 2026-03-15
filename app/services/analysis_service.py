@@ -57,6 +57,10 @@ class HarmonicAnalyzer:
             analysis = self._analyze_chord(symbol, i)
             analyzed.append(analysis)
 
+        # HL-006 Item 4a: Secondary dominant detection pass
+        # If a dom7 chord is a P5 above the next chord, label it V7/V-style
+        analyzed = self._detect_secondary_dominants(analyzed)
+
         # Detect patterns
         patterns = self._detect_patterns(analyzed)
 
@@ -66,6 +70,60 @@ class HarmonicAnalyzer:
             "chords": analyzed,
             "patterns": patterns
         }
+
+    # Dominant 7th interval set (mod 12): root, M3, P5, m7
+    _DOM7_INTERVALS = {0, 4, 7, 10}
+
+    def _detect_secondary_dominants(self, analyzed: list) -> list:
+        """HL-006 Item 4a: Post-process chords to detect secondary dominants.
+
+        Rule: if chord[n] is a dom7 chord and chord[n+1] resolves by P5 down
+        (i.e., chord[n] is a P5 above chord[n+1]), flag chord[n] as a
+        potential secondary dominant. Store in 'secondary_dominant_candidate'
+        field so the frontend can offer a toggle.
+        """
+        from music21 import harmony, interval as m21interval, pitch as m21pitch
+        import re
+
+        def get_root_semitone(symbol: str) -> int | None:
+            """Return root note as semitone (0=C ... 11=B), or None."""
+            _NOTE_SEMI = {
+                'C': 0, 'C#': 1, 'Db': 1, 'D': 2, 'D#': 3, 'Eb': 3,
+                'E': 4, 'F': 5, 'F#': 6, 'Gb': 6, 'G': 7, 'G#': 8,
+                'Ab': 8, 'A': 9, 'A#': 10, 'Bb': 10, 'B': 11,
+            }
+            m = re.match(r'^([A-G][#b]?)', symbol or '')
+            if not m:
+                return None
+            return _NOTE_SEMI.get(m.group(1))
+
+        def is_dom7_quality(symbol: str) -> bool:
+            """True if symbol appears to be a dominant 7th (X7, X9, X13 etc)."""
+            if not symbol:
+                return False
+            quality = re.sub(r'^[A-G][#b]?', '', symbol)
+            # dom7 indicators: bare '7', '7b9', '7#9', '9', '13', '7alt', '7sus4'
+            # Exclude maj7, m7, dim7, mMaj7
+            if re.match(r'^(7|7b9|7#9|7#11|9|13|7alt|7sus4|9sus4)$', quality):
+                return True
+            return False
+
+        for i in range(len(analyzed) - 1):
+            ch = analyzed[i]
+            nxt = analyzed[i + 1]
+            sym = ch.get('symbol', '')
+            nxt_sym = nxt.get('symbol', '')
+            if not is_dom7_quality(sym):
+                continue
+            root = get_root_semitone(sym)
+            nxt_root = get_root_semitone(nxt_sym)
+            if root is None or nxt_root is None:
+                continue
+            # Check P5 resolution: root - nxt_root == 7 semitones (mod 12)
+            if (root - nxt_root) % 12 == 7:
+                ch['secondary_dominant_candidate'] = True
+                ch['secondary_dominant_target'] = nxt_sym
+        return analyzed
 
     def _detect_key(self, chords: List[str]) -> tuple:
         """Auto-detect key from chords."""
