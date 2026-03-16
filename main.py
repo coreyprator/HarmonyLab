@@ -9,6 +9,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from config.settings import settings
 
 # Import routes
@@ -16,7 +17,7 @@ from app.api.routes import songs, sections, vocabulary, measures, chords, progre
 
 logger = logging.getLogger(__name__)
 
-VERSION = "2.15.0"
+VERSION = "2.15.1"
 
 app = FastAPI(
     title="Harmony Lab API",
@@ -39,6 +40,9 @@ async def general_exception_handler(request: Request, exc: Exception):
             "path": str(request.url.path)
         }
     )
+
+# Proxy headers middleware — trust X-Forwarded-Proto from Cloud Run load balancer
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 
 # CORS middleware
 # Note: allow_origins=["*"] is INVALID with allow_credentials=True (browsers reject it).
