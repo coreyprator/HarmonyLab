@@ -19,8 +19,8 @@ const HarmonyAudio = (function() {
     let volume = 0.8;
     let audioUnlocked = false;
 
-    // Salamander Grand Piano samples (official Tone.js CDN)
-    const SALAMANDER_URL = 'https://tonejs.github.io/audio/salamander/';
+    // MusyngKite acoustic grand piano samples (fallback CDN — gleitz.github.io returned 404)
+    const SAMPLER_BASE_URL = 'https://nbrosowsky.github.io/tonejs-instruments/samples/piano/';
 
     // Map chord symbols to MIDI notes
     // Base octave is 4 (middle C = C4)
@@ -97,7 +97,7 @@ const HarmonyAudio = (function() {
             await Tone.start();
             audioUnlocked = true;
 
-            // Create the sampler with Salamander piano samples
+            // Create the sampler with MusyngKite piano samples (nbrosowsky CDN, no velocity suffix)
             sampler = new Tone.Sampler({
                 urls: {
                     'A0': 'A0.mp3',
@@ -131,11 +131,11 @@ const HarmonyAudio = (function() {
                     'A7': 'A7.mp3',
                     'C8': 'C8.mp3',
                 },
-                baseUrl: SALAMANDER_URL,
+                baseUrl: SAMPLER_BASE_URL,
                 onload: () => {
-                    console.log('HarmonyAudio: Piano samples loaded');
                     isLoaded = true;
                     isLoading = false;
+                    console.log('MusyngKite piano loaded');
                 },
                 onerror: (err) => {
                     console.error('HarmonyAudio: Failed to load samples', err);
