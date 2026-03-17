@@ -127,6 +127,15 @@ async def bulk_delete_songs(
     deleted = 0
     for sid in song_ids:
         try:
+            # EFG-024: Clean up FK references that lack ON DELETE CASCADE
+            try:
+                db.execute_non_query("DELETE FROM QuizAttempts WHERE song_id = ?", (sid,))
+            except Exception:
+                pass
+            try:
+                db.execute_non_query("DELETE FROM UserSongProgress WHERE song_id = ?", (sid,))
+            except Exception:
+                pass
             result = db.execute_non_query("DELETE FROM Songs WHERE id = ?", (sid,))
             if result and result > 0:
                 deleted += 1
@@ -138,7 +147,17 @@ async def bulk_delete_songs(
 
 @router.delete("/{song_id}", status_code=204)
 async def delete_song(song_id: int, db: DatabaseConnection = Depends(get_db)):
-    """Delete a song (cascades to sections, measures, chords)."""
+    """Delete a song. Cleans up QuizAttempts and UserSongProgress FK refs first,
+    then deletes song (DB cascades handle sections/measures/chords)."""
+    # EFG-024: Clean up FK references that lack ON DELETE CASCADE
+    try:
+        db.execute_non_query("DELETE FROM QuizAttempts WHERE song_id = ?", (song_id,))
+    except Exception:
+        pass  # Table may not exist or no rows
+    try:
+        db.execute_non_query("DELETE FROM UserSongProgress WHERE song_id = ?", (song_id,))
+    except Exception:
+        pass
     result = db.execute_non_query("DELETE FROM Songs WHERE id = ?", (song_id,))
 
     if result == 0:

@@ -17,7 +17,7 @@ from app.api.routes import songs, sections, vocabulary, measures, chords, progre
 
 logger = logging.getLogger(__name__)
 
-VERSION = "2.15.1"
+VERSION = "2.15.2"  # EFG-MEGA-001: cascade delete fix for QuizAttempts FK
 
 app = FastAPI(
     title="Harmony Lab API",
