@@ -19,8 +19,8 @@ const HarmonyAudio = (function() {
     let volume = 0.8;
     let audioUnlocked = false;
 
-    // MusyngKite acoustic grand piano samples (fallback CDN — gleitz.github.io returned 404)
-    const SAMPLER_BASE_URL = 'https://nbrosowsky.github.io/tonejs-instruments/samples/piano/';
+    // Piano samples hosted on GCS (migrated from external CDN for reliability)
+    const SAMPLER_BASE_URL = 'https://storage.googleapis.com/harmonylab-media/samples/piano/';
 
     // Map chord symbols to MIDI notes
     // Base octave is 4 (middle C = C4)
@@ -97,7 +97,7 @@ const HarmonyAudio = (function() {
             await Tone.start();
             audioUnlocked = true;
 
-            // Create the sampler with MusyngKite piano samples (nbrosowsky CDN, no velocity suffix)
+            // Create the sampler with piano samples (GCS-hosted)
             sampler = new Tone.Sampler({
                 urls: {
                     'A0': 'A0.mp3',
@@ -135,7 +135,7 @@ const HarmonyAudio = (function() {
                 onload: () => {
                     isLoaded = true;
                     isLoading = false;
-                    console.log('MusyngKite piano loaded');
+                    console.log('Piano samples loaded (GCS)');
                 },
                 onerror: (err) => {
                     console.error('HarmonyAudio: Failed to load samples', err);
