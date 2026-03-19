@@ -408,18 +408,27 @@ async def get_analysis(
     """, (song_id,))
     result['total_measures'] = measure_count or 0
 
-    # Form detection based on measure count
-    tm = measure_count or 0
-    if tm <= 12:
-        result['form'] = '12-bar blues'
-    elif tm <= 16:
-        result['form'] = f'{tm}-bar'
-    elif tm <= 36:
-        result['form'] = f'AABA ({tm} bars)'
-    elif tm <= 48:
-        result['form'] = f'{tm}-bar (extended)'
-    elif tm > 0:
-        result['form'] = f'{tm}-bar (through-composed)'
+    # BV-04: Check for form override first, then fall back to auto-detection
+    form_override = db.execute_scalar(
+        "SELECT form_override FROM Songs WHERE id = ?", (song_id,)
+    )
+    if form_override:
+        result['form'] = form_override
+        result['form_source'] = 'override'
+    else:
+        # Form detection based on measure count
+        tm = measure_count or 0
+        if tm <= 12:
+            result['form'] = '12-bar blues'
+        elif tm <= 16:
+            result['form'] = f'{tm}-bar'
+        elif tm <= 36:
+            result['form'] = f'AABA ({tm} bars)'
+        elif tm <= 48:
+            result['form'] = f'{tm}-bar (extended)'
+        elif tm > 0:
+            result['form'] = f'{tm}-bar (through-composed)'
+        result['form_source'] = 'auto'
 
     # D4: Compute key centers and recompute Roman numerals per region
     try:

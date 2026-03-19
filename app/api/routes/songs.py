@@ -526,3 +526,21 @@ async def get_song_chords(song_id: int, db: DatabaseConnection = Depends(get_db)
         pass
 
     return {"song_id": song_id, "source": "none", "chords": [], "total": 0}
+
+
+@router.patch("/{song_id}/form")
+async def update_form_override(
+    song_id: int,
+    body: dict,
+    db: DatabaseConnection = Depends(get_db)
+):
+    """BV-04: Set or clear form override for a song."""
+    form_value = body.get("form_override")
+    VALID_FORMS = [None, "", "AABA", "ABAC", "ABAB", "AAB", "ABC", "AB", "Blues", "Through-composed", "Strophic", "Rondo", "Binary", "Ternary"]
+    if form_value and form_value not in VALID_FORMS:
+        raise HTTPException(status_code=400, detail=f"Invalid form: {form_value}")
+    db.execute_non_query(
+        "UPDATE Songs SET form_override = ? WHERE id = ?",
+        [form_value or None, song_id]
+    )
+    return {"song_id": song_id, "form_override": form_value or None}

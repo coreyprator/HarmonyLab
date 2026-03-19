@@ -21,7 +21,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v2.16.0</div>
+        <div class="nav-version">v2.16.1</div>
     </nav>
 
     <header>
@@ -142,6 +142,14 @@
             <div id="playback-no-notes" class="playback-warning" style="display:none">
                 No note data &mdash; upload a MIDI file to use Score or Full Song mode.
             </div>
+        </div>
+
+        <!-- Playback Notes Display (BV-01: voicing feedback) -->
+        <div id="playback-notes-bar" class="playback-notes-bar" style="display:none">
+            <span class="notes-bar-label">Playing:</span>
+            <span id="playback-notes-chord" class="notes-bar-chord"></span>
+            <span id="playback-notes-voicing" class="notes-bar-voicing"></span>
+            <span id="playback-notes-list" class="notes-bar-list"></span>
         </div>
 
         <!-- Piano Roll Display (HL-034) -->
@@ -788,7 +796,7 @@
                 statsEl.textContent = parts.length > 0 ? `| ${parts.join(' | ')}` : '';
             }
 
-            // Form label display
+            // BV-04: Form label as editable dropdown
             let formEl = document.getElementById('form-label');
             if (!formEl) {
                 formEl = document.createElement('span');
@@ -797,8 +805,39 @@
                 const statsParent = document.getElementById('song-stats');
                 if (statsParent && statsParent.parentNode) statsParent.parentNode.insertBefore(formEl, statsParent.nextSibling);
             }
-            formEl.textContent = analysisData.form ? `Form: ${analysisData.form}` : '';
-            formEl.style.display = analysisData.form ? '' : 'none';
+            const formOptions = ['', 'AABA', 'ABAC', 'ABAB', 'AAB', 'ABC', 'AB', 'Blues', 'Through-composed', 'Strophic', 'Rondo', 'Binary', 'Ternary'];
+            const currentForm = analysisData.form || '';
+            const isOverride = analysisData.form_source === 'override';
+            let selectHtml = '<label style="font-weight:600;margin-right:4px;">Form:</label>';
+            selectHtml += '<select id="form-override-select" style="font-size:12px;padding:2px 4px;">';
+            // Auto-detected option (shown when no override)
+            if (!isOverride && currentForm) {
+                selectHtml += `<option value="">${escHtml(currentForm)} (auto)</option>`;
+            } else {
+                selectHtml += '<option value="">Auto-detect</option>';
+            }
+            for (const opt of formOptions) {
+                if (!opt) continue;
+                const sel = isOverride && opt === currentForm ? ' selected' : '';
+                selectHtml += `<option value="${opt}"${sel}>${opt}</option>`;
+            }
+            selectHtml += '</select>';
+            formEl.innerHTML = selectHtml;
+            formEl.style.display = '';
+
+            document.getElementById('form-override-select').addEventListener('change', async function() {
+                const val = this.value;
+                try {
+                    await fetch(`${API_BASE}/api/v1/songs/${songId}/form`, {
+                        method: 'PATCH',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({form_override: val})
+                    });
+                    loadAnalysis(true);
+                } catch (e) {
+                    console.error('Form override failed:', e);
+                }
+            });
 
             // Color-code each chord card
             const analyzedChords = analysisData.chords || [];
@@ -1038,7 +1077,7 @@
         function renderKeyCenterBrackets() {
             if (!keyCenterData || currentView !== 'analysis') return;
             const regions = keyCenterData.regions || [];
-            if (regions.length <= 1) return;
+            if (regions.length === 0) return;
 
             // Clean up previous brackets
             document.querySelectorAll('.kc-bracket').forEach(el => el.remove());
@@ -1111,24 +1150,25 @@
         }
 
         function applyStaveGrouping() {
-            // Remove existing stave labels
+            // Remove existing stave labels and line-breaks
             document.querySelectorAll('.stave-row-label').forEach(el => el.remove());
-            document.querySelectorAll('.measures-row').forEach(row => {
-                row.classList.remove('stave-grouped');
+            document.querySelectorAll('.stave-line-break').forEach(el => el.remove());
+            document.querySelectorAll('.measure-block').forEach(mb => {
+                mb.style.borderLeft = '';
             });
 
-            // Group measure-blocks into stave rows
+            // Group measure-blocks into stave rows with forced line-breaks
             const measureBlocks = document.querySelectorAll('.measure-block');
             if (measureBlocks.length === 0) return;
 
-            let rowStart = 1;
             measureBlocks.forEach((mb, i) => {
                 const measureNum = parseInt(mb.querySelector('.measure-number')?.textContent) || (i + 1);
-                // Add visual grouping every N bars
+                // Insert flex line-break before every Nth measure to force row wrap
                 if (i > 0 && i % currentBarsPerStave === 0) {
-                    mb.style.borderLeft = '2px solid var(--border-color, #374151)';
-                } else {
-                    mb.style.borderLeft = '';
+                    const lineBreak = document.createElement('div');
+                    lineBreak.className = 'stave-line-break';
+                    lineBreak.style.cssText = 'flex-basis:100%;height:8px;';
+                    mb.parentNode.insertBefore(lineBreak, mb);
                 }
                 // Add row label at start of each stave
                 if (i % currentBarsPerStave === 0) {
@@ -2363,6 +2403,16 @@
                 const vol = parseInt(e.target.value) / 100;
                 HarmonyAudio.setVolume(vol);
             });
+
+            // BV-01: Wire playback notes display callback
+            HarmonyAudio.onPlay(function(chord, notes, mode) {
+                const bar = document.getElementById('playback-notes-bar');
+                if (!bar) return;
+                bar.style.display = '';
+                document.getElementById('playback-notes-chord').textContent = chord;
+                document.getElementById('playback-notes-voicing').textContent = '(' + mode + ')';
+                document.getElementById('playback-notes-list').textContent = notes.join(' ');
+            });
         }
 
         async function initAudioIfNeeded() {
@@ -3304,6 +3354,24 @@
         .success {
             color: #22c55e;
         }
+
+        /* Playback Notes Bar (BV-01) */
+        .playback-notes-bar {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 4px 12px;
+            margin-bottom: 8px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-family: monospace;
+        }
+        .notes-bar-label { color: var(--text-muted); }
+        .notes-bar-chord { font-weight: bold; font-size: 14px; }
+        .notes-bar-voicing { color: var(--accent, #3b82f6); font-size: 11px; }
+        .notes-bar-list { color: var(--text); letter-spacing: 1px; }
 
         /* Transport Controls (HL-050) */
         .playback-transport {

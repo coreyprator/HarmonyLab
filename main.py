@@ -17,7 +17,7 @@ from app.api.routes import songs, sections, vocabulary, measures, chords, progre
 
 logger = logging.getLogger(__name__)
 
-VERSION = "2.16.0"  # HM07: voicing engine + form analysis + key center regression + roadmap cleanup
+VERSION = "2.16.1"  # HM08: BV-01 voicing feedback + BV-03 key center fix + BV-04 form dropdown + BV-05 stave grouping
 
 app = FastAPI(
     title="Harmony Lab API",

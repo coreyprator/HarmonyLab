@@ -19,6 +19,7 @@ const HarmonyAudio = (function() {
     let volume = 0.8;
     let audioUnlocked = false;
     let voicingMode = 'close'; // 'close' | 'drop2' | 'drop3' | 'drop2and4' | 'splitLH' | 'splitRootless'
+    let onPlayCallback = null;
 
     // Piano samples hosted on GCS (migrated from external CDN for reliability)
     const SAMPLER_BASE_URL = 'https://storage.googleapis.com/harmonylab-media/samples/piano/';
@@ -330,6 +331,7 @@ const HarmonyAudio = (function() {
             if (allNotes.length === 0) return;
             isPlaying = true;
             console.log(`[HarmonyAudio] Playing ${chordSymbol} (${voicingMode}): LH=${split.lh} RH=${split.rh}`);
+            if (onPlayCallback) onPlayCallback(chordSymbol, allNotes, voicingMode);
             sampler.triggerAttackRelease(allNotes, duration);
             setTimeout(() => { isPlaying = false; }, duration * 1000);
             return;
@@ -341,6 +343,7 @@ const HarmonyAudio = (function() {
 
         isPlaying = true;
         console.log(`[HarmonyAudio] Playing ${chordSymbol} (${voicingMode}): ${notes.length} notes`, notes);
+        if (onPlayCallback) onPlayCallback(chordSymbol, notes, voicingMode);
         sampler.triggerAttackRelease(notes, duration);
 
         setTimeout(() => {
@@ -489,6 +492,7 @@ const HarmonyAudio = (function() {
         parseChord,
         setVoicingMode,
         getVoicingMode,
+        onPlay: function(cb) { onPlayCallback = cb; },
     };
 })();
 
