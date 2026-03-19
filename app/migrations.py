@@ -135,6 +135,9 @@ def run_migrations():
     # Migration 7: RLHF sessions table (HL-006C)
     _migration_7_rlhf_sessions(db)
 
+    # Migration 8: Songs.form_override column (BV-04)
+    _migration_8_form_override(db)
+
     logger.info("Migrations complete.")
 
 
@@ -432,3 +435,17 @@ def _migration_7_rlhf_sessions(db):
             logger.info("  Migration 7a: rlhf_sessions already exists.")
     except Exception as e:
         logger.warning(f"  Migration 7a warning: {e}")
+
+
+def _migration_8_form_override(db):
+    """BV-04: Add form_override column to Songs for editable form label."""
+    try:
+        exists = db.execute_scalar(
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
+            "WHERE TABLE_NAME = 'Songs' AND COLUMN_NAME = 'form_override'"
+        )
+        if exists == 0:
+            logger.info("  Migration 8: Adding Songs.form_override...")
+            db.execute_non_query("ALTER TABLE Songs ADD form_override NVARCHAR(50) NULL")
+    except Exception as e:
+        logger.warning(f"  Migration 8 warning: {e}")
