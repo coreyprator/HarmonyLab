@@ -125,15 +125,39 @@ async def bulk_delete_songs(
         raise HTTPException(status_code=400, detail="Maximum 100 songs per bulk delete")
 
     deleted = 0
+    cleanup_tables = [
+        "rlhf_sessions", "ChordAnalysisOverrides", "SongAnalysis",
+        "QuizAttempts", "UserSongProgress",
+        "song_notes", "song_lyrics", "song_dynamics", "song_tempos",
+        "song_time_signatures", "song_key_signatures", "song_text_marks",
+        "song_imports", "MelodyNotes",
+    ]
     for sid in song_ids:
         try:
-            # EFG-024: Clean up FK references that lack ON DELETE CASCADE
+            for table in cleanup_tables:
+                try:
+                    db.execute_non_query(f"DELETE FROM {table} WHERE song_id = ?", (sid,))
+                except Exception:
+                    pass
             try:
-                db.execute_non_query("DELETE FROM QuizAttempts WHERE song_id = ?", (sid,))
+                db.execute_non_query("""
+                    DELETE c FROM Chords c
+                    INNER JOIN Measures m ON c.measure_id = m.id
+                    INNER JOIN Sections s ON m.section_id = s.id
+                    WHERE s.song_id = ?
+                """, (sid,))
             except Exception:
                 pass
             try:
-                db.execute_non_query("DELETE FROM UserSongProgress WHERE song_id = ?", (sid,))
+                db.execute_non_query("""
+                    DELETE m FROM Measures m
+                    INNER JOIN Sections s ON m.section_id = s.id
+                    WHERE s.song_id = ?
+                """, (sid,))
+            except Exception:
+                pass
+            try:
+                db.execute_non_query("DELETE FROM Sections WHERE song_id = ?", (sid,))
             except Exception:
                 pass
             result = db.execute_non_query("DELETE FROM Songs WHERE id = ?", (sid,))
@@ -147,22 +171,50 @@ async def bulk_delete_songs(
 
 @router.delete("/{song_id}", status_code=204)
 async def delete_song(song_id: int, db: DatabaseConnection = Depends(get_db)):
-    """Delete a song. Cleans up QuizAttempts and UserSongProgress FK refs first,
-    then deletes song (DB cascades handle sections/measures/chords)."""
-    # EFG-024: Clean up FK references that lack ON DELETE CASCADE
-    try:
-        db.execute_non_query("DELETE FROM QuizAttempts WHERE song_id = ?", (song_id,))
-    except Exception:
-        pass  # Table may not exist or no rows
-    try:
-        db.execute_non_query("DELETE FROM UserSongProgress WHERE song_id = ?", (song_id,))
-    except Exception:
-        pass
-    result = db.execute_non_query("DELETE FROM Songs WHERE id = ?", (song_id,))
-
-    if result == 0:
+    """Delete a song with full cascade cleanup for legacy and modern schemas.
+    Deletes child records in dependency order before removing the song row."""
+    existing = db.execute_query("SELECT id FROM Songs WHERE id = ?", (song_id,))
+    if not existing:
         raise HTTPException(status_code=404, detail="Song not found")
 
+    # Delete child records in dependency order (deepest FK refs first)
+    cleanup_tables = [
+        "rlhf_sessions", "ChordAnalysisOverrides", "SongAnalysis",
+        "QuizAttempts", "UserSongProgress",
+        "song_notes", "song_lyrics", "song_dynamics", "song_tempos",
+        "song_time_signatures", "song_key_signatures", "song_text_marks",
+        "song_imports", "MelodyNotes",
+    ]
+    for table in cleanup_tables:
+        try:
+            db.execute_non_query(f"DELETE FROM {table} WHERE song_id = ?", (song_id,))
+        except Exception:
+            pass
+
+    # Chords → Measures → Sections (explicit cascade for legacy songs)
+    try:
+        db.execute_non_query("""
+            DELETE c FROM Chords c
+            INNER JOIN Measures m ON c.measure_id = m.id
+            INNER JOIN Sections s ON m.section_id = s.id
+            WHERE s.song_id = ?
+        """, (song_id,))
+    except Exception:
+        pass
+    try:
+        db.execute_non_query("""
+            DELETE m FROM Measures m
+            INNER JOIN Sections s ON m.section_id = s.id
+            WHERE s.song_id = ?
+        """, (song_id,))
+    except Exception:
+        pass
+    try:
+        db.execute_non_query("DELETE FROM Sections WHERE song_id = ?", (song_id,))
+    except Exception:
+        pass
+
+    db.execute_non_query("DELETE FROM Songs WHERE id = ?", (song_id,))
     return None
 
 
