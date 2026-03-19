@@ -408,6 +408,54 @@ async def get_analysis(
     """, (song_id,))
     result['total_measures'] = measure_count or 0
 
+    # Form detection based on measure count
+    tm = measure_count or 0
+    if tm <= 12:
+        result['form'] = '12-bar blues'
+    elif tm <= 16:
+        result['form'] = f'{tm}-bar'
+    elif tm <= 36:
+        result['form'] = f'AABA ({tm} bars)'
+    elif tm <= 48:
+        result['form'] = f'{tm}-bar (extended)'
+    elif tm > 0:
+        result['form'] = f'{tm}-bar (through-composed)'
+
+    # D4: Compute key centers and recompute Roman numerals per region
+    try:
+        from app.services.key_center_service import detect_key_centers
+        kc_chords = [
+            {'symbol': ch.get('symbol', ''), 'measure': ch.get('measure', 1), 'beat': ch.get('beat', 1.0)}
+            for ch in result.get('chords', [])
+        ]
+        kc_regions = detect_key_centers(kc_chords, result.get('detected_key'))
+        result['key_centers'] = kc_regions
+
+        # Recompute Roman numerals relative to active key center region
+        if kc_regions and len(kc_regions) > 1:
+            from music21 import key as m21key
+            analyzer = HarmonicAnalyzer()
+            for ch in result.get('chords', []):
+                idx = ch.get('index', 0)
+                active_region = next(
+                    (r for r in kc_regions
+                     if r['start_index'] <= idx <= r['end_index']),
+                    None
+                )
+                if active_region:
+                    region_key = active_region['key_center']
+                    region_mode = active_region.get('mode', 'major')
+                    key_str_mode = region_key if region_mode == 'major' else region_key.lower()
+                    try:
+                        analyzer.current_key = m21key.Key(key_str_mode)
+                        reanalyzed = analyzer._analyze_chord(ch.get('symbol', ''), idx)
+                        ch['roman'] = reanalyzed.get('roman', ch.get('roman', '?'))
+                        ch['key_context'] = f"{region_key} {region_mode}"
+                    except Exception:
+                        pass
+    except Exception as kc_err:
+        logger.warning("Key center recomputation failed (non-fatal): %s", kc_err)
+
     # Cache result using MERGE (upsert)
     analysis_json = json.dumps(result)
     detected_key = result['detected_key']

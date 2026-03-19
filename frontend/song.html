@@ -21,7 +21,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v2.15.2</div>
+        <div class="nav-version">v2.16.0</div>
     </nav>
 
     <header>
@@ -84,6 +84,10 @@
                 <span id="detected-key" class="detected-key"></span>
                 <span id="confidence" class="confidence"></span>
                 <span id="song-stats" class="song-stats"></span>
+                <span class="stave-toggle" style="margin-left:8px;">
+                    <button class="btn btn-xs stave-btn stave-btn-active" onclick="setStaveGrouping(4)" data-bars="4">4-bar</button>
+                    <button class="btn btn-xs stave-btn" onclick="setStaveGrouping(8)" data-bars="8">8-bar</button>
+                </span>
             </div>
             <div class="transpose-controls" id="transpose-controls">
                 <label>Transpose to:</label>
@@ -121,6 +125,17 @@
                 <button id="mode-chords-btn" class="mode-btn mode-btn-active" title="Play arpeggiated chord voicings">Chords</button>
                 <button id="mode-score-btn" class="mode-btn" title="Play melody from score notes">Score</button>
                 <button id="mode-fullsong-btn" class="mode-btn" title="Play melody + chords together">Full Song</button>
+                <span class="transport-separator">|</span>
+                <label class="voicing-label">Voicing:
+                    <select id="voicingMode" onchange="HarmonyAudio.setVoicingMode(this.value)" style="font-size:12px;padding:2px 4px;">
+                        <option value="close">Close</option>
+                        <option value="drop2">Drop 2</option>
+                        <option value="drop3">Drop 3</option>
+                        <option value="drop2and4">Drop 2+4</option>
+                        <option value="splitLH">LH Bass + RH Chord</option>
+                        <option value="splitRootless">LH Rootless + RH</option>
+                    </select>
+                </label>
                 <span class="transport-separator">|</span>
                 <span id="sampler-label" style="font-size:11px; opacity:0.6;">MusyngKite</span>
             </div>
@@ -673,6 +688,7 @@
                 if (!res.ok) throw new Error('Analysis failed');
                 analysisData = await res.json();
                 renderAnalysis();
+                applyStaveGrouping();
                 loadKeyCenters();
             } catch (err) {
                 console.error('Analysis error:', err);
@@ -768,8 +784,21 @@
                 const parts = [];
                 if (totalNotes > 0) parts.push(`${totalNotes} notes`);
                 if (totalMeasures > 0) parts.push(`${totalMeasures} measures`);
+                if (analysisData.form) parts.push(analysisData.form);
                 statsEl.textContent = parts.length > 0 ? `| ${parts.join(' | ')}` : '';
             }
+
+            // Form label display
+            let formEl = document.getElementById('form-label');
+            if (!formEl) {
+                formEl = document.createElement('span');
+                formEl.id = 'form-label';
+                formEl.className = 'form-label';
+                const statsParent = document.getElementById('song-stats');
+                if (statsParent && statsParent.parentNode) statsParent.parentNode.insertBefore(formEl, statsParent.nextSibling);
+            }
+            formEl.textContent = analysisData.form ? `Form: ${analysisData.form}` : '';
+            formEl.style.display = analysisData.form ? '' : 'none';
 
             // Color-code each chord card
             const analyzedChords = analysisData.chords || [];
@@ -904,12 +933,42 @@
             }
         }
 
+        // D2: Key center colors based on functional harmony interval
+        const KEY_SEMITONES_KC = {
+            'C': 0, 'C#': 1, 'Db': 1, 'D': 2, 'D#': 3, 'Eb': 3, 'E': 4,
+            'F': 5, 'F#': 6, 'Gb': 6, 'G': 7, 'G#': 8, 'Ab': 8, 'A': 9,
+            'A#': 10, 'Bb': 10, 'B': 11
+        };
+        const KEY_CENTER_COLORS = {
+            home:     '#22c55e',  // Green — home key
+            fourth:   '#3b82f6',  // Blue — IV
+            fifth:    '#f59e0b',  // Amber — V
+            relative: '#8b5cf6',  // Purple — relative major/minor
+            other:    '#6b7280',  // Gray — chromatic
+        };
+
+        function getKeyCenterColor(keyCenter, homeKey) {
+            const kcPc = KEY_SEMITONES_KC[keyCenter] ?? 0;
+            const homePc = KEY_SEMITONES_KC[homeKey] ?? 0;
+            const interval = (kcPc - homePc + 12) % 12;
+            if (interval === 0) return KEY_CENTER_COLORS.home;
+            if (interval === 5) return KEY_CENTER_COLORS.fourth;
+            if (interval === 7) return KEY_CENTER_COLORS.fifth;
+            if (interval === 3 || interval === 9) return KEY_CENTER_COLORS.relative;
+            return KEY_CENTER_COLORS.other;
+        }
+
         function renderKeyCenters() {
             if (!keyCenterData || currentView !== 'analysis') return;
             const regions = keyCenterData.regions || [];
             if (regions.length === 0) return;
 
-            // Build key center legend
+            // Determine home key from analysis or key center data
+            const homeKeyStr = keyCenterData.detected_key || analysisData?.detected_key || 'C';
+            const homeKeyMatch = homeKeyStr.match(/^([A-G][#b]?)/);
+            const homeKey = homeKeyMatch ? homeKeyMatch[1] : 'C';
+
+            // Build key center legend with functional harmony colors
             let legendEl = document.getElementById('key-center-legend');
             if (!legendEl) {
                 legendEl = document.createElement('div');
@@ -919,14 +978,11 @@
                 if (functionLegend) functionLegend.after(legendEl);
             }
 
-            const palette = ['#2563eb', '#dc2626', '#16a34a', '#9333ea', '#ea580c', '#0891b2', '#be185d', '#65a30d'];
             const keyColorMap = {};
-            let colorIdx = 0;
             for (const r of regions) {
                 const kLabel = r.key_center + ' ' + ({'major':'major','minor':'minor','harmonic_minor':'harmonic minor'}[r.mode] || r.mode);
                 if (!(kLabel in keyColorMap)) {
-                    keyColorMap[kLabel] = palette[colorIdx % palette.length];
-                    colorIdx++;
+                    keyColorMap[kLabel] = getKeyCenterColor(r.key_center, homeKey);
                 }
             }
 
@@ -936,7 +992,7 @@
                 ).join(' ');
             legendEl.style.display = '';
 
-            // Apply text color to chord symbols by key center region
+            // Apply background tint + border color to chord cards by key center region
             for (const r of regions) {
                 const kLabel = r.key_center + ' ' + ({'major':'major','minor':'minor','harmonic_minor':'harmonic minor'}[r.mode] || r.mode);
                 const color = keyColorMap[kLabel];
@@ -946,6 +1002,7 @@
                         const symbolEl = info.element.querySelector('.chord-symbol');
                         if (symbolEl) symbolEl.style.color = color;
                         info.element.style.borderBottom = `3px solid ${color}`;
+                        info.element.style.backgroundColor = color + '15'; // 15 = ~8% opacity
                     }
                 }
             }
@@ -981,7 +1038,7 @@
         function renderKeyCenterBrackets() {
             if (!keyCenterData || currentView !== 'analysis') return;
             const regions = keyCenterData.regions || [];
-            if (regions.length <= 1) return; // Single key doesn't need brackets
+            if (regions.length <= 1) return;
 
             // Clean up previous brackets
             document.querySelectorAll('.kc-bracket').forEach(el => el.remove());
@@ -990,14 +1047,15 @@
                 el.style.removeProperty('--kc-color');
             });
 
-            const palette = ['#2563eb', '#dc2626', '#16a34a', '#9333ea', '#ea580c', '#0891b2', '#be185d', '#65a30d'];
+            const homeKeyStr = keyCenterData.detected_key || analysisData?.detected_key || 'C';
+            const homeKeyMatch = homeKeyStr.match(/^([A-G][#b]?)/);
+            const homeKey = homeKeyMatch ? homeKeyMatch[1] : 'C';
+
             const keyColorMap = {};
-            let colorIdx = 0;
             for (const r of regions) {
                 const kLabel = r.key_center + ' ' + ({'major':'major','minor':'minor','harmonic_minor':'harmonic minor'}[r.mode] || r.mode);
                 if (!(kLabel in keyColorMap)) {
-                    keyColorMap[kLabel] = palette[colorIdx % palette.length];
-                    colorIdx++;
+                    keyColorMap[kLabel] = getKeyCenterColor(r.key_center, homeKey);
                 }
             }
 
@@ -1035,6 +1093,53 @@
                     measureBlocks[0].insertBefore(label, measureBlocks[0].firstChild);
                 }
             }
+        }
+
+        // ==========================================
+        // STAVE GROUPING (C5)
+        // ==========================================
+
+        let currentBarsPerStave = 4;
+
+        function setStaveGrouping(bars) {
+            currentBarsPerStave = bars;
+            // Update button state
+            document.querySelectorAll('.stave-btn').forEach(btn => {
+                btn.classList.toggle('stave-btn-active', parseInt(btn.dataset.bars) === bars);
+            });
+            applyStaveGrouping();
+        }
+
+        function applyStaveGrouping() {
+            // Remove existing stave labels
+            document.querySelectorAll('.stave-row-label').forEach(el => el.remove());
+            document.querySelectorAll('.measures-row').forEach(row => {
+                row.classList.remove('stave-grouped');
+            });
+
+            // Group measure-blocks into stave rows
+            const measureBlocks = document.querySelectorAll('.measure-block');
+            if (measureBlocks.length === 0) return;
+
+            let rowStart = 1;
+            measureBlocks.forEach((mb, i) => {
+                const measureNum = parseInt(mb.querySelector('.measure-number')?.textContent) || (i + 1);
+                // Add visual grouping every N bars
+                if (i > 0 && i % currentBarsPerStave === 0) {
+                    mb.style.borderLeft = '2px solid var(--border-color, #374151)';
+                } else {
+                    mb.style.borderLeft = '';
+                }
+                // Add row label at start of each stave
+                if (i % currentBarsPerStave === 0) {
+                    const label = document.createElement('div');
+                    label.className = 'stave-row-label';
+                    label.textContent = measureNum;
+                    label.style.cssText = 'position:absolute;left:-24px;top:0;font-size:10px;color:var(--text-muted,#6b7280);font-weight:600;';
+                    mb.style.position = 'relative';
+                    mb.appendChild(label);
+                }
+            });
         }
 
         // ==========================================
@@ -1093,6 +1198,7 @@
                     renderPatternAnnotations();
                     renderKeyCenterBrackets();
                 }
+                applyStaveGrouping();
             } else {
                 loadAnalysis();
             }

@@ -18,6 +18,7 @@ const HarmonyAudio = (function() {
     let loopId = null;
     let volume = 0.8;
     let audioUnlocked = false;
+    let voicingMode = 'close'; // 'close' | 'drop2' | 'drop3' | 'drop2and4' | 'splitLH' | 'splitRootless'
 
     // Piano samples hosted on GCS (migrated from external CDN for reliability)
     const SAMPLER_BASE_URL = 'https://storage.googleapis.com/harmonylab-media/samples/piano/';
@@ -82,6 +83,16 @@ const HarmonyAudio = (function() {
         'sus4': [0, 5, 7],
         'sus2': [0, 2, 7],
         '7sus4': [0, 5, 7, 10],
+
+        // Aliases for MuseScore/MusicXML quality strings
+        'min9': [0, 3, 7, 10, 14],
+        '-9': [0, 3, 7, 10, 14],
+        'min11': [0, 3, 7, 10, 14, 17],
+        'min6': [0, 3, 7, 9],
+        'dom7': [0, 4, 7, 10],
+        'maj13': [0, 4, 7, 11, 14, 21],
+        'm13': [0, 3, 7, 10, 14, 21],
+        'min13': [0, 3, 7, 10, 14, 21],
     };
 
     /**
@@ -192,6 +203,109 @@ const HarmonyAudio = (function() {
         return notes;
     }
 
+    // ── Voicing transforms ──────────────────────────────────────────────
+
+    function noteNameToMidi(name) {
+        const match = name.match(/^([A-G][#b]?)(\d+)$/);
+        if (!match) return 60;
+        return (parseInt(match[2]) + 1) * 12 + (NOTE_MAP[match[1]] || 0);
+    }
+
+    function midiToNoteName(midi) {
+        const names = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+        const octave = Math.floor(midi / 12) - 1;
+        return names[midi % 12] + octave;
+    }
+
+    function applyDrop2(noteNames) {
+        if (noteNames.length < 4) return noteNames;
+        const midis = noteNames.map(noteNameToMidi).sort((a, b) => a - b);
+        midis[midis.length - 2] -= 12;
+        midis.sort((a, b) => a - b);
+        return midis.map(midiToNoteName);
+    }
+
+    function applyDrop3(noteNames) {
+        if (noteNames.length < 4) return noteNames;
+        const midis = noteNames.map(noteNameToMidi).sort((a, b) => a - b);
+        midis[midis.length - 3] -= 12;
+        midis.sort((a, b) => a - b);
+        return midis.map(midiToNoteName);
+    }
+
+    function applyDrop2and4(noteNames) {
+        if (noteNames.length < 4) return noteNames;
+        const midis = noteNames.map(noteNameToMidi).sort((a, b) => a - b);
+        midis[midis.length - 2] -= 12;
+        if (midis.length >= 4) midis[midis.length - 4] -= 12;
+        midis.sort((a, b) => a - b);
+        return midis.map(midiToNoteName);
+    }
+
+    function buildSplitLH(chordSymbol) {
+        // LH: root in octave 2, RH: remaining tones in octave 4
+        const match = chordSymbol.match(/^([A-G][#b]?)(.*)$/);
+        if (!match) return { lh: [], rh: [] };
+        const root = match[1];
+        const quality = match[2].split('/')[0] || '';
+        const intervals = CHORD_VOICINGS[quality] || CHORD_VOICINGS[''];
+        const rootNum = NOTE_MAP[root];
+        if (rootNum === undefined) return { lh: [], rh: [] };
+
+        const lh = [midiToNoteName((2 + 1) * 12 + rootNum)]; // root in octave 2
+        const rh = intervals.slice(1).map(interval => {
+            const midi = rootNum + interval;
+            return midiToNoteName((4 + 1) * 12 + (midi % 12));
+        });
+        return { lh, rh };
+    }
+
+    function buildSplitRootless(chordSymbol) {
+        // LH: 3rd + 7th in octave 3, RH: top chord tones in octave 5
+        const match = chordSymbol.match(/^([A-G][#b]?)(.*)$/);
+        if (!match) return { lh: [], rh: [] };
+        const root = match[1];
+        const quality = match[2].split('/')[0] || '';
+        const intervals = CHORD_VOICINGS[quality] || CHORD_VOICINGS[''];
+        const rootNum = NOTE_MAP[root];
+        if (rootNum === undefined) return { lh: [], rh: [] };
+
+        // Find 3rd and 7th intervals
+        let third = intervals.find(i => i === 3 || i === 4); // m3 or M3
+        let seventh = intervals.find(i => i === 10 || i === 11); // m7 or M7
+        const lhIntervals = [third, seventh].filter(i => i !== undefined);
+        const rhIntervals = intervals.filter(i => i !== 0 && !lhIntervals.includes(i));
+
+        const lh = lhIntervals.map(interval => {
+            return midiToNoteName((3 + 1) * 12 + ((rootNum + interval) % 12));
+        });
+        const rh = rhIntervals.length > 0
+            ? rhIntervals.map(interval => midiToNoteName((5 + 1) * 12 + ((rootNum + interval) % 12)))
+            : [midiToNoteName((5 + 1) * 12 + ((rootNum + (intervals[intervals.length - 1] || 0)) % 12))];
+        return { lh, rh };
+    }
+
+    function applyVoicing(noteNames, chordSymbol) {
+        switch (voicingMode) {
+            case 'drop2': return applyDrop2(noteNames);
+            case 'drop3': return applyDrop3(noteNames);
+            case 'drop2and4': return applyDrop2and4(noteNames);
+            case 'splitLH':
+            case 'splitRootless':
+                return noteNames; // Split modes handled separately in play()
+            default: return noteNames; // 'close' — no transform
+        }
+    }
+
+    function setVoicingMode(mode) {
+        voicingMode = mode;
+        console.log(`[HarmonyAudio] Voicing mode: ${mode}`);
+    }
+
+    function getVoicingMode() {
+        return voicingMode;
+    }
+
     /**
      * Play a chord (all notes simultaneously)
      * @param {string} chordSymbol - Chord to play
@@ -200,7 +314,6 @@ const HarmonyAudio = (function() {
     async function play(chordSymbol, duration = 1.5) {
         if (!isLoaded) {
             await init();
-            // Wait for load
             while (isLoading) {
                 await new Promise(r => setTimeout(r, 100));
             }
@@ -208,10 +321,26 @@ const HarmonyAudio = (function() {
 
         stop();
 
-        const notes = parseChord(chordSymbol);
-        if (notes.length === 0) return;
+        // Split hand modes — schedule LH and RH simultaneously
+        if (voicingMode === 'splitLH' || voicingMode === 'splitRootless') {
+            const split = voicingMode === 'splitLH'
+                ? buildSplitLH(chordSymbol)
+                : buildSplitRootless(chordSymbol);
+            const allNotes = [...split.lh, ...split.rh];
+            if (allNotes.length === 0) return;
+            isPlaying = true;
+            console.log(`[HarmonyAudio] Playing ${chordSymbol} (${voicingMode}): LH=${split.lh} RH=${split.rh}`);
+            sampler.triggerAttackRelease(allNotes, duration);
+            setTimeout(() => { isPlaying = false; }, duration * 1000);
+            return;
+        }
+
+        const rawNotes = parseChord(chordSymbol);
+        if (rawNotes.length === 0) return;
+        const notes = applyVoicing(rawNotes, chordSymbol);
 
         isPlaying = true;
+        console.log(`[HarmonyAudio] Playing ${chordSymbol} (${voicingMode}): ${notes.length} notes`, notes);
         sampler.triggerAttackRelease(notes, duration);
 
         setTimeout(() => {
@@ -234,8 +363,9 @@ const HarmonyAudio = (function() {
 
         stop();
 
-        const notes = parseChord(chordSymbol);
-        if (notes.length === 0) return;
+        const rawNotes = parseChord(chordSymbol);
+        if (rawNotes.length === 0) return;
+        const notes = applyVoicing(rawNotes, chordSymbol);
 
         isPlaying = true;
 
@@ -356,7 +486,9 @@ const HarmonyAudio = (function() {
         isReady,
         isPlaying: getIsPlaying,
         unlockAudio,
-        parseChord
+        parseChord,
+        setVoicingMode,
+        getVoicingMode,
     };
 })();
 

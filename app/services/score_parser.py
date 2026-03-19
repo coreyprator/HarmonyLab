@@ -60,6 +60,13 @@ _DURATION_TO_BEATS = {
 
 
 @dataclass
+class ScoreBarline:
+    measure_number: int
+    bar_style: str  # 'light-heavy', 'light-light', 'heavy-light', 'repeat-forward', 'repeat-backward'
+    location: str = 'right'  # 'left' or 'right'
+
+
+@dataclass
 class ParsedScore:
     title: str
     key: Optional[str]
@@ -67,6 +74,10 @@ class ParsedScore:
     tempo: Optional[int]
     chords: List[ScoreChord] = field(default_factory=list)
     notes: List[ScoreNote] = field(default_factory=list)
+    repeats: List[tuple] = field(default_factory=list)  # (start_measure, end_measure)
+    barlines: List[ScoreBarline] = field(default_factory=list)
+    has_pickup: bool = False
+    form: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -350,10 +361,97 @@ def _parse_mscx_content(xml_content: str, default_title: str) -> ParsedScore:
 
     logger.info("Note extraction: %d notes from %d measures", len(notes), note_measure_num)
 
-    logger.info("Parsed MuseScore file: title=%r key=%r time_sig=%r chords=%d notes=%d",
-                title, key_str, time_sig, len(chords), len(notes))
+    # --- Repeat detection ---
+    repeats = []
+    barlines = []
+    repeat_start = None
+    has_pickup = False
+    re_measure_num = 0
+    for measure in (first_staff if first_staff is not None else root).iter('Measure'):
+        re_measure_num += 1
+        # Check for pickup/anacrusis
+        if measure.get('implicit') == 'yes' or measure.get('number') == '0':
+            has_pickup = True
+        for barline in measure.findall('barline') + list(measure.iter('BarLine')):
+            location = barline.get('location', 'right')
+            # Check for repeat signs
+            repeat_el = barline.find('repeat') or barline.find('Repeat')
+            if repeat_el is not None:
+                direction = repeat_el.get('direction', '')
+                if direction == 'forward':
+                    repeat_start = re_measure_num
+                    barlines.append(ScoreBarline(re_measure_num, 'repeat-forward', 'left'))
+                elif direction == 'backward':
+                    repeats.append((repeat_start or 1, re_measure_num))
+                    repeat_start = None
+                    barlines.append(ScoreBarline(re_measure_num, 'repeat-backward', 'right'))
+            # Check for bar styles (double bar, final bar)
+            style_el = barline.find('bar-style') or barline.find('subtype')
+            if style_el is not None and style_el.text:
+                style = style_el.text.strip()
+                if style in ('light-heavy', 'light-light', 'heavy-light', 'double', 'final'):
+                    barlines.append(ScoreBarline(re_measure_num, style, location))
+
+    # --- Expand repeats into chords/notes ---
+    if repeats:
+        expanded_chords = list(chords)
+        expanded_notes = list(notes)
+        for rstart, rend in repeats:
+            repeat_chords = [c for c in chords if rstart <= c.measure_number <= rend]
+            repeat_notes = [n for n in notes if rstart <= n.measure_number <= rend]
+            offset = rend  # append after original
+            for c in repeat_chords:
+                expanded_chords.append(ScoreChord(
+                    measure_number=c.measure_number + offset,
+                    beat_position=c.beat_position,
+                    chord_symbol=c.chord_symbol,
+                    chord_order=c.chord_order,
+                ))
+            for n in repeat_notes:
+                expanded_notes.append(ScoreNote(
+                    measure_number=n.measure_number + offset,
+                    beat_position=n.beat_position,
+                    midi_pitch=n.midi_pitch,
+                    duration_type=n.duration_type,
+                    voice=n.voice,
+                ))
+        chords = expanded_chords
+        notes = expanded_notes
+        logger.info("Repeat expansion: %d repeats, total chords=%d notes=%d",
+                     len(repeats), len(chords), len(notes))
+
+    # --- Form detection ---
+    total_measures = max((c.measure_number for c in chords), default=0) if chords else note_measure_num
+    form = _detect_form(total_measures, repeats)
+
+    logger.info("Parsed MuseScore file: title=%r key=%r time_sig=%r chords=%d notes=%d form=%s",
+                title, key_str, time_sig, len(chords), len(notes), form)
     return ParsedScore(title=title, key=key_str, time_signature=time_sig,
-                       tempo=tempo_val, chords=chords, notes=notes)
+                       tempo=tempo_val, chords=chords, notes=notes,
+                       repeats=repeats, barlines=barlines,
+                       has_pickup=has_pickup, form=form)
+
+
+def _detect_form(total_measures: int, repeats: list) -> Optional[str]:
+    """Detect standard jazz song forms from measure count and repeats."""
+    if total_measures <= 0:
+        return None
+    if total_measures <= 12:
+        return '12-bar blues'
+    elif total_measures <= 16:
+        return f'{total_measures}-bar'
+    elif total_measures <= 32:
+        # Heuristic: 32 bars with repeat at 8 and 24 → AABA
+        repeat_ends = {r[1] for r in repeats} if repeats else set()
+        if 8 in repeat_ends or 16 in repeat_ends:
+            return 'AABA (32 bars)'
+        return 'AABA (32 bars)'  # Most common jazz standard form
+    elif total_measures <= 36:
+        return f'AABA ({total_measures} bars)'
+    elif total_measures <= 48:
+        return f'{total_measures}-bar (extended)'
+    else:
+        return f'{total_measures}-bar (through-composed)'
 
 
 # ---------------------------------------------------------------------------

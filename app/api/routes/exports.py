@@ -70,12 +70,30 @@ async def export_musescore(
         for c in chords_rows
     ]
 
+    # C6: Fetch melody notes for export
+    melody_notes = []
+    try:
+        melody_rows = db.execute_query("""
+            SELECT midi_pitch, measure_num, beat, duration_quarters, note_name
+            FROM song_notes WHERE song_id = ? AND is_rest = 0
+            ORDER BY measure_num, beat
+        """, (song_id,))
+        if melody_rows:
+            melody_notes = [
+                {"midi": r['midi_pitch'], "measure": r['measure_num'],
+                 "beat": float(r.get('beat') or 1.0),
+                 "duration": float(r['duration_quarters']) if r.get('duration_quarters') else 1.0,
+                 "name": r.get('note_name', '')}
+                for r in melody_rows
+            ]
+    except Exception:
+        pass
+
     # Run or fetch analysis
     analysis = None
     if include_analysis:
         chord_symbols = [c['symbol'] for c in chords]
         try:
-            # Check for cached analysis with key override
             cached = db.execute_query(
                 "SELECT analysis_json, manual_key_override FROM SongAnalysis WHERE song_id = ?",
                 (song_id,)
@@ -85,11 +103,12 @@ async def export_musescore(
                 key_override = cached[0]['manual_key_override']
 
             analysis = analyze_song(chord_symbols, key_override)
-            # Use detected key if no original_key
             if not key_str and analysis.get('detected_key'):
                 key_str = analysis['detected_key']
         except Exception as e:
             logger.warning("Analysis failed for export of song %d: %s", song_id, e)
+    if analysis:
+        analysis['melody_notes'] = melody_notes
 
     # Generate export
     safe_title = ''.join(c for c in title if c.isalnum() or c in ' -_').strip() or 'export'
