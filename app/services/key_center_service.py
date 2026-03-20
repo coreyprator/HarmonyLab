@@ -308,3 +308,54 @@ def detect_key_centers(chords: List[Dict], detected_key: str = None) -> List[Dic
         merged = consolidated
 
     return merged
+
+
+def detect_turnarounds(chords: List[Dict]) -> List[Dict]:
+    """
+    Detect iii-vi-ii-V turnaround patterns in a chord list.
+
+    Jazz turnaround: three minor 7ths descending in 4ths, resolving to a dom7.
+    Interval pattern (root PCs): iii → vi (down P5/up P4) → ii (down P5/up P4) → V (down P5/up P4).
+    """
+    turnarounds = []
+    if len(chords) < 4:
+        return turnarounds
+
+    def get_pc(symbol: str) -> Optional[int]:
+        m = re.match(r'^([A-G][#b]?)', symbol or '')
+        if not m:
+            return None
+        return NOTE_TO_PC.get(m.group(1))
+
+    def quality_type(symbol: str) -> str:
+        q = re.sub(r'^[A-G][#b]?', '', symbol or '')
+        q = re.sub(r'[/\\].*', '', q)  # strip slash bass
+        if re.match(r'^(m7|m9|m11|-7|-9)', q):
+            return 'm7'
+        if re.match(r'^(7|9|13|7b9|7#9|7alt|7sus4)', q):
+            return 'dom7'
+        return 'other'
+
+    for i in range(len(chords) - 3):
+        c1, c2, c3, c4 = chords[i], chords[i+1], chords[i+2], chords[i+3]
+        syms = [c.get('symbol', '') for c in (c1, c2, c3, c4)]
+        types = [quality_type(s) for s in syms]
+
+        # Pattern: m7, m7, m7, dom7 (or m7, m7, dom7, dom7 for ii-V-ii-V variant)
+        if types[:3] == ['m7', 'm7', 'm7'] and types[3] == 'dom7':
+            pcs = [get_pc(s) for s in syms]
+            if None in pcs:
+                continue
+            # Verify descending fourths: each root is 5 semitones above the next (= P4 down)
+            intervals = [(pcs[j] - pcs[j+1]) % 12 for j in range(3)]
+            if all(iv == 5 for iv in intervals):
+                turnarounds.append({
+                    'start_measure': c1.get('measure', i),
+                    'end_measure': c4.get('measure', i + 3),
+                    'start_index': i,
+                    'end_index': i + 3,
+                    'type': 'iii-vi-ii-V',
+                    'label': f"{syms[0]} – {syms[1]} – {syms[2]} – {syms[3]}",
+                })
+
+    return turnarounds

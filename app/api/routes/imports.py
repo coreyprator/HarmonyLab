@@ -62,6 +62,25 @@ def _save_score_to_db(
     )
     song_id = song_result[0]['id']
 
+    # Store section markers and form if parsed from score
+    if hasattr(parsed, 'section_markers') and parsed.section_markers:
+        import json as _json
+        try:
+            db.execute_non_query(
+                "UPDATE Songs SET section_markers_json = ? WHERE id = ?",
+                (_json.dumps(parsed.section_markers), song_id)
+            )
+        except Exception as _e:
+            logger.warning(f"Could not store section_markers_json: {_e}")
+    if hasattr(parsed, 'form') and parsed.form:
+        try:
+            db.execute_non_query(
+                "UPDATE Songs SET form_override = ? WHERE id = ?",
+                (parsed.form, song_id)
+            )
+        except Exception as _e:
+            logger.warning(f"Could not store form: {_e}")
+
     section_query = """
         INSERT INTO Sections (song_id, name, section_order, repeat_count)
         OUTPUT INSERTED.id

@@ -1,6 +1,6 @@
 """
 Analysis API Routes
-Harmonic analysis, chord overrides, and key region management.
+Harmonic analysis, chord overrides, key region management, and theory chat.
 """
 from fastapi import APIRouter, HTTPException, Depends
 from typing import Optional, List
@@ -11,6 +11,8 @@ import json
 import re
 import logging
 import uuid
+import httpx
+import os
 
 router = APIRouter(prefix="/api/v1/analysis", tags=["analysis"])
 logger = logging.getLogger(__name__)
@@ -98,7 +100,7 @@ async def get_key_centers(
     db: DatabaseConnection = Depends(get_db),
 ):
     """Get key center regions for a song."""
-    from app.services.key_center_service import detect_key_centers, detect_ii_v_i_patterns
+    from app.services.key_center_service import detect_key_centers, detect_ii_v_i_patterns, detect_turnarounds
 
     # Get analysis data first
     analysis = await get_analysis(song_id, db=db)
@@ -107,12 +109,14 @@ async def get_key_centers(
 
     regions = detect_key_centers(chords, detected_key)
     patterns = detect_ii_v_i_patterns(chords)
+    turnarounds = detect_turnarounds(chords)
 
     return {
         'song_id': song_id,
         'detected_key': detected_key,
         'regions': regions,
         'patterns': patterns,
+        'turnarounds': turnarounds,
     }
 
 
@@ -407,6 +411,18 @@ async def get_analysis(
         WHERE s.song_id = ?
     """, (song_id,))
     result['total_measures'] = measure_count or 0
+
+    # Group E: Load section markers for form detection and display
+    try:
+        section_markers_raw = db.execute_scalar(
+            "SELECT section_markers_json FROM Songs WHERE id = ?", (song_id,)
+        )
+        if section_markers_raw:
+            result['section_markers'] = json.loads(section_markers_raw)
+        else:
+            result['section_markers'] = []
+    except Exception:
+        result['section_markers'] = []
 
     # BV-04: Check for form override first, then fall back to auto-detection
     form_override = db.execute_scalar(
@@ -879,3 +895,57 @@ def _apply_overrides(result: dict, song_id: int, db: DatabaseConnection) -> dict
                 chord['notes'] = o['notes']
 
     return result
+
+
+# ==========================================
+# THEORY CHAT (HL-051)
+# ==========================================
+
+PORTFOLIO_RAG_URL = os.getenv(
+    "PORTFOLIO_RAG_URL",
+    "https://portfolio-rag-57478301787.us-central1.run.app"
+)
+
+
+class TheoryChatRequest(BaseModel):
+    query: str
+    song_context: dict = {}
+
+
+@router.post("/theory-chat")
+async def theory_chat(payload: TheoryChatRequest):
+    """Query Portfolio RAG jazz_theory collection for theory context."""
+    query = payload.query.strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="query is required")
+
+    song_context = payload.song_context
+    rag_results = []
+    rag_error = None
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"{PORTFOLIO_RAG_URL}/semantic",
+                params={"q": query, "collection": "jazz_theory", "n": 5}
+            )
+            if resp.status_code == 200:
+                rag_results = resp.json().get("results", [])
+    except Exception as e:
+        rag_error = str(e)
+        logger.warning(f"Portfolio RAG unavailable for theory-chat: {e}")
+
+    context_lines = []
+    if song_context.get("key"):
+        context_lines.append(f"Song key: {song_context['key']}")
+    if song_context.get("current_chord"):
+        context_lines.append(f"Current chord: {song_context['current_chord']}")
+    if rag_results:
+        context_lines.append("\nJazz theory reference:")
+        for r in rag_results[:3]:
+            snippet = r.get("snippet") or r.get("content", "")
+            if snippet:
+                context_lines.append(f"- {snippet[:300]}")
+
+    context = "\n".join(context_lines) if context_lines else "No context available."
+    return {"context": context, "rag_results": rag_results, "rag_error": rag_error}
