@@ -138,6 +138,9 @@ def run_migrations():
     # Migration 8: Songs.form_override column (BV-04)
     _migration_8_form_override(db)
 
+    # Migration 9: Songs.section_markers_json column (Group E)
+    _migration_9_section_markers(db)
+
     logger.info("Migrations complete.")
 
 
@@ -449,3 +452,17 @@ def _migration_8_form_override(db):
             db.execute_non_query("ALTER TABLE Songs ADD form_override NVARCHAR(50) NULL")
     except Exception as e:
         logger.warning(f"  Migration 8 warning: {e}")
+
+
+def _migration_9_section_markers(db):
+    """Group E: Add section_markers_json column to Songs for rehearsal mark storage."""
+    try:
+        exists = db.execute_scalar(
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
+            "WHERE TABLE_NAME = 'Songs' AND COLUMN_NAME = 'section_markers_json'"
+        )
+        if exists == 0:
+            logger.info("  Migration 9: Adding Songs.section_markers_json...")
+            db.execute_non_query("ALTER TABLE Songs ADD section_markers_json NVARCHAR(MAX) NULL")
+    except Exception as e:
+        logger.warning(f"  Migration 9 warning: {e}")

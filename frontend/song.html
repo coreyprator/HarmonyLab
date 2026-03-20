@@ -21,7 +21,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v2.16.1</div>
+        <div class="nav-version">v2.17.0</div>
     </nav>
 
     <header>
@@ -50,6 +50,7 @@
                 <label><input type="radio" name="view" value="notes"> Notes</label>
             </div>
             <button id="export-btn" class="btn btn-sm" title="Export to MuseScore with analysis annotations">Export .mscz</button>
+            <button id="theory-chat-btn" class="btn btn-sm" onclick="toggleTheoryChat()" title="Ask jazz theory questions (powered by jazz_theory knowledge base)">Theory Chat</button>
 
             <div class="analysis-controls" id="analysis-controls" style="display:none">
                 <label>Key:</label>
@@ -88,6 +89,7 @@
                     <button class="btn btn-xs stave-btn stave-btn-active" onclick="setStaveGrouping(4)" data-bars="4">4-bar</button>
                     <button class="btn btn-xs stave-btn" onclick="setStaveGrouping(8)" data-bars="8">8-bar</button>
                 </span>
+                <button id="scales-toggle-btn" class="btn btn-xs" onclick="toggleScaleOverlay()" style="margin-left:8px;" title="Show recommended improvisation scale per chord">Scales</button>
             </div>
             <div class="transpose-controls" id="transpose-controls">
                 <label>Transpose to:</label>
@@ -188,6 +190,22 @@
         <!-- Pattern info -->
         <div id="patterns-info" class="patterns-info" style="display:none"></div>
 
+        <!-- Theory Chat Panel (HL-051) -->
+        <div id="theory-chat-panel" style="display:none;border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:12px;background:#f9fafb;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                <strong style="font-size:13px;">Theory Chat</strong>
+                <span style="font-size:11px;color:#6b7280;">Powered by jazz theory knowledge base</span>
+                <button onclick="toggleTheoryChat()" style="margin-left:auto;border:none;background:none;cursor:pointer;font-size:16px;color:#6b7280;" title="Close">&#10005;</button>
+            </div>
+            <div style="display:flex;gap:8px;margin-bottom:8px;">
+                <input type="text" id="theory-chat-input" placeholder="Ask about this song... (e.g. 'What scale works over Dm7?')"
+                    style="flex:1;padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;"
+                    onkeydown="if(event.key==='Enter')sendTheoryChat()">
+                <button onclick="sendTheoryChat()" class="btn btn-sm">Ask</button>
+            </div>
+            <div id="theory-chat-result" style="font-size:12px;color:#374151;white-space:pre-wrap;min-height:40px;max-height:200px;overflow-y:auto;padding:4px;"></div>
+        </div>
+
         <!-- Rhythm Analysis Panel (FAIL 4) -->
         <div id="rhythm-panel" class="rhythm-panel" style="display:none">
             <div class="rhythm-header">Rhythm Analysis</div>
@@ -232,6 +250,10 @@
                 <button class="btn btn-sm" onclick="resetQuizScore()">Reset</button>
             </div>
         </div>
+
+        <!-- Key Center Debug + Bar (Group A / BV-03) -->
+        <div id="kc-debug" style="font-size:10px;color:#666;margin-bottom:4px;display:none;"></div>
+        <div id="key-center-bar" style="display:flex;width:100%;margin-bottom:8px;min-height:24px;"></div>
 
         <!-- Chord Display -->
         <div id="chord-display" class="chord-display">
@@ -709,11 +731,184 @@
                 const res = await fetch(`${API_BASE}/api/v1/analysis/songs/${songId}/key-centers`);
                 if (!res.ok) return;
                 keyCenterData = await res.json();
+                renderKeyCenterBar();
                 renderKeyCenters();
                 renderPatternAnnotations();
                 renderKeyCenterBrackets();
+                renderTurnarounds();
             } catch (e) {
                 console.error('Key center load failed:', e);
+            }
+        }
+
+        function renderKeyCenterBar() {
+            if (!keyCenterData) return;
+            const regions = keyCenterData.regions || [];
+            const debugEl = document.getElementById('kc-debug');
+            const barEl = document.getElementById('key-center-bar');
+            if (!debugEl || !barEl) return;
+
+            const homeKeyStr = keyCenterData.detected_key || analysisData?.detected_key || 'C';
+            const homeKeyMatch = homeKeyStr.match(/^([A-G][#b]?)/);
+            const homeKey = homeKeyMatch ? homeKeyMatch[1] : 'C';
+
+            // Debug text — stays in shipped code per sprint rules
+            debugEl.textContent = `Key centers: ${regions.length} region${regions.length !== 1 ? 's' : ''} | Home: ${homeKey}`;
+            debugEl.style.display = currentView === 'analysis' ? '' : 'none';
+
+            // Proportional bar
+            barEl.innerHTML = '';
+            barEl.style.display = currentView === 'analysis' && regions.length > 0 ? 'flex' : 'none';
+
+            if (regions.length === 0) return;
+            const totalChords = keyCenterData.regions[keyCenterData.regions.length - 1].end_index + 1;
+            for (const r of regions) {
+                const span = r.end_index - r.start_index + 1;
+                const pct = totalChords > 0 ? (span / totalChords * 100).toFixed(1) : 100;
+                const color = getKeyCenterColor(r.key_center, homeKey);
+                const modeLabel = {'major':'maj','minor':'min','harmonic_minor':'hm'}[r.mode] || r.mode;
+                const seg = document.createElement('div');
+                seg.style.cssText = `flex:0 0 ${pct}%;background:${color}30;border-top:3px solid ${color};` +
+                    `display:flex;align-items:center;justify-content:center;font-size:10px;` +
+                    `font-weight:600;color:${color};overflow:hidden;white-space:nowrap;box-sizing:border-box;padding:2px;`;
+                seg.textContent = `${r.key_center} ${modeLabel}`;
+                seg.title = `${r.key_center} ${r.mode} (mm ${r.start_measure}–${r.end_measure})`;
+                barEl.appendChild(seg);
+            }
+        }
+
+        // ==========================================
+        // THEORY CHAT (HL-051)
+        // ==========================================
+
+        function toggleTheoryChat() {
+            const panel = document.getElementById('theory-chat-panel');
+            panel.style.display = panel.style.display === 'none' ? '' : 'none';
+            if (panel.style.display !== 'none') {
+                document.getElementById('theory-chat-input').focus();
+            }
+        }
+
+        async function sendTheoryChat() {
+            const input = document.getElementById('theory-chat-input');
+            const result = document.getElementById('theory-chat-result');
+            const query = input.value.trim();
+            if (!query) return;
+
+            result.textContent = 'Searching jazz theory knowledge base...';
+
+            const songContext = {};
+            if (analysisData?.detected_key) songContext.key = analysisData.detected_key;
+
+            try {
+                const resp = await fetch(`${API_BASE}/api/v1/analysis/theory-chat`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({query, song_context: songContext})
+                });
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const data = await resp.json();
+                result.textContent = data.context || 'No results found.';
+            } catch (e) {
+                result.textContent = `Error: ${e.message}`;
+            }
+        }
+
+        // ==========================================
+        // SCALE OVERLAY (HL-049)
+        // ==========================================
+
+        const CHORD_SCALES = {
+            'maj7': 'Ionian', 'maj9': 'Ionian', 'maj7#11': 'Lydian', '6': 'Ionian', '69': 'Ionian',
+            'm7': 'Dorian', 'm9': 'Dorian', 'm11': 'Dorian', '-7': 'Dorian',
+            '7': 'Mixolydian', '9': 'Mixolydian', '13': 'Mixolydian',
+            '7sus4': 'Mixolydian (sus)', '9sus4': 'Mixolydian (sus)',
+            '7b9': 'HM Dominant', '7#9': 'Altered', '7alt': 'Altered', '7#11': 'Lyd. Dom.',
+            'm7b5': 'Locrian', 'ø7': 'Locrian', 'half-dim': 'Locrian',
+            'dim7': 'Dim. (W-H)', 'o7': 'Dim. (W-H)',
+            'm(maj7)': 'Mel. Minor', 'mMaj7': 'Mel. Minor',
+            'maj': 'Ionian', 'm': 'Dorian', '': 'Ionian',
+        };
+
+        let scaleOverlayActive = false;
+
+        function getChordScale(symbol) {
+            if (!symbol || symbol === 'N.C.') return null;
+            const q = symbol.replace(/^[A-G][#b]?/, '').replace(/\/.*/, '');
+            if (q in CHORD_SCALES) return CHORD_SCALES[q];
+            // Partial matches
+            for (const [pat, scale] of Object.entries(CHORD_SCALES)) {
+                if (pat && q.startsWith(pat)) return scale;
+            }
+            return null;
+        }
+
+        function toggleScaleOverlay() {
+            scaleOverlayActive = !scaleOverlayActive;
+            const btn = document.getElementById('scales-toggle-btn');
+            if (btn) btn.classList.toggle('stave-btn-active', scaleOverlayActive);
+            applyScaleOverlay();
+        }
+
+        function applyScaleOverlay() {
+            for (const ac of allChords) {
+                let scaleEl = ac.element.querySelector('.scale-tag');
+                if (scaleOverlayActive && currentView === 'analysis') {
+                    const scaleName = getChordScale(ac.symbol || ac.element.dataset.symbol || '');
+                    if (scaleName) {
+                        if (!scaleEl) {
+                            scaleEl = document.createElement('div');
+                            scaleEl.className = 'scale-tag';
+                            scaleEl.style.cssText = 'font-size:9px;color:#7c3aed;margin-top:2px;font-style:italic;';
+                            ac.element.appendChild(scaleEl);
+                        }
+                        scaleEl.textContent = scaleName;
+                        scaleEl.style.display = '';
+                    }
+                } else if (scaleEl) {
+                    scaleEl.style.display = 'none';
+                }
+            }
+        }
+
+        // ==========================================
+        // SECTION COLORS (Group E)
+        // ==========================================
+
+        const SECTION_COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
+
+        function renderSectionColors() {
+            if (!analysisData?.section_markers?.length || currentView !== 'analysis') return;
+            const markers = analysisData.section_markers;
+            // Build measure→section label map
+            const measureSection = {};
+            for (let i = 0; i < markers.length; i++) {
+                const m = markers[i];
+                const end = i + 1 < markers.length ? markers[i + 1].measure_number - 1 : Infinity;
+                for (let mn = m.measure_number; mn <= end; mn++) {
+                    measureSection[mn] = {label: m.label, colorIdx: i % SECTION_COLORS.length};
+                }
+            }
+            for (const ac of allChords) {
+                const mn = ac.measure;
+                if (mn && measureSection[mn]) {
+                    const {label, colorIdx} = measureSection[mn];
+                    const color = SECTION_COLORS[colorIdx];
+                    let secEl = ac.element.querySelector('.section-label');
+                    if (!secEl) {
+                        secEl = document.createElement('div');
+                        secEl.className = 'section-label';
+                        secEl.style.cssText = 'font-size:8px;font-weight:700;position:absolute;top:-14px;left:0;';
+                        ac.element.style.position = 'relative';
+                        ac.element.appendChild(secEl);
+                    }
+                    // Only show at first chord of a new section
+                    const prevMn = ac.index > 0 ? (allChords[ac.index - 1]?.measure) : null;
+                    secEl.style.display = (prevMn === null || measureSection[prevMn]?.label !== label) ? '' : 'none';
+                    secEl.textContent = label;
+                    secEl.style.color = color;
+                    ac.element.style.borderTop = `2px solid ${color}`;
+                }
             }
         }
 
@@ -909,9 +1104,9 @@
                         provEl.className = 'provenance-badge prov-score';
                         provEl.title = 'From your score notation';
                     } else if (ac.chord_source === 'override') {
-                        provEl.textContent = '\u2713';
+                        provEl.textContent = '\u270e';
                         provEl.className = 'provenance-badge prov-override';
-                        provEl.title = 'Your correction';
+                        provEl.title = 'Your correction (RLHF override)';
                     } else {
                         provEl.textContent = 'A';
                         provEl.className = 'provenance-badge prov-algorithm';
@@ -923,6 +1118,12 @@
 
             // Render patterns
             renderPatterns(analysisData.patterns || []);
+
+            // Scale overlay
+            if (scaleOverlayActive) applyScaleOverlay();
+
+            // Section marker colors (Group E)
+            renderSectionColors();
 
             // HL-TRANSPOSE-001: Re-render piano roll with transposed chord tones
             if (typeof setupPianoRoll === 'function') setupPianoRoll();
@@ -1134,6 +1335,23 @@
             }
         }
 
+        function renderTurnarounds() {
+            if (!keyCenterData || currentView !== 'analysis') return;
+            const turnarounds = keyCenterData.turnarounds || [];
+            document.querySelectorAll('.turnaround-bracket').forEach(el => el.remove());
+            for (const t of turnarounds) {
+                const info = allChords[t.start_index];
+                if (!info || !info.element) continue;
+                const label = document.createElement('div');
+                label.className = 'turnaround-bracket';
+                label.style.cssText = 'font-size:9px;color:#f59e0b;background:#fef3c7;border:1px solid #f59e0b;' +
+                    'border-radius:3px;padding:1px 4px;margin-top:2px;white-space:nowrap;';
+                label.textContent = `↻ ${t.type}`;
+                label.title = t.label;
+                info.element.appendChild(label);
+            }
+        }
+
         // ==========================================
         // STAVE GROUPING (C5)
         // ==========================================
@@ -1214,9 +1432,13 @@
                 if (secTarget) secTarget.style.display = isAnalysis ? '' : 'none';
             }
 
-            // Hide key center legend and brackets when not in analysis view
+            // Hide key center legend, bar, and debug when not in analysis view
             const kcLegend = document.getElementById('key-center-legend');
             if (kcLegend) kcLegend.style.display = isAnalysis ? '' : 'none';
+            const kcDebug = document.getElementById('kc-debug');
+            if (kcDebug) kcDebug.style.display = isAnalysis && kcDebug.textContent ? '' : 'none';
+            const kcBar = document.getElementById('key-center-bar');
+            if (kcBar) kcBar.style.display = isAnalysis && keyCenterData?.regions?.length ? 'flex' : 'none';
 
             // Reset chord card classes if switching to chords view
             if (!isAnalysis) {
@@ -1234,6 +1456,7 @@
             } else if (analysisData) {
                 renderAnalysis();
                 if (keyCenterData) {
+                    renderKeyCenterBar();
                     renderKeyCenters();
                     renderPatternAnnotations();
                     renderKeyCenterBrackets();

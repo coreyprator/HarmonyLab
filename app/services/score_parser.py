@@ -10,7 +10,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 import logging
 from dataclasses import dataclass, field
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +78,7 @@ class ParsedScore:
     barlines: List[ScoreBarline] = field(default_factory=list)
     has_pickup: bool = False
     form: Optional[str] = None
+    section_markers: List[Dict] = field(default_factory=list)  # [{label, measure_number}]
 
 
 # ---------------------------------------------------------------------------
@@ -420,28 +421,61 @@ def _parse_mscx_content(xml_content: str, default_title: str) -> ParsedScore:
         logger.info("Repeat expansion: %d repeats, total chords=%d notes=%d",
                      len(repeats), len(chords), len(notes))
 
+    # --- Rehearsal mark / section marker extraction ---
+    section_markers = []
+    sm_measure_num = 0
+    for measure in (first_staff if first_staff is not None else root).iter('Measure'):
+        sm_measure_num += 1
+        # MuseScore uses <RehearsalText> or <Text> with <subtype>Rehearsal</subtype>
+        for frame in measure.iter():
+            tag = frame.tag
+            if tag in ('RehearsalText', 'RehearsalMark'):
+                text_el = frame.find('text') or frame.find('Text') or frame
+                label = (text_el.text or '').strip() if text_el is not None else ''
+                if label:
+                    section_markers.append({'label': label, 'measure_number': sm_measure_num})
+            elif tag == 'Text':
+                subtype = frame.find('subtype')
+                if subtype is not None and subtype.text in ('Rehearsal', 'rehearsalMark'):
+                    text_el = frame.find('text') or frame.find('html-data') or frame
+                    label = (text_el.text or '').strip() if text_el is not None else ''
+                    if not label:
+                        # Try direct .text on the Text element
+                        label = (frame.text or '').strip()
+                    if label:
+                        section_markers.append({'label': label, 'measure_number': sm_measure_num})
+
     # --- Form detection ---
     total_measures = max((c.measure_number for c in chords), default=0) if chords else note_measure_num
-    form = _detect_form(total_measures, repeats)
+    form = _detect_form(total_measures, repeats, section_markers)
 
-    logger.info("Parsed MuseScore file: title=%r key=%r time_sig=%r chords=%d notes=%d form=%s",
-                title, key_str, time_sig, len(chords), len(notes), form)
+    logger.info("Parsed MuseScore file: title=%r key=%r time_sig=%r chords=%d notes=%d form=%s sections=%d",
+                title, key_str, time_sig, len(chords), len(notes), form, len(section_markers))
     return ParsedScore(title=title, key=key_str, time_signature=time_sig,
                        tempo=tempo_val, chords=chords, notes=notes,
                        repeats=repeats, barlines=barlines,
-                       has_pickup=has_pickup, form=form)
+                       has_pickup=has_pickup, form=form,
+                       section_markers=section_markers)
 
 
-def _detect_form(total_measures: int, repeats: list) -> Optional[str]:
-    """Detect standard jazz song forms from measure count and repeats."""
+def _detect_form(total_measures: int, repeats: list, section_markers: list = None) -> Optional[str]:
+    """Detect standard jazz song forms from section markers (preferred) or measure count heuristic."""
     if total_measures <= 0:
         return None
+
+    # Prefer actual section markers from the score (rehearsal marks A, B, C...)
+    if section_markers:
+        labels = [m['label'] for m in section_markers]
+        unique_labels = list(dict.fromkeys(labels))  # preserve order, dedupe
+        if unique_labels:
+            return ' '.join(unique_labels)
+
+    # Fallback: measure count heuristic
     if total_measures <= 12:
         return '12-bar blues'
     elif total_measures <= 16:
         return f'{total_measures}-bar'
     elif total_measures <= 32:
-        # Heuristic: 32 bars with repeat at 8 and 24 → AABA
         repeat_ends = {r[1] for r in repeats} if repeats else set()
         if 8 in repeat_ends or 16 in repeat_ends:
             return 'AABA (32 bars)'
