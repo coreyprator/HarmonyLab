@@ -17,7 +17,7 @@ from app.api.routes import songs, sections, vocabulary, measures, chords, progre
 
 logger = logging.getLogger(__name__)
 
-VERSION = "2.17.0"  # HM09: key center bar+debug + theory chat (HL-051) + RLHF badge + scale overlay + turnaround detection + section markers
+VERSION = "2.17.1"  # HM10: fix loadKeyCenters() never called when analysisData pre-loaded (kc-debug/kc-bar invisible)
 
 app = FastAPI(
     title="Harmony Lab API",
