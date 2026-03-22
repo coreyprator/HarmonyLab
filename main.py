@@ -17,7 +17,7 @@ from app.api.routes import songs, sections, vocabulary, measures, chords, progre
 
 logger = logging.getLogger(__name__)
 
-VERSION = "2.18.0"  # HM11: HL-006A voicing_type, HL-006C override_count, HL-049 scales default ON, HL-053 soundfont dropdown, REQ-006 rootless check, BUG-005 delete fix
+VERSION = "2.18.1"  # HM12: multi-key detection (-/^ chord parsing fix + sliding window), song-aware theory chat
 
 app = FastAPI(
     title="Harmony Lab API",

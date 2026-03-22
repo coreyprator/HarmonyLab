@@ -21,7 +21,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v2.18.0</div>
+        <div class="nav-version">v2.18.1</div>
     </nav>
 
     <header>
@@ -804,8 +804,14 @@
 
             result.textContent = 'Searching jazz theory knowledge base...';
 
+            // HL-051: Send full song context for song-aware responses
             const songContext = {};
+            if (songData?.title) songContext.title = songData.title;
             if (analysisData?.detected_key) songContext.key = analysisData.detected_key;
+            if (keyCenterData?.regions?.length) songContext.key_centers = keyCenterData.regions;
+            if (analysisData?.chords?.length) {
+                songContext.chord_sequence = analysisData.chords.slice(0, 16).map(c => c.symbol);
+            }
 
             try {
                 const resp = await fetch(`${API_BASE}/api/v1/analysis/theory-chat`, {
