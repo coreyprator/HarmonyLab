@@ -920,7 +920,7 @@ class TheoryChatRequest(BaseModel):
 
 @router.post("/theory-chat")
 async def theory_chat(payload: TheoryChatRequest):
-    """Query Portfolio RAG jazz_theory collection for theory context."""
+    """Query Portfolio RAG jazz_theory collection for song-aware theory context."""
     query = payload.query.strip()
     if not query:
         raise HTTPException(status_code=400, detail="query is required")
@@ -941,11 +941,42 @@ async def theory_chat(payload: TheoryChatRequest):
         rag_error = str(e)
         logger.warning(f"Portfolio RAG unavailable for theory-chat: {e}")
 
+    # HL-051: Build song-aware context — reference the actual song's chords and key analysis
     context_lines = []
-    if song_context.get("key"):
-        context_lines.append(f"Song key: {song_context['key']}")
-    if song_context.get("current_chord"):
-        context_lines.append(f"Current chord: {song_context['current_chord']}")
+
+    # Song identity section
+    title = song_context.get("title")
+    key = song_context.get("key")
+    if title:
+        context_lines.append(f'Song: "{title}"')
+    if key:
+        context_lines.append(f"Detected key: {key}")
+
+    # Key center regions (multi-key)
+    key_centers = song_context.get("key_centers") or []
+    if key_centers:
+        region_strs = []
+        for r in key_centers:
+            kc = r.get("key_center", "")
+            mode = r.get("mode", "")
+            sm = r.get("start_measure", "?")
+            em = r.get("end_measure", "?")
+            region_strs.append(f"{kc} {mode} (mm {sm}–{em})")
+        context_lines.append(f"Key center regions: {' | '.join(region_strs)}")
+
+    # Chord sequence
+    chord_seq = song_context.get("chord_sequence") or []
+    if chord_seq:
+        context_lines.append(f"Chord sequence: {', '.join(str(c) for c in chord_seq[:16])}")
+
+    # Current chord context
+    current_chord = song_context.get("current_chord")
+    current_measure = song_context.get("current_measure")
+    if current_chord:
+        loc = f" (measure {current_measure})" if current_measure else ""
+        context_lines.append(f"Current chord: {current_chord}{loc}")
+
+    # Jazz theory RAG reference
     if rag_results:
         context_lines.append("\nJazz theory reference:")
         for r in rag_results[:3]:

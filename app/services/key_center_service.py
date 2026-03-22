@@ -32,11 +32,15 @@ def _parse_chord(symbol: str) -> Optional[Dict]:
     if pc is None:
         return None
 
-    is_minor = quality.startswith('m') and not quality.startswith('maj')
+    # Handle both 'm' and '-' as minor notation (iReal/MuseScore use '-')
+    is_minor = (quality.startswith('m') and not quality.startswith('maj')) or quality.startswith('-')
     is_dom7 = (quality.startswith('7') or quality == '9' or quality == '13'
-               or quality == '11' or quality.startswith('7'))
-    is_maj7 = quality.startswith('maj7') or quality.startswith('Maj7') or quality.startswith('M7')
-    is_half_dim = 'm7b5' in quality or quality.startswith('ø')
+               or quality == '11' or quality.startswith('7') or quality.startswith('9sus')
+               or quality.startswith('13sus'))
+    # Handle '^' and 't' as maj7 notation (MuseScore triangle = '^'; 't7' = triangle 7)
+    is_maj7 = (quality.startswith('maj7') or quality.startswith('Maj7') or quality.startswith('M7')
+               or quality.startswith('^') or quality == 't7' or quality == 'T7')
+    is_half_dim = 'm7b5' in quality or '-7b5' in quality or quality.startswith('ø')
     is_dim = 'dim' in quality and not is_half_dim
     is_major_triad = not is_minor and not is_dom7 and not is_dim and not is_half_dim
 
@@ -196,6 +200,25 @@ def detect_key_centers(chords: List[Dict], detected_key: str = None) -> List[Dic
 
     if not pattern_keys:
         pattern_keys.append((home_key, home_mode))
+
+    # Step 2.5: Sliding window key discovery — when pattern detection finds < 2 candidates,
+    # score all 24 keys against windows of chords to discover additional key regions.
+    # This handles songs where chord symbols don't form clean ii-V-I patterns.
+    if len(pattern_keys) < 2 and len(parsed) >= 4:
+        window_size = 4
+        for i in range(0, len(parsed), window_size):
+            window = parsed[i:i + window_size]
+            best_wk, best_score = pattern_keys[0], -1
+            for key_name in NOTE_NAMES:
+                key_pc_val = NOTE_TO_PC[key_name]
+                for mode_name, scale_pcs in [('major', major_scale), ('minor', h_minor_scale)]:
+                    score = sum(
+                        1 for p in window if p and (p['root_pc'] - key_pc_val) % 12 in scale_pcs
+                    )
+                    if score > best_score:
+                        best_score, best_wk = score, (key_name, mode_name)
+            if best_wk not in pattern_keys:
+                pattern_keys.append(best_wk)
 
     def _chord_fits_key(chord_pc, key_name, mode):
         key_pc = NOTE_TO_PC.get(key_name, 0)
