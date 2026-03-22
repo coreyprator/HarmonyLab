@@ -403,6 +403,9 @@ async def get_analysis(
                         if has_extension:
                             ch['is_rootless'] = True
 
+            # HL-006A: voicing_type field
+            ch['voicing_type'] = 'rootless' if ch.get('is_rootless') else 'closed'
+
     # Add total measures count
     measure_count = db.execute_scalar("""
         SELECT COUNT(DISTINCT m.measure_number)
@@ -871,6 +874,9 @@ def _apply_overrides(result: dict, song_id: int, db: DatabaseConnection) -> dict
     )
 
     override_map = {o['chord_index']: o for o in overrides}
+
+    # HL-006C: expose override count for UI display
+    result['override_count'] = len(override_map)
 
     for chord in result.get('chords', []):
         idx = chord['index']

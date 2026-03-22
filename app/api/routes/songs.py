@@ -139,24 +139,21 @@ async def bulk_delete_songs(
                     db.execute_non_query(f"DELETE FROM {table} WHERE song_id = ?", (sid,))
                 except Exception:
                     pass
+            # BUG-005: Nested direct deletes for legacy song compatibility
             try:
-                db.execute_non_query("""
-                    DELETE c FROM Chords c
-                    INNER JOIN Measures m ON c.measure_id = m.id
-                    INNER JOIN Sections s ON m.section_id = s.id
-                    WHERE s.song_id = ?
-                """, (sid,))
-            except Exception:
-                pass
-            try:
-                db.execute_non_query("""
-                    DELETE m FROM Measures m
-                    INNER JOIN Sections s ON m.section_id = s.id
-                    WHERE s.song_id = ?
-                """, (sid,))
-            except Exception:
-                pass
-            try:
+                section_rows = db.execute_query("SELECT id FROM Sections WHERE song_id = ?", (sid,))
+                for sr in (section_rows or []):
+                    sec_id = sr['id']
+                    measure_rows = db.execute_query("SELECT id FROM Measures WHERE section_id = ?", (sec_id,))
+                    for mr in (measure_rows or []):
+                        try:
+                            db.execute_non_query("DELETE FROM Chords WHERE measure_id = ?", (mr['id'],))
+                        except Exception:
+                            pass
+                    try:
+                        db.execute_non_query("DELETE FROM Measures WHERE section_id = ?", (sec_id,))
+                    except Exception:
+                        pass
                 db.execute_non_query("DELETE FROM Sections WHERE song_id = ?", (sid,))
             except Exception:
                 pass
@@ -191,30 +188,30 @@ async def delete_song(song_id: int, db: DatabaseConnection = Depends(get_db)):
         except Exception:
             pass
 
-    # Chords → Measures → Sections (explicit cascade for legacy songs)
+    # BUG-005: Nested direct deletes — safer than JOIN syntax for legacy songs
+    # Walk Sections → Measures → Chords individually to avoid FK blocks
     try:
-        db.execute_non_query("""
-            DELETE c FROM Chords c
-            INNER JOIN Measures m ON c.measure_id = m.id
-            INNER JOIN Sections s ON m.section_id = s.id
-            WHERE s.song_id = ?
-        """, (song_id,))
-    except Exception:
-        pass
-    try:
-        db.execute_non_query("""
-            DELETE m FROM Measures m
-            INNER JOIN Sections s ON m.section_id = s.id
-            WHERE s.song_id = ?
-        """, (song_id,))
-    except Exception:
-        pass
-    try:
+        section_rows = db.execute_query("SELECT id FROM Sections WHERE song_id = ?", (song_id,))
+        for sr in (section_rows or []):
+            sec_id = sr['id']
+            measure_rows = db.execute_query("SELECT id FROM Measures WHERE section_id = ?", (sec_id,))
+            for mr in (measure_rows or []):
+                try:
+                    db.execute_non_query("DELETE FROM Chords WHERE measure_id = ?", (mr['id'],))
+                except Exception:
+                    pass
+            try:
+                db.execute_non_query("DELETE FROM Measures WHERE section_id = ?", (sec_id,))
+            except Exception:
+                pass
         db.execute_non_query("DELETE FROM Sections WHERE song_id = ?", (song_id,))
     except Exception:
         pass
 
-    db.execute_non_query("DELETE FROM Songs WHERE id = ?", (song_id,))
+    try:
+        db.execute_non_query("DELETE FROM Songs WHERE id = ?", (song_id,))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Delete failed — FK constraint: {e}")
     return None
 
 
