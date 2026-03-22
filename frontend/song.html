@@ -21,7 +21,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v2.17.1</div>
+        <div class="nav-version">v2.18.0</div>
     </nav>
 
     <header>
@@ -89,7 +89,7 @@
                     <button class="btn btn-xs stave-btn stave-btn-active" onclick="setStaveGrouping(4)" data-bars="4">4-bar</button>
                     <button class="btn btn-xs stave-btn" onclick="setStaveGrouping(8)" data-bars="8">8-bar</button>
                 </span>
-                <button id="scales-toggle-btn" class="btn btn-xs" onclick="toggleScaleOverlay()" style="margin-left:8px;" title="Show recommended improvisation scale per chord">Scales</button>
+                <button id="scales-toggle-btn" class="btn btn-xs stave-btn-active" onclick="toggleScaleOverlay()" style="margin-left:8px;" title="Show recommended improvisation scale per chord">Scales</button>
             </div>
             <div class="transpose-controls" id="transpose-controls">
                 <label>Transpose to:</label>
@@ -139,7 +139,13 @@
                     </select>
                 </label>
                 <span class="transport-separator">|</span>
-                <span id="sampler-label" style="font-size:11px; opacity:0.6;">MusyngKite</span>
+                <label style="font-size:11px;opacity:0.6;">Sound:
+                    <select id="soundfont-select" onchange="switchSoundfont(this.value)" style="font-size:11px;padding:1px 3px;">
+                        <option value="piano">Piano</option>
+                        <option value="elecpiano">Elec. Piano</option>
+                        <option value="vibraphone">Vibraphone</option>
+                    </select>
+                </label>
             </div>
             <div id="playback-no-notes" class="playback-warning" style="display:none">
                 No note data &mdash; upload a MIDI file to use Score or Full Song mode.
@@ -180,6 +186,7 @@
                     Enable RLHF corrections
                 </label>
                 <span class="rlhf-hint">Learn from my edits</span>
+                <span id="rlhf-override-count" style="display:none;font-size:11px;background:#e0e7ff;color:#3730a3;border-radius:10px;padding:1px 7px;margin-left:8px;"></span>
                 <button id="rlhf-revert-btn" class="btn btn-sm btn-danger" style="display:none"
                         onclick="revertRLHF()">Revert</button>
             </div>
@@ -830,7 +837,7 @@
             'maj': 'Ionian', 'm': 'Dorian', '': 'Ionian',
         };
 
-        let scaleOverlayActive = false;
+        let scaleOverlayActive = true;  // HL-049: scales ON by default
 
         function getChordScale(symbol) {
             if (!symbol || symbol === 'N.C.') return null;
@@ -989,6 +996,18 @@
                 if (totalMeasures > 0) parts.push(`${totalMeasures} measures`);
                 if (analysisData.form) parts.push(analysisData.form);
                 statsEl.textContent = parts.length > 0 ? `| ${parts.join(' | ')}` : '';
+            }
+
+            // HL-006C: Override count badge
+            const overrideCountEl = document.getElementById('rlhf-override-count');
+            if (overrideCountEl) {
+                const n = analysisData.override_count || 0;
+                if (n > 0) {
+                    overrideCountEl.textContent = `${n} override${n !== 1 ? 's' : ''}`;
+                    overrideCountEl.style.display = '';
+                } else {
+                    overrideCountEl.style.display = 'none';
+                }
             }
 
             // BV-04: Form label as editable dropdown
@@ -1608,7 +1627,7 @@
                 }
 
                 // HL-006D: Rootless voicing explanation
-                if (ac.is_rootless && source === 'algorithm') {
+                if ((ac.is_rootless || ac.voicing_type === 'rootless') && source === 'algorithm') {
                     const rootNote = ac.symbol ? ac.symbol.match(/^[A-G][#b]?/)?.[0] : '?';
                     reasoningHtml += `<div style="margin-top:6px;padding:6px 8px;background:var(--bg-hover);border-radius:4px;border-left:3px solid #f59e0b">`;
                     reasoningHtml += `<strong>Jazz voicing:</strong> root ${rootNote} not present in piano notes.<br>`;
@@ -2718,7 +2737,38 @@
                 return window._harmonyPlaybackSampler;
             }
 
-            function getSampler() { return window._harmonyPlaybackSampler; }
+            function getSampler() {
+                return window._harmonyPlaybackSynth || window._harmonyPlaybackSampler;
+            }
+
+            // HL-053: Soundfont switcher
+            async function switchSoundfont(name) {
+                // Stop any active playback
+                try { getSampler()?.releaseAll(); } catch(e) {}
+                window._harmonyPlaybackSynth = null;
+                window._harmonyPlaybackSampler = null;
+
+                if (name === 'elecpiano') {
+                    const synth = new Tone.PolySynth(Tone.FMSynth, {
+                        harmonicity: 3,
+                        modulationIndex: 10,
+                        envelope: { attack: 0.01, decay: 0.3, sustain: 0.2, release: 0.8 },
+                        modulation: { type: 'sine' },
+                        modulationEnvelope: { attack: 0.01, decay: 0.2, sustain: 0.1, release: 0.5 }
+                    }).toDestination();
+                    synth.loaded = true;  // PolySynth has no .loaded property — patch for compatibility
+                    window._harmonyPlaybackSynth = synth;
+                } else if (name === 'vibraphone') {
+                    const synth = new Tone.PolySynth(Tone.Synth, {
+                        oscillator: { type: 'sine' },
+                        envelope: { attack: 0.005, decay: 0.6, sustain: 0.0, release: 0.8 }
+                    }).toDestination();
+                    synth.loaded = true;
+                    window._harmonyPlaybackSynth = synth;
+                } else {
+                    // Piano: reset to Salamander sampler (lazy-load on next play)
+                }
+            }
 
             // ── Helpers ───────────────────────────────────────────────────────
             function midiToNoteName(midi) {

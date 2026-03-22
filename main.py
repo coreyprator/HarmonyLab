@@ -17,7 +17,7 @@ from app.api.routes import songs, sections, vocabulary, measures, chords, progre
 
 logger = logging.getLogger(__name__)
 
-VERSION = "2.17.1"  # HM10: fix loadKeyCenters() never called when analysisData pre-loaded (kc-debug/kc-bar invisible)
+VERSION = "2.18.0"  # HM11: HL-006A voicing_type, HL-006C override_count, HL-049 scales default ON, HL-053 soundfont dropdown, REQ-006 rootless check, BUG-005 delete fix
 
 app = FastAPI(
     title="Harmony Lab API",
