@@ -21,7 +21,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v2.19.0</div>
+        <div class="nav-version">v2.19.1</div>
     </nav>
 
     <header>
@@ -220,10 +220,10 @@
                 <span id="improv-iteration" style="font-size:11px;color:#6b7280;"></span>
                 <button id="improv-generate-btn" onclick="generateImprovisation()" class="btn btn-sm" style="margin-left:auto;background:#16a34a;color:#fff;border:none;padding:4px 12px;border-radius:6px;cursor:pointer;">Generate Improvisation</button>
             </div>
-            <!-- A/B Toggle -->
-            <div id="improv-ab-toggle" style="display:none;margin-bottom:8px;">
+            <!-- A/B Toggle — always rendered; B disabled until riffs exist -->
+            <div id="improv-ab-toggle" style="display:;margin-bottom:8px;">
                 <button id="ab-original-btn" class="improv-ab-btn improv-ab-active" onclick="playOriginalChords()">A: Original</button>
-                <button id="ab-improv-btn" class="improv-ab-btn" onclick="playImprovRiffs()">B: AI Improv</button>
+                <button id="ab-improv-btn" class="improv-ab-btn" onclick="playImprovRiffs()" disabled style="opacity:0.5;cursor:not-allowed;">B: AI Improv</button>
             </div>
             <!-- Loading indicator -->
             <div id="improv-loading" style="display:none;text-align:center;padding:16px;color:#6b7280;">
@@ -2605,7 +2605,11 @@
             btn.textContent = 'Generating...';
             loading.style.display = '';
             riffsDiv.innerHTML = '';
-            document.getElementById('improv-ab-toggle').style.display = 'none';
+            // Keep A/B toggle visible; disable B while generating
+            const abBtnDuringGen = document.getElementById('ab-improv-btn');
+            abBtnDuringGen.disabled = true;
+            abBtnDuringGen.style.opacity = '0.5';
+            abBtnDuringGen.style.cursor = 'not-allowed';
             document.getElementById('improv-regenerate').style.display = 'none';
 
             try {
@@ -2633,6 +2637,11 @@
             document.getElementById('improv-iteration').textContent = `Iteration ${session.iteration}`;
             document.getElementById('improv-ab-toggle').style.display = '';
             document.getElementById('improv-regenerate').style.display = '';
+            // Enable B button now that riffs exist
+            const abImprovBtn = document.getElementById('ab-improv-btn');
+            abImprovBtn.disabled = false;
+            abImprovBtn.style.opacity = '';
+            abImprovBtn.style.cursor = '';
 
             const riffs = session.riffs || [];
             riffsDiv.innerHTML = riffs.map(riff => `

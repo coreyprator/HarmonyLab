@@ -69,15 +69,25 @@ class ImprovisationService:
             prior_feedback, song_title, song_composer, iteration
         )
 
-        client = Anthropic()
+        client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+        if not client.api_key:
+            raise ValueError("ANTHROPIC_API_KEY not set in environment")
+
+        logger.info(f"[IMPROV] Calling Claude API for song {song_id} iteration {iteration}")
         response = client.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=2000,
             messages=[{"role": "user", "content": prompt}]
         )
-        riffs = self._parse_improv_response(response.content[0].text)
+        raw_text = response.content[0].text
+        logger.info(f"[IMPROV] Claude response length: {len(raw_text)} chars, stop_reason: {response.stop_reason}")
+        logger.info(f"[IMPROV] Claude response preview: {raw_text[:300]}")
+
+        riffs = self._parse_improv_response(raw_text)
+        logger.info(f"[IMPROV] Parsed {len(riffs)} riffs")
 
         if not riffs:
+            logger.error(f"[IMPROV] No riffs parsed. Full response: {raw_text[:500]}")
             raise ValueError("AI returned no valid riff data.")
 
         # 7. Store session and riffs
@@ -245,21 +255,33 @@ Return ONLY a JSON array of riff objects, no markdown fences, no commentary. Exa
 [{{"measure_start":1,"measure_end":2,"riff_type":"bebop_lick","notes":[{{"pitch":"D4","duration":0.5,"beat":1.0}},{{"pitch":"E4","duration":0.5,"beat":1.5}}],"pattern_desc":"Ascending bebop line over Dm7"}}]"""
 
     def _parse_improv_response(self, text: str) -> list:
-        """Parse Claude's JSON response into riff objects."""
-        # Strip markdown fences if present
-        text = text.strip()
-        if text.startswith("```"):
-            lines = text.split("\n")
-            text = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
-            text = text.strip()
+        """Parse Claude's JSON response into riff objects. Handles markdown fences and dict wrappers."""
+        import re
 
+        # Strip markdown code fences if present
+        text = text.strip()
+        text = re.sub(r'^```(?:json)?\s*', '', text, flags=re.MULTILINE)
+        text = re.sub(r'\s*```\s*$', '', text, flags=re.MULTILINE)
+        text = text.strip()
+
+        # Try direct JSON parse
         try:
-            riffs = json.loads(text)
-            if not isinstance(riffs, list):
-                logger.warning("AI response is not a JSON array")
-                return []
-            return riffs
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse AI improvisation response: {e}")
-            logger.error(f"Raw response: {text[:500]}")
-            return []
+            data = json.loads(text)
+            if isinstance(data, list):
+                return data
+            if isinstance(data, dict) and 'riffs' in data:
+                return data['riffs']
+            logger.warning(f"[IMPROV] AI response is not a JSON array or {{riffs:[]}}: {type(data).__name__}")
+        except json.JSONDecodeError:
+            pass
+
+        # Fallback: extract JSON array from text
+        match = re.search(r'\[.*\]', text, re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group())
+            except json.JSONDecodeError:
+                pass
+
+        logger.error(f"[IMPROV] Could not parse riffs from response: {text[:300]}")
+        return []
