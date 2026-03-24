@@ -141,6 +141,9 @@ def run_migrations():
     # Migration 9: Songs.section_markers_json column (Group E)
     _migration_9_section_markers(db)
 
+    # Migration 10: Improvisation tables (HL-IMPROV-001)
+    _migration_10_improvisation_tables(db)
+
     logger.info("Migrations complete.")
 
 
@@ -466,3 +469,116 @@ def _migration_9_section_markers(db):
             db.execute_non_query("ALTER TABLE Songs ADD section_markers_json NVARCHAR(MAX) NULL")
     except Exception as e:
         logger.warning(f"  Migration 9 warning: {e}")
+
+
+def _migration_10_improvisation_tables(db):
+    """HL-IMPROV-001: Create ImprovisationSessions, ImprovisationRiffs, JazzTheoryPatterns tables."""
+    # ImprovisationSessions
+    try:
+        count = db.execute_scalar(
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'ImprovisationSessions'"
+        )
+        if count == 0:
+            logger.info("  Migration 10a: Creating ImprovisationSessions table...")
+            db.execute_non_query("""
+                CREATE TABLE ImprovisationSessions (
+                    id              INT IDENTITY(1,1) PRIMARY KEY,
+                    song_id         INT NOT NULL,
+                    iteration       INT DEFAULT 1,
+                    status          NVARCHAR(20) DEFAULT 'draft',
+                    created_at      DATETIME2 DEFAULT GETUTCDATE(),
+                    CONSTRAINT FK_ImprovSessions_Songs FOREIGN KEY (song_id)
+                        REFERENCES Songs(id) ON DELETE CASCADE
+                )
+            """)
+            logger.info("  Migration 10a: ImprovisationSessions table created.")
+    except Exception as e:
+        logger.warning(f"  Migration 10a warning: {e}")
+
+    # ImprovisationRiffs
+    try:
+        count = db.execute_scalar(
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'ImprovisationRiffs'"
+        )
+        if count == 0:
+            logger.info("  Migration 10b: Creating ImprovisationRiffs table...")
+            db.execute_non_query("""
+                CREATE TABLE ImprovisationRiffs (
+                    id              INT IDENTITY(1,1) PRIMARY KEY,
+                    session_id      INT NOT NULL,
+                    measure_start   INT NOT NULL,
+                    measure_end     INT NOT NULL,
+                    riff_type       NVARCHAR(50),
+                    notes_json      NVARCHAR(MAX),
+                    pattern_desc    NVARCHAR(200),
+                    rlhf_rating     INT NULL,
+                    rated_at        DATETIME2 NULL,
+                    CONSTRAINT FK_ImprovRiffs_Sessions FOREIGN KEY (session_id)
+                        REFERENCES ImprovisationSessions(id) ON DELETE CASCADE
+                )
+            """)
+            logger.info("  Migration 10b: ImprovisationRiffs table created.")
+    except Exception as e:
+        logger.warning(f"  Migration 10b warning: {e}")
+
+    # JazzTheoryPatterns
+    try:
+        count = db.execute_scalar(
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'JazzTheoryPatterns'"
+        )
+        if count == 0:
+            logger.info("  Migration 10c: Creating JazzTheoryPatterns table...")
+            db.execute_non_query("""
+                CREATE TABLE JazzTheoryPatterns (
+                    id              INT IDENTITY(1,1) PRIMARY KEY,
+                    pattern_name    NVARCHAR(100),
+                    chord_context   NVARCHAR(50),
+                    notes_template  NVARCHAR(MAX),
+                    approved_count  INT DEFAULT 0,
+                    rejected_count  INT DEFAULT 0,
+                    created_at      DATETIME2 DEFAULT GETUTCDATE()
+                )
+            """)
+            logger.info("  Migration 10c: JazzTheoryPatterns table created.")
+
+            # Seed with standard bebop patterns
+            _seed_jazz_theory_patterns(db)
+    except Exception as e:
+        logger.warning(f"  Migration 10c warning: {e}")
+
+
+def _seed_jazz_theory_patterns(db):
+    """Seed JazzTheoryPatterns with standard jazz vocabulary."""
+    patterns = [
+        ("bebop_dominant_scale", "dom7", '["1","2","3","4","5","6","b7","7"]',
+         "Bebop dominant scale — adds major 7th passing tone between b7 and octave"),
+        ("bebop_major_scale", "maj7", '["1","2","3","4","5","#5","6","7"]',
+         "Bebop major scale — adds #5 passing tone for chromatic flow"),
+        ("minor_bebop_scale", "min7", '["1","2","b3","3","4","5","6","b7"]',
+         "Minor bebop scale — chromatic passing tone between b3 and 3"),
+        ("enclosure_pattern", "dom7", '["b2","#7","1"]',
+         "Enclosure — approach target note from half step above and below"),
+        ("ii_V_I_lick_major", "dom7", '["5","4","3","2","1","7","1"]',
+         "Classic ii-V-I resolution lick descending through chord tones"),
+        ("cry_me_a_river_turn", "min7", '["1","b3","5","b7","5","b3","1"]',
+         "Arpeggio turn — outline the minor 7th chord up and back down"),
+        ("chromatic_approach", "dom7", '["#4","5","b7","7","1"]',
+         "Chromatic approach to resolution — #4 to 5, b7 to 7 to 1"),
+        ("coltrane_pattern", "dom7", '["1","2","3","5","#5","3","2","1"]',
+         "Coltrane-inspired digital pattern with augmented passing tone"),
+        ("parker_lick", "dom7", '["3","#4","5","6","b7","5","3","1"]',
+         "Charlie Parker signature lick — chromatic approach to 5th"),
+        ("dorian_run", "min7", '["1","2","b3","4","5","6","b7","1"]',
+         "Ascending Dorian scale run — standard minor ii chord vocabulary"),
+        ("tritone_sub_approach", "dom7", '["b5","4","3","1"]',
+         "Tritone substitution approach — descend from b5 to resolve"),
+        ("honeysuckle_rose", "maj7", '["5","#5","6","#5","5","3","1"]',
+         "Honeysuckle Rose motif — chromatic neighbor around 5th and 6th"),
+    ]
+    for name, ctx, template, desc in patterns:
+        db.execute_non_query(
+            "INSERT INTO JazzTheoryPatterns (pattern_name, chord_context, notes_template) "
+            "VALUES (?, ?, ?)",
+            (name, ctx, template)
+        )
+    logger.info(f"  Seeded {len(patterns)} jazz theory patterns.")

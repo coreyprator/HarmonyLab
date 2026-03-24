@@ -21,7 +21,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v2.18.1</div>
+        <div class="nav-version">v2.19.0</div>
     </nav>
 
     <header>
@@ -211,6 +211,31 @@
                 <button onclick="sendTheoryChat()" class="btn btn-sm">Ask</button>
             </div>
             <div id="theory-chat-result" style="font-size:12px;color:#374151;white-space:pre-wrap;min-height:40px;max-height:200px;overflow-y:auto;padding:4px;"></div>
+        </div>
+
+        <!-- HL-IMPROV-001: AI Improvisation Panel -->
+        <div id="improv-panel" style="display:none;border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:12px;background:#f0fdf4;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                <strong style="font-size:14px;">AI Improvisation</strong>
+                <span id="improv-iteration" style="font-size:11px;color:#6b7280;"></span>
+                <button id="improv-generate-btn" onclick="generateImprovisation()" class="btn btn-sm" style="margin-left:auto;background:#16a34a;color:#fff;border:none;padding:4px 12px;border-radius:6px;cursor:pointer;">Generate Improvisation</button>
+            </div>
+            <!-- A/B Toggle -->
+            <div id="improv-ab-toggle" style="display:none;margin-bottom:8px;">
+                <button id="ab-original-btn" class="improv-ab-btn improv-ab-active" onclick="playOriginalChords()">A: Original</button>
+                <button id="ab-improv-btn" class="improv-ab-btn" onclick="playImprovRiffs()">B: AI Improv</button>
+            </div>
+            <!-- Loading indicator -->
+            <div id="improv-loading" style="display:none;text-align:center;padding:16px;color:#6b7280;">
+                <span style="font-size:24px;">&#9835;</span> Generating improvisation...
+            </div>
+            <!-- Riff list -->
+            <div id="improv-riffs"></div>
+            <!-- Regenerate -->
+            <div id="improv-regenerate" style="display:none;margin-top:8px;">
+                <button onclick="regenerateImprov()" class="btn btn-sm" style="background:#2563eb;color:#fff;border:none;padding:4px 12px;border-radius:6px;cursor:pointer;">Regenerate with Feedback</button>
+                <span id="improv-feedback-count" style="font-size:11px;color:#6b7280;margin-left:8px;"></span>
+            </div>
         </div>
 
         <!-- Rhythm Analysis Panel (FAIL 4) -->
@@ -551,6 +576,8 @@
             loadRhythmAnalysis();
             // HL-006C: Check RLHF status
             checkRLHFStatus();
+            // HL-IMPROV-001: Load existing improvisation sessions
+            loadImprovSessions();
             // Init MIDI (FAIL 5)
             initMIDI();
         }
@@ -1437,6 +1464,7 @@
             document.getElementById('analysis-controls').style.display = isAnalysis ? '' : 'none';
             document.getElementById('function-legend').style.display = isAnalysis ? '' : 'none';
             document.getElementById('rlhf-panel').style.display = isAnalysis ? '' : 'none';
+            document.getElementById('improv-panel').style.display = isAnalysis ? '' : 'none';
             document.getElementById('patterns-info').style.display =
                 isAnalysis && analysisData?.patterns?.length ? '' : 'none';
 
@@ -2555,6 +2583,187 @@
                 }
             } catch (e) {
                 console.error('RLHF revert error:', e);
+            }
+        }
+
+        // ==========================================
+        // HL-IMPROV-001: AI IMPROVISATION
+        // ==========================================
+
+        let currentImprovSession = null;
+        let improvPlaying = false;
+
+        async function generateImprovisation() {
+            if (!songId || !analysisData) {
+                alert('Load a song and run analysis first.');
+                return;
+            }
+            const btn = document.getElementById('improv-generate-btn');
+            const loading = document.getElementById('improv-loading');
+            const riffsDiv = document.getElementById('improv-riffs');
+            btn.disabled = true;
+            btn.textContent = 'Generating...';
+            loading.style.display = '';
+            riffsDiv.innerHTML = '';
+            document.getElementById('improv-ab-toggle').style.display = 'none';
+            document.getElementById('improv-regenerate').style.display = 'none';
+
+            try {
+                const iteration = currentImprovSession ? currentImprovSession.iteration + 1 : 1;
+                const res = await fetch(`${API_BASE}/api/v1/songs/${songId}/improvise?iteration=${iteration}`, {
+                    method: 'POST'
+                });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.detail || 'Generation failed');
+                }
+                currentImprovSession = await res.json();
+                renderImprovSession(currentImprovSession);
+            } catch (e) {
+                riffsDiv.innerHTML = `<div style="color:#dc2626;padding:8px;">Error: ${e.message}</div>`;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Generate Improvisation';
+                loading.style.display = 'none';
+            }
+        }
+
+        function renderImprovSession(session) {
+            const riffsDiv = document.getElementById('improv-riffs');
+            document.getElementById('improv-iteration').textContent = `Iteration ${session.iteration}`;
+            document.getElementById('improv-ab-toggle').style.display = '';
+            document.getElementById('improv-regenerate').style.display = '';
+
+            const riffs = session.riffs || [];
+            riffsDiv.innerHTML = riffs.map(riff => `
+                <div class="improv-riff-row" data-riff-id="${riff.id}">
+                    <button class="improv-riff-play" onclick="playRiff(${riff.id})" title="Play this riff">&#9654;</button>
+                    <span class="improv-riff-range">mm ${riff.measure_start}–${riff.measure_end}</span>
+                    <span class="improv-riff-type">${riff.riff_type || 'riff'}</span>
+                    <span class="improv-riff-desc">${riff.pattern_desc || ''}</span>
+                    <div class="improv-riff-feedback">
+                        <button onclick="rateRiff(${riff.id}, 1)" class="${riff.rlhf_rating === 1 ? 'riff-liked' : ''}" title="Like">&#128077;</button>
+                        <button onclick="rateRiff(${riff.id}, -1)" class="${riff.rlhf_rating === -1 ? 'riff-disliked' : ''}" title="Dislike">&#128078;</button>
+                    </div>
+                </div>
+            `).join('');
+
+            updateFeedbackCount();
+        }
+
+        async function rateRiff(riffId, rating) {
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/songs/improvisations/riffs/${riffId}/rate`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ rating })
+                });
+                if (!res.ok) throw new Error('Rating failed');
+                const result = await res.json();
+
+                // Update UI
+                const row = document.querySelector(`[data-riff-id="${riffId}"]`);
+                if (row) {
+                    const btns = row.querySelectorAll('.improv-riff-feedback button');
+                    btns[0].className = result.rlhf_rating === 1 ? 'riff-liked' : '';
+                    btns[1].className = result.rlhf_rating === -1 ? 'riff-disliked' : '';
+                }
+
+                // Update local data
+                if (currentImprovSession) {
+                    const riff = currentImprovSession.riffs.find(r => r.id === riffId);
+                    if (riff) riff.rlhf_rating = result.rlhf_rating;
+                }
+                updateFeedbackCount();
+            } catch (e) {
+                console.error('Rate riff error:', e);
+            }
+        }
+
+        function updateFeedbackCount() {
+            if (!currentImprovSession) return;
+            const rated = currentImprovSession.riffs.filter(r => r.rlhf_rating !== null && r.rlhf_rating !== undefined).length;
+            const total = currentImprovSession.riffs.length;
+            document.getElementById('improv-feedback-count').textContent =
+                rated > 0 ? `${rated}/${total} rated` : '';
+        }
+
+        async function regenerateImprov() {
+            await generateImprovisation();
+        }
+
+        function playOriginalChords() {
+            document.getElementById('ab-original-btn').classList.add('improv-ab-active');
+            document.getElementById('ab-improv-btn').classList.remove('improv-ab-active');
+            // Use existing playback — just play the chord progression
+            if (typeof playAll === 'function') playAll();
+        }
+
+        function playImprovRiffs() {
+            document.getElementById('ab-improv-btn').classList.add('improv-ab-active');
+            document.getElementById('ab-original-btn').classList.remove('improv-ab-active');
+            if (!currentImprovSession || !currentImprovSession.riffs) return;
+
+            // Play AI improvisation notes using Tone.js
+            _playImprovNotes(currentImprovSession.riffs);
+        }
+
+        function playRiff(riffId) {
+            if (!currentImprovSession) return;
+            const riff = currentImprovSession.riffs.find(r => r.id === riffId);
+            if (riff) _playImprovNotes([riff]);
+        }
+
+        function _playImprovNotes(riffs) {
+            // Use Tone.js to play the generated note data
+            const now = Tone.now();
+            const bpm = parseInt(document.getElementById('tempo-slider')?.value || '120');
+            const beatDuration = 60 / bpm;
+
+            // Get the synth/sampler from HarmonyAudio
+            const synth = (typeof getSampler === 'function') ? getSampler() :
+                          (window._harmonyPlaybackSynth || window._harmonyPlaybackSampler);
+            if (!synth) {
+                console.warn('No synth available for improv playback');
+                return;
+            }
+
+            let timeOffset = 0;
+            for (const riff of riffs) {
+                const notes = riff.notes || [];
+                for (const note of notes) {
+                    const pitch = note.pitch || 'C4';
+                    const dur = (note.duration || 0.5) * beatDuration;
+                    const startBeat = (note.beat || 1) - 1;
+                    const time = now + timeOffset + (startBeat * beatDuration);
+                    try {
+                        if (synth.triggerAttackRelease) {
+                            synth.triggerAttackRelease(pitch, dur, time);
+                        }
+                    } catch (e) {
+                        console.warn('Playback note error:', e);
+                    }
+                }
+                // Move offset to end of this riff's measure range
+                const riffBeats = ((riff.measure_end - riff.measure_start + 1) * 4);
+                timeOffset += riffBeats * beatDuration;
+            }
+        }
+
+        // Load existing improvisation sessions on analysis load
+        async function loadImprovSessions() {
+            if (!songId) return;
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/songs/${songId}/improvisations`);
+                if (res.ok) {
+                    const sessions = await res.json();
+                    if (sessions.length > 0) {
+                        currentImprovSession = sessions[0]; // most recent
+                        renderImprovSession(currentImprovSession);
+                    }
+                }
+            } catch (e) {
+                console.warn('Failed to load improv sessions:', e);
             }
         }
 
@@ -3925,6 +4134,44 @@
             pointer-events: none;
             z-index: 1000;
             white-space: nowrap;
+        }
+
+        /* HL-IMPROV-001: Improvisation panel styles */
+        .improv-ab-btn {
+            padding: 4px 14px; border: 1px solid #d1d5db; border-radius: 6px;
+            background: #fff; cursor: pointer; font-size: 12px; margin-right: 4px;
+        }
+        .improv-ab-btn.improv-ab-active {
+            background: #16a34a; color: #fff; border-color: #16a34a;
+        }
+        .improv-riff-row {
+            display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+            border-bottom: 1px solid #e5e7eb; font-size: 12px;
+        }
+        .improv-riff-row:last-child { border-bottom: none; }
+        .improv-riff-range {
+            font-weight: 600; color: #374151; min-width: 60px;
+        }
+        .improv-riff-type {
+            background: #dbeafe; color: #1e40af; border-radius: 4px;
+            padding: 1px 6px; font-size: 11px; min-width: 70px; text-align: center;
+        }
+        .improv-riff-desc {
+            flex: 1; color: #4b5563;
+        }
+        .improv-riff-feedback button {
+            border: 1px solid #d1d5db; background: #fff; border-radius: 4px;
+            cursor: pointer; padding: 2px 8px; font-size: 14px; margin-left: 2px;
+        }
+        .improv-riff-feedback button.riff-liked {
+            background: #dcfce7; border-color: #16a34a;
+        }
+        .improv-riff-feedback button.riff-disliked {
+            background: #fee2e2; border-color: #dc2626;
+        }
+        .improv-riff-play {
+            border: none; background: none; cursor: pointer; font-size: 16px;
+            padding: 0 4px;
         }
     </style>
 </body>
