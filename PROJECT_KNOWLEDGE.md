@@ -2,7 +2,7 @@
 <!-- CHECKPOINT: HL-PK-9F3A -->
 
 **Generated**: 2026-02-15
-**Updated**: 2026-03-14T20:20:00Z — Sprint HL-MEGA-003: v2.14.0 (note count enrichment for MuseScore imports, header stats display, Darren review doc)
+**Updated**: 2026-03-24T21:30:00Z — Sprint HM13-THEORY-SOUND-001: v2.20.0 (jazz_theory_docs SQL table, song-context-aware theory chat via Claude Haiku API, soundfont dropdown fix)
 **Method**: Full project read-through of every source file, config, schema, workflow, and documentation file.
 **Purpose**: Single-file knowledge recovery for any AI agent resuming work on this project.
 
@@ -17,7 +17,7 @@
 | Repository | https://github.com/coreyprator/harmonylab | `CLAUDE.md` line 65 |
 | Local Path | `G:\My Drive\Code\Python\harmonylab` | `CLAUDE.md` line 66 |
 | Methodology | [coreyprator/project-methodology](https://github.com/coreyprator/project-methodology) v3.14 | `CLAUDE.md` line 67 |
-| Current Version | v2.14.0 | `main.py` VERSION (updated 2026-03-14) |
+| Current Version | v2.20.0 | `main.py` VERSION (updated 2026-03-24) |
 | Latest Revision | harmonylab-00165+ (backend), harmonylab-frontend-00081-j96 (frontend) | HL-MEGA-003 2026-03-14 |
 | Production URL | https://harmonylab.rentyourcio.com | `PROJECT_STATUS.md` line 5 |
 | API Docs | https://harmonylab.rentyourcio.com/docs | `PROJECT_STATUS.md` line 189 |
@@ -149,6 +149,7 @@ Secrets are injected at deploy time via the GitHub Actions workflow (`deploy.yml
 | **ChordAnalysisOverrides** | 2 | User overrides for auto-analysis. Columns: id, song_id (FK), chord_index, roman_override, function_override, key_context_override, is_pivot_chord, pivot_to_key, notes, created_at, updated_at. Unique on (song_id, chord_index) |
 | **KeyRegions** | 3 | Key region boundaries for modulation tracking. Columns: id, song_id (FK), start_chord_index, end_chord_index, key_center, transition_type, pivot_chord_index, notes, is_user_defined, created_at. Unique on (song_id, start_chord_index) |
 | **Users** | 4 | Authentication users. Columns: id, email (unique), display_name, google_id (unique), avatar_url, created_at, last_login_at, is_active. Indexed on email and google_id |
+| **jazz_theory_docs** | 11 | Jazz theory reference docs for theory chat (HM13). Columns: id, doc_id (unique NVARCHAR(50)), title (NVARCHAR(200)), content_md (NVARCHAR(MAX)), tags (NVARCHAR(500), comma-separated), version, updated_at. 12 docs seeded. |
 
 ### Database Objects
 - **View**: `vw_SongProgression` -- Joins Songs > Sections > Measures > Chords for full progression display (`HarmonyLab-Schema-v1.0.sql` lines 287-306)
