@@ -13,11 +13,11 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from config.settings import settings
 
 # Import routes
-from app.api.routes import songs, sections, vocabulary, measures, chords, progress, quiz, imports, analysis, auth, exports, midi_input, riffs
+from app.api.routes import songs, sections, vocabulary, measures, chords, progress, quiz, imports, analysis, auth, exports, midi_input, riffs, improvisation
 
 logger = logging.getLogger(__name__)
 
-VERSION = "2.18.1"  # HM12: multi-key detection (-/^ chord parsing fix + sliding window), song-aware theory chat
+VERSION = "2.19.0"  # HL-IMPROV-001: AI jazz improvisation with RLHF feedback loop
 
 app = FastAPI(
     title="Harmony Lab API",
@@ -124,6 +124,7 @@ app.include_router(analysis.router)
 app.include_router(exports.router)
 app.include_router(midi_input.router)
 app.include_router(riffs.router)
+app.include_router(improvisation.router)
 
 
 if __name__ == "__main__":
