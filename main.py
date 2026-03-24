@@ -17,7 +17,7 @@ from app.api.routes import songs, sections, vocabulary, measures, chords, progre
 
 logger = logging.getLogger(__name__)
 
-VERSION = "2.19.0"  # HL-IMPROV-001: AI jazz improvisation with RLHF feedback loop
+VERSION = "2.19.1"  # HLIMPROV2: Fix improvisation response parsing + A/B toggle
 
 app = FastAPI(
     title="Harmony Lab API",
