@@ -904,13 +904,33 @@ def _apply_overrides(result: dict, song_id: int, db: DatabaseConnection) -> dict
 
 
 # ==========================================
-# THEORY CHAT (HL-051)
+# JAZZ THEORY DOCS (HM13-REQ-001)
 # ==========================================
 
-PORTFOLIO_RAG_URL = os.getenv(
-    "PORTFOLIO_RAG_URL",
-    "https://portfolio-rag-57478301787.us-central1.run.app"
-)
+
+@router.get("/jazz-theory")
+async def get_jazz_theory_docs(tags: str = None, db: DatabaseConnection = Depends(get_db)):
+    """Return jazz theory docs, optionally filtered by tag."""
+    if tags:
+        # Match any doc containing any of the requested tags
+        tag_list = [t.strip() for t in tags.split(",") if t.strip()]
+        if not tag_list:
+            rows = db.execute_query("SELECT doc_id, title, content_md, tags, version, updated_at FROM jazz_theory_docs ORDER BY title")
+        else:
+            conditions = " OR ".join(["tags LIKE ?" for _ in tag_list])
+            params = tuple(f"%{t}%" for t in tag_list)
+            rows = db.execute_query(
+                f"SELECT doc_id, title, content_md, tags, version, updated_at FROM jazz_theory_docs WHERE {conditions} ORDER BY title",
+                params
+            )
+    else:
+        rows = db.execute_query("SELECT doc_id, title, content_md, tags, version, updated_at FROM jazz_theory_docs ORDER BY title")
+    return rows
+
+
+# ==========================================
+# THEORY CHAT — Song-Context-Aware (HM13-REQ-002)
+# ==========================================
 
 
 class TheoryChatRequest(BaseModel):
@@ -919,70 +939,122 @@ class TheoryChatRequest(BaseModel):
 
 
 @router.post("/theory-chat")
-async def theory_chat(payload: TheoryChatRequest):
-    """Query Portfolio RAG jazz_theory collection for song-aware theory context."""
+async def theory_chat(payload: TheoryChatRequest, db: DatabaseConnection = Depends(get_db)):
+    """Song-context-aware jazz theory chat using Claude API + jazz_theory_docs."""
+    from anthropic import Anthropic
+
     query = payload.query.strip()
     if not query:
         raise HTTPException(status_code=400, detail="query is required")
 
     song_context = payload.song_context
-    rag_results = []
-    rag_error = None
 
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(
-                f"{PORTFOLIO_RAG_URL}/semantic",
-                params={"q": query, "collection": "jazz_theory", "n": 5}
+    # 1. Find relevant jazz_theory_docs by keyword matching against tags
+    words = re.findall(r'[a-zA-Z#b]+', query.lower())
+    theory_docs = []
+    if words:
+        conditions = " OR ".join(["LOWER(tags) LIKE ? OR LOWER(title) LIKE ? OR LOWER(content_md) LIKE ?" for _ in words])
+        params = tuple(val for w in words for val in (f"%{w}%", f"%{w}%", f"%{w}%"))
+        try:
+            theory_docs = db.execute_query(
+                f"SELECT TOP 3 doc_id, title, content_md FROM jazz_theory_docs WHERE {conditions}",
+                params
             )
-            if resp.status_code == 200:
-                rag_results = resp.json().get("results", [])
-    except Exception as e:
-        rag_error = str(e)
-        logger.warning(f"Portfolio RAG unavailable for theory-chat: {e}")
+        except Exception as e:
+            logger.warning(f"[THEORY-CHAT] jazz_theory_docs query failed: {e}")
 
-    # HL-051: Build song-aware context — reference the actual song's chords and key analysis
-    context_lines = []
+    # If no keyword matches, return all docs as fallback reference
+    if not theory_docs:
+        try:
+            theory_docs = db.execute_query(
+                "SELECT TOP 3 doc_id, title, content_md FROM jazz_theory_docs ORDER BY NEWID()"
+            )
+        except Exception as e:
+            logger.warning(f"[THEORY-CHAT] fallback query failed: {e}")
 
-    # Song identity section
+    # 2. Build song context string
+    ctx_lines = []
     title = song_context.get("title")
     key = song_context.get("key")
     if title:
-        context_lines.append(f'Song: "{title}"')
+        ctx_lines.append(f'Song: "{title}"')
     if key:
-        context_lines.append(f"Detected key: {key}")
+        ctx_lines.append(f"Key: {key}")
 
-    # Key center regions (multi-key)
     key_centers = song_context.get("key_centers") or []
     if key_centers:
-        region_strs = []
+        regions = []
         for r in key_centers:
             kc = r.get("key_center", "")
             mode = r.get("mode", "")
             sm = r.get("start_measure", "?")
             em = r.get("end_measure", "?")
-            region_strs.append(f"{kc} {mode} (mm {sm}–{em})")
-        context_lines.append(f"Key center regions: {' | '.join(region_strs)}")
+            regions.append(f"{kc} {mode} (mm {sm}-{em})")
+        ctx_lines.append(f"Key regions: {' | '.join(regions)}")
 
-    # Chord sequence
     chord_seq = song_context.get("chord_sequence") or []
     if chord_seq:
-        context_lines.append(f"Chord sequence: {', '.join(str(c) for c in chord_seq[:16])}")
+        ctx_lines.append(f"Chords: {', '.join(str(c) for c in chord_seq)}")
 
-    # Current chord context
-    current_chord = song_context.get("current_chord")
-    current_measure = song_context.get("current_measure")
-    if current_chord:
-        loc = f" (measure {current_measure})" if current_measure else ""
-        context_lines.append(f"Current chord: {current_chord}{loc}")
+    # RLHF overrides from context
+    rlhf = song_context.get("rlhf_overrides") or []
+    if rlhf:
+        ctx_lines.append(f"RLHF corrections: {json.dumps(rlhf)}")
 
-    # Jazz theory RAG reference
-    if rag_results:
-        context_lines.append("\nJazz theory reference:")
-        for r in rag_results[:3]:
-            snippet = r.get("snippet") or r.get("content", "")
-            if snippet:
-                context_lines.append(f"- {snippet[:300]}")
+    song_context_str = "\n".join(ctx_lines) if ctx_lines else "No song currently loaded."
 
-    context = "\n".join(context_lines) if context_lines else "No context available."
-    return {"context": context, "rag_results": rag_results, "rag_error": rag_error}
+    # 3. Build reference material from jazz_theory_docs
+    ref_material = ""
+    if theory_docs:
+        ref_parts = []
+        for doc in theory_docs:
+            content = doc.get("content_md", "")
+            if len(content) > 800:
+                content = content[:800] + "..."
+            ref_parts.append(f"### {doc.get('title', 'Untitled')}\n{content}")
+        ref_material = "\n\n".join(ref_parts)
+
+    # 4. Call Claude API
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        # Fallback: return context-only response (no AI)
+        logger.warning("[THEORY-CHAT] ANTHROPIC_API_KEY not set, returning context-only response")
+        fallback_lines = [song_context_str]
+        if ref_material:
+            fallback_lines.append("\nRelevant jazz theory reference:")
+            fallback_lines.append(ref_material)
+        return {
+            "answer": "\n".join(fallback_lines),
+            "song_context": song_context_str,
+            "docs_used": [d.get("doc_id") for d in theory_docs],
+            "ai_powered": False
+        }
+
+    system_prompt = f"""You are a jazz theory assistant helping a pianist analyze songs in HarmonyLab. Answer questions in the context of the specific song being analyzed. Be concise, practical, and specific to the song's actual chords and key. Reference measure numbers when relevant.
+
+CURRENT SONG CONTEXT:
+{song_context_str}
+
+JAZZ THEORY REFERENCE MATERIAL:
+{ref_material if ref_material else 'No specific reference material matched.'}"""
+
+    try:
+        client = Anthropic(api_key=api_key)
+        response = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=600,
+            system=system_prompt,
+            messages=[{"role": "user", "content": query}]
+        )
+        answer = response.content[0].text
+        logger.info(f"[THEORY-CHAT] Claude response: {len(answer)} chars")
+    except Exception as e:
+        logger.error(f"[THEORY-CHAT] Claude API error: {e}")
+        answer = f"AI unavailable ({e}). Song context: {song_context_str}"
+
+    return {
+        "answer": answer,
+        "song_context": song_context_str,
+        "docs_used": [d.get("doc_id") for d in theory_docs],
+        "ai_powered": True
+    }
