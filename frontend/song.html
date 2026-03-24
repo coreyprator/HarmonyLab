@@ -21,7 +21,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v2.19.1</div>
+        <div class="nav-version">v2.20.0</div>
     </nav>
 
     <header>
@@ -829,15 +829,22 @@
             const query = input.value.trim();
             if (!query) return;
 
-            result.textContent = 'Searching jazz theory knowledge base...';
+            result.textContent = 'Thinking...';
 
-            // HL-051: Send full song context for song-aware responses
+            // HM13: Send full song context including RLHF overrides
             const songContext = {};
             if (songData?.title) songContext.title = songData.title;
             if (analysisData?.detected_key) songContext.key = analysisData.detected_key;
             if (keyCenterData?.regions?.length) songContext.key_centers = keyCenterData.regions;
             if (analysisData?.chords?.length) {
-                songContext.chord_sequence = analysisData.chords.slice(0, 16).map(c => c.symbol);
+                songContext.chord_sequence = analysisData.chords.map(c => c.symbol);
+            }
+            // Include RLHF overrides
+            if (analysisData?.chords?.length) {
+                const overrides = analysisData.chords
+                    .filter(c => c.chord_source === 'override')
+                    .map(c => ({index: c.index, symbol: c.symbol, roman: c.roman}));
+                if (overrides.length) songContext.rlhf_overrides = overrides;
             }
 
             try {
@@ -848,7 +855,7 @@
                 });
                 if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
                 const data = await resp.json();
-                result.textContent = data.context || 'No results found.';
+                result.textContent = data.answer || data.context || 'No results found.';
             } catch (e) {
                 result.textContent = `Error: ${e.message}`;
             }
@@ -2935,28 +2942,34 @@
             let scoreNotesCache = null;
 
             // ── Sampler ──────────────────────────────────────────────────────
+            async function _loadSalamanderSampler() {
+                window._harmonyPlaybackSampler = new Tone.Sampler({
+                    urls: {
+                        'A0': 'A0.mp3', 'C1': 'C1.mp3', 'D#1': 'Ds1.mp3', 'F#1': 'Fs1.mp3',
+                        'A1': 'A1.mp3', 'C2': 'C2.mp3', 'D#2': 'Ds2.mp3', 'F#2': 'Fs2.mp3',
+                        'A2': 'A2.mp3', 'C3': 'C3.mp3', 'D#3': 'Ds3.mp3', 'F#3': 'Fs3.mp3',
+                        'A3': 'A3.mp3', 'C4': 'C4.mp3', 'D#4': 'Ds4.mp3', 'F#4': 'Fs4.mp3',
+                        'A4': 'A4.mp3', 'C5': 'C5.mp3', 'D#5': 'Ds5.mp3', 'F#5': 'Fs5.mp3',
+                        'A5': 'A5.mp3', 'C6': 'C6.mp3', 'D#6': 'Ds6.mp3', 'F#6': 'Fs6.mp3',
+                        'A6': 'A6.mp3', 'C7': 'C7.mp3', 'D#7': 'Ds7.mp3', 'F#7': 'Fs7.mp3',
+                        'A7': 'A7.mp3', 'C8': 'C8.mp3'
+                    },
+                    baseUrl: 'https://tonejs.github.io/audio/salamander/',
+                }).toDestination();
+                await new Promise(resolve => {
+                    const check = setInterval(() => {
+                        if (window._harmonyPlaybackSampler.loaded) {
+                            clearInterval(check); resolve();
+                        }
+                    }, 100);
+                });
+            }
+
             async function ensureSampler() {
+                // If a synth is already set (Elec.Piano/Vibraphone), skip sampler creation
+                if (window._harmonyPlaybackSynth) return window._harmonyPlaybackSynth;
                 if (!window._harmonyPlaybackSampler) {
-                    window._harmonyPlaybackSampler = new Tone.Sampler({
-                        urls: {
-                            'A0': 'A0.mp3', 'C1': 'C1.mp3', 'D#1': 'Ds1.mp3', 'F#1': 'Fs1.mp3',
-                            'A1': 'A1.mp3', 'C2': 'C2.mp3', 'D#2': 'Ds2.mp3', 'F#2': 'Fs2.mp3',
-                            'A2': 'A2.mp3', 'C3': 'C3.mp3', 'D#3': 'Ds3.mp3', 'F#3': 'Fs3.mp3',
-                            'A3': 'A3.mp3', 'C4': 'C4.mp3', 'D#4': 'Ds4.mp3', 'F#4': 'Fs4.mp3',
-                            'A4': 'A4.mp3', 'C5': 'C5.mp3', 'D#5': 'Ds5.mp3', 'F#5': 'Fs5.mp3',
-                            'A5': 'A5.mp3', 'C6': 'C6.mp3', 'D#6': 'Ds6.mp3', 'F#6': 'Fs6.mp3',
-                            'A6': 'A6.mp3', 'C7': 'C7.mp3', 'D#7': 'Ds7.mp3', 'F#7': 'Fs7.mp3',
-                            'A7': 'A7.mp3', 'C8': 'C8.mp3'
-                        },
-                        baseUrl: 'https://tonejs.github.io/audio/salamander/',
-                    }).toDestination();
-                    await new Promise(resolve => {
-                        const check = setInterval(() => {
-                            if (window._harmonyPlaybackSampler.loaded) {
-                                clearInterval(check); resolve();
-                            }
-                        }, 100);
-                    });
+                    await _loadSalamanderSampler();
                 }
                 return window._harmonyPlaybackSampler;
             }
@@ -2965,12 +2978,19 @@
                 return window._harmonyPlaybackSynth || window._harmonyPlaybackSampler;
             }
 
-            // HL-053: Soundfont switcher
+            // HM13-REQ-003: Soundfont switcher with proper disposal and loading state
             async function switchSoundfont(name) {
                 // Stop any active playback
-                try { getSampler()?.releaseAll(); } catch(e) {}
+                if (isPlaying) stop();
+                // Dispose current instruments
+                try { window._harmonyPlaybackSynth?.dispose(); } catch(e) {}
+                try { window._harmonyPlaybackSampler?.dispose(); } catch(e) {}
                 window._harmonyPlaybackSynth = null;
                 window._harmonyPlaybackSampler = null;
+
+                // Disable play button during load
+                const playBtn = document.getElementById('play-btn');
+                if (playBtn) { playBtn.disabled = true; playBtn.title = 'Loading sound...'; }
 
                 if (name === 'elecpiano') {
                     const synth = new Tone.PolySynth(Tone.FMSynth, {
@@ -2980,7 +3000,7 @@
                         modulation: { type: 'sine' },
                         modulationEnvelope: { attack: 0.01, decay: 0.2, sustain: 0.1, release: 0.5 }
                     }).toDestination();
-                    synth.loaded = true;  // PolySynth has no .loaded property — patch for compatibility
+                    synth.loaded = true;
                     window._harmonyPlaybackSynth = synth;
                 } else if (name === 'vibraphone') {
                     const synth = new Tone.PolySynth(Tone.Synth, {
@@ -2990,8 +3010,12 @@
                     synth.loaded = true;
                     window._harmonyPlaybackSynth = synth;
                 } else {
-                    // Piano: reset to Salamander sampler (lazy-load on next play)
+                    // Piano: eagerly load Salamander sampler
+                    await _loadSalamanderSampler();
                 }
+
+                // Re-enable play button
+                if (playBtn) { playBtn.disabled = false; playBtn.title = ''; }
             }
 
             // ── Helpers ───────────────────────────────────────────────────────
