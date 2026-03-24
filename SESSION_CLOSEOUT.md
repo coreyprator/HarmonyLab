@@ -1,81 +1,39 @@
-# SESSION_CLOSEOUT.md — HL-MEGA-003 (PTH-HM05)
+# SESSION CLOSEOUT — HM13-THEORY-SOUND-001
 
-> **Sprint ID**: HL-MEGA-003
-> **Session Date**: 2026-03-14
-> **Version**: v2.13.0 → v2.14.0
-> **Bootstrap**: v1.5.9
-> **Backend URL**: https://harmonylab-wmrla7fhwa-uc.a.run.app
+**PTH:** F38A
+**Sprint:** HM13-THEORY-SOUND-001
+**Project:** HarmonyLab
+**Version:** 2.19.1 → 2.20.0
+**Date:** 2026-03-24
+**Commit:** 8273b50
+**Revision:** harmonylab-00199-978 (backend), harmonylab-frontend deployed separately
 
----
+## Changes Applied
 
-## Deliverables
+### HM13-REQ-001 — Jazz theory docs SQL table
+- Created `jazz_theory_docs` table (Migration 11) in Cloud SQL HarmonyLab DB
+- Schema: id, doc_id (unique), title, content_md, tags, version, updated_at
+- Seeded 12 jazz theory docs covering chord construction, ii-V-I, tritone sub, rootless voicings, chord scales, blues form, rhythm changes, comping patterns, reharmonization, ear training, turnarounds, modal jazz
+- Endpoint: GET /api/v1/analysis/jazz-theory?tags={tag}
 
-| # | Deliverable | Status | Evidence |
-|---|-------------|--------|----------|
-| 1 | Note count badges for MuseScore imports | DONE | _enrich_note_counts() in analysis.py; 46/46 chords on song 81 have counts |
-| 2 | Total note count moved to header | DONE | song-stats span in song.html header; "| N notes | M measures" format |
-| 3 | HL-048 Jazz riff library verified | DONE | Existing from v2.11.0; 10 riffs; GET /api/v1/riffs/ working |
-| 4 | Darren review doc | DONE | docs/Corcovado_Darren_Review_March_2026.md; 6 flagged questions |
-| 5 | v2.14.0 deployed | DONE | Backend CI/CD success; Frontend harmonylab-frontend-00081-j96 |
-| 6 | Canary 5/5 | PASS | Version, MuseScore note counts, header stats, riffs endpoint, doc exists |
-| 7 | UAT submitted | DONE | Combined: 3BF665A2-A8CD-4F8A-B541-375BDC70BF26; Item 3: CE373B17-86E3-4EC2-9285-3EFD99EE70B2 |
+### HM13-REQ-002 — Song-context-aware theory chat
+- Rewrote POST /api/v1/analysis/theory-chat to use Claude Haiku 4.5 API
+- System prompt includes: song name, key, chord sequence, key regions, RLHF overrides
+- Queries jazz_theory_docs by keyword match for reference material
+- Fallback: context-only response if ANTHROPIC_API_KEY not set
+- Frontend updated: sends RLHF overrides in song_context, displays data.answer
 
----
+### HM13-REQ-003 — Soundfont dropdown fix
+- Extracted _loadSalamanderSampler() helper
+- ensureSampler() skips sampler creation when synth exists
+- switchSoundfont() disposes previous instruments via .dispose()
+- Piano switch eagerly loads Salamander (no lazy-load race)
+- Play button disabled during sound loading
 
-## Commits
+## Secrets
+- ANTHROPIC_API_KEY re-applied via --update-secrets after deploy
 
-| SHA | Description |
-|-----|-------------|
-| `306197c` | v2.14.0: HL-MEGA-003 — note count enrichment, header stats, Darren review doc |
-
----
-
-## Root Cause (Item 1 — MuseScore note count badges)
-
-MuseScore-imported songs (S badge) showed no note count badges. Root cause: 12/15 MuseScore songs were imported before v2.5.0, which added the `song_notes` table. Without note data in the DB, the analysis cache returned null note counts.
-
-**Fix**: Added `_enrich_note_counts()` to analysis.py. On every analysis return (including cached), this function queries `song_notes` (primary) and `MelodyNotes` (fallback) tables for live note-per-measure counts. Songs imported after v2.5.0 (like song 81, imported 2026-03-12) now show full note badges. Older songs show `--` unless re-imported via the `reparse-notes` endpoint.
-
----
-
-## Item 2 — Header Stats
-
-Added `<span id="song-stats">` to song.html header. In `renderAnalysis()`, total notes and measures are computed from chord data and displayed as `| N notes | M measures` next to the key detection line. Frontend-only change.
-
----
-
-## Item 3 — Riff Library
-
-Already existed from v2.11.0 with 10 curated jazz riffs (hardcoded in riffs.py). GET endpoints for list/filter/detail. Riffs tab in nav. No POST upload endpoint exists but the library is functional. Sprint canary used `/api/riffs` (no v1 prefix) which returns 404; correct path is `/api/v1/riffs/`.
-
----
-
-## Item 4 — Darren Review Doc
-
-`docs/Corcovado_Darren_Review_March_2026.md` — Corcovado (Song 87, Version 3) analysis with:
-- 72 chords in A minor, full table with roman numerals and note counts
-- 6 flagged questions: D7 as IV7 vs V7/V, Fm9 as vim9 voicing, G7#9 as VII7#9, Gbm as bviim, B7alt as II7alt, roman numeral extension conventions
-- 0 RLHF corrections applied
-
----
-
-## Gotchas / Rediscovery Traps
-
-- Service account auth works: `gcloud auth activate-service-account cc-deploy@... --key-file=C:/venvs/cc-deploy-key.json`
-- Songs API path requires trailing slash: `/api/v1/songs/` (307 redirect without)
-- Analysis endpoint: `/api/v1/analysis/songs/{id}` (not `/api/v1/songs/{id}/analysis`)
-- Riffs endpoint: `/api/v1/riffs/` (not `/api/riffs`)
-- `packed-refs.lock` git warning persists but commits succeed
-- `py -3` for Python on Windows, `gcloud.cmd` for gcloud
-
----
-
-## MetaPM Handoff
-
-- Combined UAT ID: 3BF665A2-A8CD-4F8A-B541-375BDC70BF26
-- Item 3 UAT ID: CE373B17-86E3-4EC2-9285-3EFD99EE70B2
-- Handoff ID: B3EA65D3-2927-40AD-8AA4-7F1CC2BAC3AE
-- HL-048: already cc_complete
-- HL-006: sub-items exist (A-E); Darren review doc is a documentation deliverable
-
-Full details: `handoffs/outbox/SESSION_CLOSEOUT_2026-03-14_HM05.md`
+## Handoff
+- Handoff ID: D907B686-D7E5-4BFF-9223-A9E5467FD0DB
+- UAT spec ID: B390E92B-4C9D-437F-B9B6-2E6566F6FC35
+- UAT URL: https://metapm.rentyourcio.com/uat/B390E92B-4C9D-437F-B9B6-2E6566F6FC35
