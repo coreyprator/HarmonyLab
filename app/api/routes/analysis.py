@@ -1058,3 +1058,163 @@ JAZZ THEORY REFERENCE MATERIAL:
         "docs_used": [d.get("doc_id") for d in theory_docs],
         "ai_powered": True
     }
+
+
+# ─── HM14 HL-055: AI Harmonic Analysis ────────────────────────────
+
+class ChordProgItem(BaseModel):
+    measure: int
+    chord: str
+
+class SongContext(BaseModel):
+    detected_key: Optional[str] = None
+    chord_progression: List[ChordProgItem] = []
+
+class AIAnalysisRequest(BaseModel):
+    measures: List[int] = []
+    comment: str = ""
+    song_context: SongContext = SongContext()
+
+
+@router.post("/songs/{song_id}/ai-analysis")
+async def ai_harmonic_analysis(song_id: int, request: AIAnalysisRequest,
+                                db: DatabaseConnection = Depends(get_db)):
+    """HM14 HL-055: AI-powered harmonic analysis with RLHF storage."""
+    from anthropic import Anthropic
+
+    # 1. Fetch song title
+    song_row = db.execute_query("SELECT title FROM Songs WHERE id = ?", (song_id,))
+    song_title = song_row[0]["title"] if song_row else f"Song #{song_id}"
+
+    # 2. Get prior RLHF overrides for this song
+    prior_overrides = []
+    try:
+        overrides = db.execute_query(
+            "SELECT chord_index, roman_override, key_context_override, notes "
+            "FROM ChordAnalysisOverrides WHERE song_id = ?", (song_id,)
+        )
+        prior_overrides = [dict(o) for o in overrides]
+    except Exception as e:
+        logger.warning(f"[AI-ANALYSIS] Could not fetch overrides: {e}")
+
+    # 3. Build chord progression context
+    chord_prog_str = ", ".join(
+        f"m{c.measure}: {c.chord}" for c in request.song_context.chord_progression
+    )
+
+    # 4. Call Anthropic API
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=503, detail="AI analysis temporarily unavailable")
+
+    system_prompt = """You are a jazz harmony expert analyzing a chord progression.
+You have access to the detected chord progression, the user's annotation, and any
+prior corrections for this song. Your job is to:
+1. Identify the harmonic function of each selected chord
+2. Determine the correct key center for this passage
+3. Identify any standard jazz patterns (ii-V-I, turnaround, tritone sub, etc.)
+4. Explain your reasoning concisely (2-3 sentences max per point)
+
+Return a JSON object with: analysis (string), suggested_key (string),
+suggested_corrections (array of objects with measure, chord, function, confidence),
+pattern_identified (string or null).
+Respond ONLY with the JSON object — no preamble, no markdown fences."""
+
+    user_prompt = f"""Song: {song_title}
+Detected key: {request.song_context.detected_key or 'Unknown'}
+Selected measures: {request.measures}
+Detected chords: {chord_prog_str}
+Prior RLHF overrides for this song: {json.dumps(prior_overrides) if prior_overrides else 'None'}
+User comment: {request.comment or 'No comment provided'}
+
+Analyze the harmonic content of these measures."""
+
+    try:
+        client = Anthropic(api_key=api_key)
+        response = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=800,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_prompt}]
+        )
+        raw_text = response.content[0].text
+        logger.info(f"[AI-ANALYSIS] Claude response: {len(raw_text)} chars")
+
+        # Parse JSON response
+        try:
+            result = json.loads(raw_text)
+        except json.JSONDecodeError:
+            # Try to extract JSON from response
+            json_match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+            if json_match:
+                result = json.loads(json_match.group())
+            else:
+                result = {
+                    "analysis": raw_text,
+                    "suggested_key": request.song_context.detected_key,
+                    "suggested_corrections": [],
+                    "pattern_identified": None
+                }
+
+    except Exception as e:
+        logger.error(f"[AI-ANALYSIS] Claude API error: {e}")
+        raise HTTPException(status_code=503, detail="AI analysis temporarily unavailable")
+
+    # 5. Store RLHF: song-specific overrides
+    rlhf_stored = False
+    corrections = result.get("suggested_corrections", [])
+    if corrections:
+        for corr in corrections:
+            m = corr.get("measure")
+            func = corr.get("function", "")
+            key_ctx = result.get("suggested_key", "")
+            try:
+                db.execute_non_query(
+                    """MERGE ChordAnalysisOverrides AS target
+                       USING (SELECT ? AS song_id, ? AS chord_index) AS src
+                       ON target.song_id = src.song_id AND target.chord_index = src.chord_index
+                       WHEN MATCHED THEN
+                           UPDATE SET function_override = ?, key_context_override = ?,
+                                      notes = ?, updated_at = GETDATE()
+                       WHEN NOT MATCHED THEN
+                           INSERT (song_id, chord_index, function_override, key_context_override, notes)
+                           VALUES (?, ?, ?, ?, ?);""",
+                    (song_id, m, func, key_ctx,
+                     f"AI: {result.get('analysis', '')[:200]}",
+                     song_id, m, func, key_ctx,
+                     f"AI: {result.get('analysis', '')[:200]}")
+                )
+                rlhf_stored = True
+            except Exception as e:
+                logger.warning(f"[AI-ANALYSIS] RLHF override store failed: {e}")
+
+    # 6. Store generalized pattern in JazzTheoryPatterns (REQ-B2)
+    pattern = result.get("pattern_identified")
+    if pattern:
+        suggested_key = result.get("suggested_key", "")
+        try:
+            existing = db.execute_query(
+                "SELECT id FROM JazzTheoryPatterns WHERE pattern_name = ? AND key_center = ?",
+                (pattern, suggested_key)
+            )
+            if existing:
+                db.execute_non_query(
+                    "UPDATE JazzTheoryPatterns SET occurrence_count = occurrence_count + 1 WHERE id = ?",
+                    (existing[0]["id"],)
+                )
+            else:
+                db.execute_non_query(
+                    """INSERT INTO JazzTheoryPatterns
+                       (pattern_name, key_center, chord_sequence, description, source, confidence, occurrence_count, song_id)
+                       VALUES (?, ?, ?, ?, 'rlhf', ?, 1, ?)""",
+                    (pattern, suggested_key, chord_prog_str,
+                     result.get("analysis", "")[:500],
+                     corrections[0].get("confidence", 0.8) if corrections else 0.8,
+                     song_id)
+                )
+            rlhf_stored = True
+        except Exception as e:
+            logger.warning(f"[AI-ANALYSIS] Pattern store failed: {e}")
+
+    result["rlhf_stored"] = rlhf_stored
+    return result

@@ -147,6 +147,9 @@ def run_migrations():
     # Migration 11: jazz_theory_docs table (HM13-REQ-001)
     _migration_11_jazz_theory_docs(db)
 
+    # Migration 12: AI analysis RLHF columns on JazzTheoryPatterns (HM14 HL-055)
+    _migration_12_ai_analysis_columns(db)
+
     logger.info("Migrations complete.")
 
 
@@ -968,3 +971,27 @@ Instead of fast-moving chord changes, modal jazz uses one or two chords per sect
             (doc_id, title, content_md, tags)
         )
     logger.info(f"  Seeded {len(docs)} jazz theory docs.")
+
+
+def _migration_12_ai_analysis_columns(db):
+    """HM14 HL-055: Add RLHF columns to JazzTheoryPatterns for AI harmonic analysis."""
+    try:
+        # Add key_center column if missing
+        col_count = db.execute_scalar(
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
+            "WHERE TABLE_NAME = 'JazzTheoryPatterns' AND COLUMN_NAME = 'key_center'"
+        )
+        if col_count == 0:
+            logger.info("  Migration 12: Adding AI analysis columns to JazzTheoryPatterns...")
+            db.execute_non_query("ALTER TABLE JazzTheoryPatterns ADD key_center NVARCHAR(20)")
+            db.execute_non_query("ALTER TABLE JazzTheoryPatterns ADD chord_sequence NVARCHAR(MAX)")
+            db.execute_non_query("ALTER TABLE JazzTheoryPatterns ADD description NVARCHAR(MAX)")
+            db.execute_non_query("ALTER TABLE JazzTheoryPatterns ADD source NVARCHAR(20) DEFAULT 'seed'")
+            db.execute_non_query("ALTER TABLE JazzTheoryPatterns ADD confidence FLOAT DEFAULT 0.5")
+            db.execute_non_query("ALTER TABLE JazzTheoryPatterns ADD occurrence_count INT DEFAULT 1")
+            db.execute_non_query("ALTER TABLE JazzTheoryPatterns ADD song_id INT")
+            logger.info("  Migration 12: AI analysis columns added.")
+        else:
+            logger.info("  Migration 12: AI analysis columns already exist.")
+    except Exception as e:
+        logger.warning(f"  Migration 12 warning: {e}")

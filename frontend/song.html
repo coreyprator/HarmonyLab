@@ -21,7 +21,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v2.20.0</div>
+        <div class="nav-version">v2.21.0</div>
     </nav>
 
     <header>
@@ -51,6 +51,7 @@
             </div>
             <button id="export-btn" class="btn btn-sm" title="Export to MuseScore with analysis annotations">Export .mscz</button>
             <button id="theory-chat-btn" class="btn btn-sm" onclick="toggleTheoryChat()" title="Ask jazz theory questions (powered by jazz_theory knowledge base)">Theory Chat</button>
+            <button id="ai-analysis-btn" class="btn btn-sm" onclick="toggleAIAnalysisPanel()" title="AI-powered harmonic analysis with measure selection">🤖 AI Analysis</button>
 
             <div class="analysis-controls" id="analysis-controls" style="display:none">
                 <label>Key:</label>
@@ -89,7 +90,7 @@
                     <button class="btn btn-xs stave-btn stave-btn-active" onclick="setStaveGrouping(4)" data-bars="4">4-bar</button>
                     <button class="btn btn-xs stave-btn" onclick="setStaveGrouping(8)" data-bars="8">8-bar</button>
                 </span>
-                <button id="scales-toggle-btn" class="btn btn-xs stave-btn-active" onclick="toggleScaleOverlay()" style="margin-left:8px;" title="Show recommended improvisation scale per chord">Scales</button>
+                <button id="scales-toggle-btn" class="btn btn-xs stave-btn stave-btn-active" onclick="toggleScaleOverlay()" style="margin-left:8px;" title="Show recommended improvisation scale per chord">Scales</button>
             </div>
             <div class="transpose-controls" id="transpose-controls">
                 <label>Transpose to:</label>
@@ -211,6 +212,51 @@
                 <button onclick="sendTheoryChat()" class="btn btn-sm">Ask</button>
             </div>
             <div id="theory-chat-result" style="font-size:12px;color:#374151;white-space:pre-wrap;min-height:40px;max-height:200px;overflow-y:auto;padding:4px;"></div>
+        </div>
+
+        <!-- HM14 HL-055: AI Harmonic Analysis Panel -->
+        <div id="ai-analysis-panel" style="display:none;border:1px solid var(--border, #374151);border-radius:8px;padding:12px;margin-bottom:12px;background:var(--bg-secondary, #1e1e2e);">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                <strong style="font-size:14px;">🤖 AI Harmonic Analysis</strong>
+                <span style="font-size:11px;color:#6b7280;">Powered by Claude</span>
+                <button onclick="toggleAIAnalysisPanel()" style="margin-left:auto;border:none;background:none;cursor:pointer;font-size:16px;color:#6b7280;" title="Close">&#10005;</button>
+            </div>
+            <!-- Key Center Display -->
+            <div id="ai-key-display" style="margin-bottom:8px;padding:6px 10px;background:var(--bg-hover, #2a2a3e);border-radius:6px;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <span style="font-size:13px;font-weight:bold;">Key Center: <span id="ai-detected-key">--</span></span>
+                    <button onclick="toggleAIReasoning()" class="btn btn-xs" style="font-size:11px;">Why?</button>
+                </div>
+                <div id="ai-reasoning" style="display:none;margin-top:6px;font-size:12px;color:var(--text-muted, #9ca3af);padding:4px 0;border-top:1px solid var(--border, #374151);"></div>
+            </div>
+            <!-- Measure Selection -->
+            <div style="margin-bottom:8px;">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+                    <span style="font-size:12px;color:var(--text-muted, #9ca3af);">Selected: <strong id="ai-selected-measures">none</strong></span>
+                    <button onclick="clearAIMeasureSelection()" class="btn btn-xs" style="font-size:10px;">Clear</button>
+                </div>
+                <span style="font-size:10px;color:var(--text-muted, #6b7280);">Click measures in score to select. Shift-click for range.</span>
+            </div>
+            <!-- Annotation Input -->
+            <div style="margin-bottom:8px;">
+                <textarea id="ai-annotation-input" rows="2" placeholder="Your annotation (optional): e.g. 'This looks like a ii-V-I'"
+                    style="width:100%;padding:6px 10px;border:1px solid var(--border, #374151);border-radius:6px;font-size:12px;background:var(--bg, #0f0f1a);color:var(--text, #e2e8f0);resize:vertical;"></textarea>
+            </div>
+            <!-- Analyze Button -->
+            <button id="ai-analyze-btn" onclick="runAIAnalysis()" class="btn btn-sm" style="background:#3b82f6;color:#fff;border:none;padding:6px 16px;border-radius:6px;cursor:pointer;margin-bottom:8px;">
+                Analyze with AI ▶
+            </button>
+            <span id="ai-analyze-spinner" style="display:none;font-size:12px;color:var(--text-muted, #9ca3af);">Analyzing...</span>
+            <!-- AI Response -->
+            <div id="ai-response-panel" style="display:none;margin-top:8px;padding:8px 10px;background:var(--bg-hover, #2a2a3e);border-radius:6px;border-left:3px solid #3b82f6;">
+                <div id="ai-response-text" style="font-size:12px;color:var(--text, #e2e8f0);white-space:pre-wrap;margin-bottom:8px;"></div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <span style="font-size:12px;">Suggested key: <strong id="ai-suggested-key"></strong></span>
+                    <button id="ai-accept-btn" onclick="acceptAICorrection()" class="btn btn-xs" style="background:#22c55e;color:#fff;border:none;">Accept</button>
+                    <button onclick="dismissAIResponse()" class="btn btn-xs" style="background:#6b7280;color:#fff;border:none;">Dismiss</button>
+                </div>
+                <div id="ai-pattern-tag" style="display:none;margin-top:4px;font-size:11px;color:#7c3aed;font-style:italic;"></div>
+            </div>
         </div>
 
         <!-- HL-IMPROV-001: AI Improvisation Panel -->
@@ -662,7 +708,15 @@
 
                     for (const measure of measures) {
                         const measureDiv = document.createElement('div');
-                        measureDiv.className = 'measure-block';
+                        measureDiv.className = 'measure-block measure-div';
+                        measureDiv.dataset.measure = measure.measure_number;
+                        // HM14 HL-055: Measure click for AI analysis selection
+                        measureDiv.addEventListener('click', (e) => {
+                            if (document.getElementById('ai-analysis-panel')?.style.display !== 'none') {
+                                e.stopPropagation();
+                                handleAIMeasureClick(measure.measure_number, e.shiftKey);
+                            }
+                        });
 
                         const measureNum = document.createElement('div');
                         measureNum.className = 'measure-number';
@@ -859,6 +913,165 @@
             } catch (e) {
                 result.textContent = `Error: ${e.message}`;
             }
+        }
+
+        // ==========================================
+        // AI HARMONIC ANALYSIS (HM14 HL-055)
+        // ==========================================
+
+        let aiSelectedMeasures = new Set();
+        let aiLastResponse = null;
+
+        function toggleAIAnalysisPanel() {
+            const panel = document.getElementById('ai-analysis-panel');
+            panel.style.display = panel.style.display === 'none' ? '' : 'none';
+            if (panel.style.display !== 'none') {
+                // Update key display from current analysis
+                const keyEl = document.getElementById('ai-detected-key');
+                if (analysisData?.detected_key) {
+                    keyEl.textContent = analysisData.detected_key;
+                }
+                // Build reasoning from key center data
+                const reasonEl = document.getElementById('ai-reasoning');
+                if (keyCenterData?.regions?.length) {
+                    const regions = keyCenterData.regions.map(r =>
+                        `${r.key_center} ${r.mode} (mm ${r.start_measure}–${r.end_measure})`
+                    ).join(', ');
+                    reasonEl.textContent = `Key regions: ${regions}. Detection: Krumhansl-Schmuckler + last-measure tiebreaker.`;
+                }
+            }
+        }
+
+        function toggleAIReasoning() {
+            const el = document.getElementById('ai-reasoning');
+            el.style.display = el.style.display === 'none' ? '' : 'none';
+        }
+
+        function handleAIMeasureClick(measureNum, shiftKey) {
+            if (shiftKey && aiSelectedMeasures.size > 0) {
+                // Range select: from last selected to this one
+                const sorted = [...aiSelectedMeasures].sort((a, b) => a - b);
+                const last = sorted[sorted.length - 1];
+                const start = Math.min(last, measureNum);
+                const end = Math.max(last, measureNum);
+                for (let m = start; m <= end; m++) aiSelectedMeasures.add(m);
+            } else {
+                if (aiSelectedMeasures.has(measureNum)) {
+                    aiSelectedMeasures.delete(measureNum);
+                } else {
+                    aiSelectedMeasures.add(measureNum);
+                }
+            }
+            updateAIMeasureHighlights();
+        }
+
+        function clearAIMeasureSelection() {
+            aiSelectedMeasures.clear();
+            updateAIMeasureHighlights();
+        }
+
+        function updateAIMeasureHighlights() {
+            // Update display text
+            const sorted = [...aiSelectedMeasures].sort((a, b) => a - b);
+            document.getElementById('ai-selected-measures').textContent =
+                sorted.length > 0 ? `measures ${sorted.join(', ')}` : 'none';
+
+            // Highlight measure divs
+            document.querySelectorAll('.measure-div').forEach(div => {
+                const m = parseInt(div.dataset.measure);
+                if (aiSelectedMeasures.has(m)) {
+                    div.style.outline = '2px solid #3b82f6';
+                    div.style.outlineOffset = '-2px';
+                } else {
+                    div.style.outline = '';
+                    div.style.outlineOffset = '';
+                }
+            });
+        }
+
+        async function runAIAnalysis() {
+            const btn = document.getElementById('ai-analyze-btn');
+            const spinner = document.getElementById('ai-analyze-spinner');
+            const responsePanel = document.getElementById('ai-response-panel');
+
+            if (!songData?.id) return;
+
+            const measures = [...aiSelectedMeasures].sort((a, b) => a - b);
+            const comment = document.getElementById('ai-annotation-input').value.trim();
+
+            // Build chord progression from analysis data
+            const chordProg = (analysisData?.chords || [])
+                .filter(c => measures.length === 0 || measures.includes(c.measure))
+                .map(c => ({ measure: c.measure, chord: c.symbol }));
+
+            btn.disabled = true;
+            spinner.style.display = '';
+            responsePanel.style.display = 'none';
+
+            try {
+                const resp = await fetch(`${API_BASE}/api/v1/analysis/songs/${songData.id}/ai-analysis`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        measures: measures,
+                        comment: comment,
+                        song_context: {
+                            detected_key: analysisData?.detected_key || '',
+                            chord_progression: chordProg
+                        }
+                    })
+                });
+
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({}));
+                    throw new Error(err.detail || `HTTP ${resp.status}`);
+                }
+
+                const data = await resp.json();
+                aiLastResponse = data;
+
+                // Display response
+                document.getElementById('ai-response-text').textContent = data.analysis || 'No analysis returned.';
+                document.getElementById('ai-suggested-key').textContent = data.suggested_key || '--';
+                responsePanel.style.display = '';
+
+                // Pattern tag
+                const patternEl = document.getElementById('ai-pattern-tag');
+                if (data.pattern_identified) {
+                    patternEl.textContent = `Pattern: ${data.pattern_identified}`;
+                    patternEl.style.display = '';
+                } else {
+                    patternEl.style.display = 'none';
+                }
+            } catch (err) {
+                document.getElementById('ai-response-text').textContent = `Error: ${err.message}`;
+                responsePanel.style.display = '';
+            } finally {
+                btn.disabled = false;
+                spinner.style.display = 'none';
+            }
+        }
+
+        function acceptAICorrection() {
+            if (!aiLastResponse) return;
+            // Update detected key display if suggested
+            if (aiLastResponse.suggested_key) {
+                document.getElementById('ai-detected-key').textContent = aiLastResponse.suggested_key;
+                const mainKeyEl = document.getElementById('detected-key');
+                if (mainKeyEl) mainKeyEl.textContent = aiLastResponse.suggested_key;
+            }
+            // Show confirmation
+            const responsePanel = document.getElementById('ai-response-panel');
+            const banner = document.createElement('div');
+            banner.style.cssText = 'color:#22c55e;font-size:11px;margin-top:4px;';
+            banner.textContent = '✓ Correction accepted and stored as RLHF signal.';
+            responsePanel.appendChild(banner);
+            document.getElementById('ai-accept-btn').disabled = true;
+        }
+
+        function dismissAIResponse() {
+            document.getElementById('ai-response-panel').style.display = 'none';
+            aiLastResponse = null;
         }
 
         // ==========================================
@@ -1159,17 +1372,17 @@
                         card.appendChild(provEl);
                     }
                     if (ac.chord_source === 'score') {
-                        provEl.textContent = 'S';
+                        provEl.textContent = '📄 Score';
                         provEl.className = 'provenance-badge prov-score';
-                        provEl.title = 'From your score notation';
+                        provEl.title = 'Source: imported from score notation';
                     } else if (ac.chord_source === 'override') {
-                        provEl.textContent = '\u270e';
+                        provEl.textContent = '✎ Override';
                         provEl.className = 'provenance-badge prov-override';
-                        provEl.title = 'Your correction (RLHF override)';
+                        provEl.title = 'Source: your correction (RLHF override)';
                     } else {
-                        provEl.textContent = 'A';
+                        provEl.textContent = '🤖 Algorithm';
                         provEl.className = 'provenance-badge prov-algorithm';
-                        provEl.title = 'Computed from MIDI notes';
+                        provEl.title = 'Source: detected from MIDI notes';
                     }
                     provEl.style.display = '';
                 }
@@ -3340,11 +3553,15 @@
             return {
                 load: loadChords, loadScore, loadFullSong, loadScoreNotes,
                 play, pause, stop, togglePlayPause, setMode, setTempo,
+                switchSoundfont,
                 isPlaying: getIsPlaying, getMode,
                 get chordEvents() { return chordEvents; },
                 get totalBeats() { return totalBeats; }
             };
         })();
+
+        // HM14 BUG-3: Expose switchSoundfont globally for inline onchange handler
+        window.switchSoundfont = function(name) { return HarmonyPlayback.switchSoundfont(name); };
 
         function parseTimeSignature() {
             const ts = songData?.time_signature || '4/4';
@@ -4073,15 +4290,15 @@
             position: absolute;
             top: 2px;
             right: 3px;
-            font-size: 0.55rem;
+            font-size: 0.5rem;
             font-weight: bold;
-            width: 14px;
-            height: 14px;
-            line-height: 14px;
+            padding: 1px 4px;
+            line-height: 1.2;
             text-align: center;
-            border-radius: 50%;
+            border-radius: 3px;
+            white-space: nowrap;
         }
-        .prov-score { background: #6b7280; color: #fff; }
+        .prov-score { background: #22c55e; color: #fff; }
         .prov-algorithm { background: #3b82f6; color: #fff; }
         .prov-override { background: #f59e0b; color: #000; }
         /* HL-006C: RLHF panel */

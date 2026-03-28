@@ -51,6 +51,9 @@ class HarmonicAnalyzer:
         else:
             self.current_key, confidence = self._detect_key(chords)
 
+        # HM14 BUG-2: Resolve relative major/minor ambiguity via last-chord tiebreaker
+        self.current_key = self._resolve_relative_ambiguity(self.current_key, chords)
+
         # Analyze each chord
         analyzed = []
         for i, symbol in enumerate(chords):
@@ -200,6 +203,52 @@ class HarmonicAnalyzer:
         except Exception as e:
             logger.warning(f"Key detection from notes failed: {e}")
             return key.Key('C'), 0.0
+
+    # HM14 BUG-2: Relative major/minor tiebreaker using last-measure chords
+    RELATIVE_PAIRS = {
+        'A minor': 'C major', 'E minor': 'G major', 'D minor': 'F major',
+        'B minor': 'D major', 'G minor': 'B- major', 'C minor': 'E- major',
+        'F minor': 'A- major', 'F# minor': 'A major', 'C# minor': 'E major',
+        'G# minor': 'B major', 'B- minor': 'D- major', 'E- minor': 'G- major',
+    }
+
+    def _resolve_relative_ambiguity(self, detected_key, chords: List[str]) -> object:
+        """If detected key is minor, check if its relative major is a better fit
+        based on the last chord of the song (jazz standard final cadence rule)."""
+        key_str = str(detected_key)
+        if key_str not in self.RELATIVE_PAIRS:
+            return detected_key
+
+        relative_major_str = self.RELATIVE_PAIRS[key_str]
+        major_tonic = relative_major_str.split()[0]
+
+        # Check last non-empty chord
+        last_chord = None
+        for c in reversed(chords):
+            if c and c != 'N.C.':
+                last_chord = c
+                break
+
+        if not last_chord:
+            return detected_key
+
+        # Extract root of last chord
+        import re
+        match = re.match(r'^([A-G])([#b]?)', last_chord)
+        if not match:
+            return detected_key
+
+        last_root = match.group(1) + match.group(2)
+
+        # Normalize for comparison (B- = Bb, E- = Eb, etc.)
+        normalize = {'B-': 'Bb', 'E-': 'Eb', 'A-': 'Ab', 'D-': 'Db', 'G-': 'Gb'}
+        major_tonic_norm = normalize.get(major_tonic, major_tonic)
+
+        if last_root == major_tonic_norm:
+            logger.info(f"[KEY-DETECT] Relative ambiguity resolved: {key_str} → {relative_major_str} (last chord root: {last_root})")
+            return key.Key(major_tonic_norm)
+
+        return detected_key
 
     def _normalize_chord_symbol(self, symbol: str) -> str:
         """Normalize chord symbols for music21 parsing.
