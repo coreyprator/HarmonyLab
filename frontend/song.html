@@ -333,6 +333,36 @@
         <div id="kc-debug" style="font-size:10px;color:#666;margin-bottom:4px;display:none;"></div>
         <div id="key-center-bar" style="display:flex;width:100%;margin-bottom:8px;min-height:24px;"></div>
 
+        <!-- HM15: Harmonic Chord Analysis Tool -->
+        <div class="harmonic-analysis-container">
+            <div class="analysis-header">
+                <span>🎵 Harmonic Chord Analysis Tool</span>
+                <span id="toggle-icon">▶</span>
+            </div>
+            <div class="analysis-content" style="display:none;">
+                <div class="selection-toolbar">
+                    <label>Selected Measures/Chords:</label>
+                    <div class="button-group">
+                        <button id="select-all-btn">Select All</button>
+                        <button id="clear-btn">Clear</button>
+                    </div>
+                </div>
+                <div id="chord-multiselect-area">
+                    <span class="placeholder">No chords selected. Click chords in the score or use 'Select All'.</span>
+                </div>
+                <label>Analysis Input / Annotation:</label>
+                <textarea id="harmonic-input" placeholder="Enter your interpretation or question (e.g. 'This looks like a ii-V-I in C')"></textarea>
+                <button id="analyze-btn">🤖 Analyze with AI</button>
+                <div id="ai-analysis-result" style="display:none;">
+                    <div id="ai-analysis-text"></div>
+                    <div id="ai-suggested-key-hm15"></div>
+                    <div id="ai-pattern-hm15"></div>
+                    <button id="accept-analysis-btn">✅ Accept</button>
+                    <button id="dismiss-analysis-btn">✕ Dismiss</button>
+                </div>
+            </div>
+        </div>
+
         <!-- Chord Display -->
         <div id="chord-display" class="chord-display">
             <p class="loading">Loading chords...</p>
@@ -3862,6 +3892,186 @@
             }
         }, 50);
     </script>
+    <script>
+    // ===== HARMONIC CHORD ANALYSIS PANEL (HM15) =====
+    (function() {
+        // 1. Toggle collapse/expand
+        const header = document.querySelector('.analysis-header');
+        const content = document.querySelector('.analysis-content');
+        const toggleIcon = document.getElementById('toggle-icon');
+
+        if (header) {
+            header.addEventListener('click', function() {
+                const isVisible = content.style.display !== 'none';
+                content.style.display = isVisible ? 'none' : 'flex';
+                toggleIcon.textContent = isVisible ? '▶' : '▼';
+            });
+        }
+
+        // 2. Selected measures state
+        let hm15SelectedMeasures = new Set();
+
+        function updateMultiselectArea() {
+            const area = document.getElementById('chord-multiselect-area');
+            if (!area) return;
+            if (hm15SelectedMeasures.size === 0) {
+                area.innerHTML = '<span class="placeholder">No chords selected. Click chords in the score or use \'Select All\'.</span>';
+            } else {
+                area.innerHTML = '';
+                const sorted = [...hm15SelectedMeasures].sort((a, b) => a - b);
+                sorted.forEach(function(m) {
+                    const tag = document.createElement('span');
+                    tag.className = 'measure-tag';
+                    tag.textContent = 'Measure ' + m;
+                    area.appendChild(tag);
+                });
+            }
+        }
+
+        // 3. Select All
+        const selectAllBtn = document.getElementById('select-all-btn');
+        if (selectAllBtn) {
+            selectAllBtn.addEventListener('click', function() {
+                document.querySelectorAll('.measure-block').forEach(function(block) {
+                    block.style.outline = '3px solid #4CAF50';
+                    const measureNum = block.dataset.measure;
+                    if (measureNum) hm15SelectedMeasures.add(parseInt(measureNum));
+                });
+                updateMultiselectArea();
+            });
+        }
+
+        // 4. Clear
+        const clearBtn = document.getElementById('clear-btn');
+        if (clearBtn) {
+            clearBtn.addEventListener('click', function() {
+                document.querySelectorAll('.measure-block').forEach(function(block) {
+                    block.style.outline = '';
+                });
+                hm15SelectedMeasures.clear();
+                updateMultiselectArea();
+                document.getElementById('ai-analysis-result').style.display = 'none';
+            });
+        }
+
+        // 5. Individual measure selection (Shift+click or Ctrl+click to avoid conflict with chord modal)
+        document.addEventListener('click', function(e) {
+            const block = e.target.closest('.measure-block');
+            if (!block) return;
+
+            // Only handle if the analysis panel is expanded
+            const panelContent = document.querySelector('.analysis-content');
+            if (!panelContent || panelContent.style.display === 'none') return;
+
+            // Shift+click or Ctrl+click for selection — regular click still opens chord modal
+            if (!e.shiftKey && !e.ctrlKey && !e.metaKey) return;
+
+            e.stopPropagation();
+            e.preventDefault();
+
+            const measureNum = parseInt(block.dataset.measure);
+            if (isNaN(measureNum)) return;
+
+            if (hm15SelectedMeasures.has(measureNum)) {
+                hm15SelectedMeasures.delete(measureNum);
+                block.style.outline = '';
+            } else {
+                hm15SelectedMeasures.add(measureNum);
+                block.style.outline = '3px solid #4CAF50';
+            }
+            updateMultiselectArea();
+        });
+
+        // 6. Analyze with AI
+        const analyzeBtn = document.getElementById('analyze-btn');
+        if (analyzeBtn) {
+            analyzeBtn.addEventListener('click', async function() {
+                const input = document.getElementById('harmonic-input').value.trim();
+                const measures = Array.from(hm15SelectedMeasures).sort((a, b) => a - b);
+                const resultDiv = document.getElementById('ai-analysis-result');
+                const analysisText = document.getElementById('ai-analysis-text');
+                const suggestedKey = document.getElementById('ai-suggested-key-hm15');
+                const patternDiv = document.getElementById('ai-pattern-hm15');
+
+                if (measures.length === 0 && !input) {
+                    alert('Please select measures or enter an analysis input first.');
+                    return;
+                }
+
+                analyzeBtn.disabled = true;
+                analyzeBtn.textContent = '⏳ Analyzing...';
+
+                // Build chord progression from analysisData (populated by loadSong)
+                const chordProg = (window.analysisData?.chords || analysisData?.chords || [])
+                    .filter(c => measures.length === 0 || measures.includes(c.measure))
+                    .map(c => ({ measure: c.measure, chord: c.symbol }));
+
+                const body = {
+                    measures: measures,
+                    comment: input,
+                    song_context: {
+                        detected_key: (window.analysisData?.detected_key || analysisData?.detected_key || ''),
+                        chord_progression: chordProg
+                    }
+                };
+
+                try {
+                    const sid = songData?.id || songId;
+                    if (!sid) throw new Error('No song loaded');
+                    const resp = await fetch(`${API_BASE}/api/v1/analysis/songs/${sid}/ai-analysis`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(body)
+                    });
+
+                    if (!resp.ok) {
+                        const err = await resp.json().catch(() => ({}));
+                        throw new Error(err.detail || 'Analysis failed: ' + resp.status);
+                    }
+                    const data = await resp.json();
+
+                    analysisText.textContent = data.analysis || 'No analysis returned.';
+                    suggestedKey.textContent = data.suggested_key ? 'Suggested key: ' + data.suggested_key : '';
+                    patternDiv.textContent = data.pattern_identified ? 'Pattern: ' + data.pattern_identified : '';
+                    resultDiv.style.display = 'flex';
+
+                } catch (err) {
+                    analysisText.textContent = 'Analysis error: ' + err.message;
+                    suggestedKey.textContent = '';
+                    patternDiv.textContent = '';
+                    resultDiv.style.display = 'flex';
+                } finally {
+                    analyzeBtn.disabled = false;
+                    analyzeBtn.textContent = '🤖 Analyze with AI';
+                }
+            });
+        }
+
+        // 7. Accept / Dismiss
+        const acceptBtn = document.getElementById('accept-analysis-btn');
+        if (acceptBtn) {
+            acceptBtn.addEventListener('click', function() {
+                document.getElementById('ai-analysis-result').style.display = 'none';
+                document.getElementById('harmonic-input').value = '';
+                hm15SelectedMeasures.clear();
+                document.querySelectorAll('.measure-block').forEach(b => b.style.outline = '');
+                updateMultiselectArea();
+                // Show brief confirmation
+                const area = document.getElementById('chord-multiselect-area');
+                area.innerHTML = '<span style="color:#4CAF50">✅ Analysis accepted and stored.</span>';
+                setTimeout(updateMultiselectArea, 2000);
+            });
+        }
+
+        const dismissBtn = document.getElementById('dismiss-analysis-btn');
+        if (dismissBtn) {
+            dismissBtn.addEventListener('click', function() {
+                document.getElementById('ai-analysis-result').style.display = 'none';
+            });
+        }
+    })();
+    // ===== END HARMONIC CHORD ANALYSIS PANEL =====
+    </script>
     <style>
         /* Audio Panel Styles */
         .audio-panel {
@@ -4422,6 +4632,122 @@
         .improv-riff-play {
             border: none; background: none; cursor: pointer; font-size: 16px;
             padding: 0 4px;
+        }
+        /* HM15: Harmonic Chord Analysis Panel */
+        .harmonic-analysis-container {
+            border: 2px solid #4CAF50;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(76, 175, 80, 0.2);
+            margin-bottom: 16px;
+            overflow: hidden;
+        }
+        .analysis-header {
+            background: #4CAF50;
+            color: white;
+            padding: 10px 16px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: 600;
+            user-select: none;
+        }
+        .analysis-content {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding: 16px;
+            background: #f9fff9;
+        }
+        .selection-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+        .button-group {
+            display: flex;
+            gap: 6px;
+        }
+        .button-group button {
+            padding: 4px 12px;
+            border: 1px solid #4CAF50;
+            background: white;
+            color: #4CAF50;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+        .button-group button:hover {
+            background: #4CAF50;
+            color: white;
+        }
+        #chord-multiselect-area {
+            border: 2px dashed #4CAF50;
+            background: #f0fff0;
+            border-radius: 4px;
+            padding: 8px 12px;
+            min-height: 40px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            align-items: center;
+        }
+        .measure-tag {
+            background: #4CAF50;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+        }
+        #harmonic-input {
+            width: 100%;
+            min-height: 60px;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-family: inherit;
+            resize: vertical;
+        }
+        #analyze-btn {
+            padding: 8px 20px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.95rem;
+            align-self: flex-start;
+        }
+        #analyze-btn:hover { background: #388E3C; }
+        #analyze-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        #ai-analysis-result {
+            border: 1px solid #4CAF50;
+            border-radius: 4px;
+            padding: 12px;
+            background: white;
+            flex-direction: column;
+            gap: 8px;
+        }
+        #ai-analysis-text { font-size: 0.9rem; line-height: 1.5; }
+        #ai-suggested-key-hm15 { font-weight: 600; color: #4CAF50; }
+        #ai-pattern-hm15 { color: #666; font-style: italic; font-size: 0.85rem; }
+        #accept-analysis-btn {
+            padding: 6px 14px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        #dismiss-analysis-btn {
+            padding: 6px 14px;
+            background: #f44336;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
         }
     </style>
 </body>
