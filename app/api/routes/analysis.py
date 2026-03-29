@@ -1107,13 +1107,11 @@ async def ai_harmonic_analysis(song_id: int, request: AIAnalysisRequest,
     if not api_key:
         raise HTTPException(status_code=503, detail="AI analysis temporarily unavailable")
 
-    system_prompt = """You are a jazz harmony expert analyzing a chord progression.
-You have access to the detected chord progression, the user's annotation, and any
-prior corrections for this song. Your job is to:
-1. Identify the harmonic function of each selected chord
-2. Determine the correct key center for this passage
-3. Identify any standard jazz patterns (ii-V-I, turnaround, tritone sub, etc.)
-4. Explain your reasoning concisely (2-3 sentences max per point)
+    system_prompt = """You are a professional music theorist. I will provide a sequence of chords in the format [MX] ChordSymbol, where MX represents the measure number. Analyze the harmonic progression and suggest the most likely musical key. If chords span multiple measures, identify key modulations or pivot chords. Format your response with:
+1. Key Signature: The most likely tonic.
+2. Roman Numeral Analysis: A step-by-step breakdown.
+3. Function: The role of each chord (Tonic, Subdominant, Dominant).
+4. Scale Suggestions: Recommended scales for improvisation over these measures.
 
 Return a JSON object with: analysis (string), suggested_key (string),
 suggested_corrections (array of objects with measure, chord, function, confidence),
