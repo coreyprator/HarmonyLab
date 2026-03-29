@@ -1235,24 +1235,26 @@ User comment: {request.comment or 'No comment provided'}"""
     prior_ids_str = ",".join(str(i) for i in prior_ids) if prior_ids else None
 
     try:
-        db.execute_non_query(
+        rows = db.execute_with_commit(
             """INSERT INTO HarmonicAnalysisExchanges
                (song_id, selected_measures, selected_chords, user_comment,
                 ai_analysis, suggested_key, pattern_identified,
                 reasoning_trace, confidence, prior_exchange_ids)
+               OUTPUT INSERTED.id
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (song_id, measures_str, selected_chords_str, request.comment or None,
              result.get("analysis", raw_text), result.get("suggested_key"),
              result.get("pattern_identified"), reasoning_trace_json,
              result.get("confidence"), prior_ids_str)
         )
-        # Get the inserted ID
-        id_row = db.execute_query("SELECT IDENT_CURRENT('HarmonicAnalysisExchanges') AS last_id")
-        exchange_id = int(id_row[0]["last_id"]) if id_row else None
-        logger.info(f"[AI-ANALYSIS] Exchange stored: id={exchange_id}")
+        exchange_id = rows[0]["id"] if rows else None
+        if exchange_id is None:
+            logger.error("[AI-ANALYSIS] INSERT succeeded but returned no ID")
+        else:
+            logger.info(f"[AI-ANALYSIS] Exchange stored: id={exchange_id}")
     except Exception as e:
-        logger.warning(f"[AI-ANALYSIS] Exchange store failed: {e}")
-        exchange_id = None
+        logger.error(f"[AI-ANALYSIS] Exchange INSERT failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to store exchange: {str(e)}")
 
     # 7. Store RLHF: song-specific overrides (legacy)
     corrections = result.get("suggested_corrections", result.get("roman_numeral_analysis", []))
@@ -1365,6 +1367,31 @@ async def record_exchange_outcome(song_id: int, exchange_id: int,
             return {"status": "ok", "outcome": body.outcome, "key_updated": suggested_key}
 
     return {"status": "ok", "outcome": body.outcome}
+
+
+class ManualKeyRequest(BaseModel):
+    detected_key: str
+
+
+@router.post("/songs/{song_id}/manual-key")
+async def set_manual_key(song_id: int, body: ManualKeyRequest,
+                          db: DatabaseConnection = Depends(get_db)):
+    """HM22 REQ-004: Directly update detected key without AI analysis."""
+    existing = db.execute_query(
+        "SELECT id FROM SongAnalysis WHERE song_id = ?", (song_id,)
+    )
+    if existing:
+        db.execute_non_query(
+            "UPDATE SongAnalysis SET detected_key = ?, updated_at = GETDATE() WHERE song_id = ?",
+            (body.detected_key, song_id)
+        )
+    else:
+        db.execute_non_query(
+            "INSERT INTO SongAnalysis (song_id, detected_key) VALUES (?, ?)",
+            (song_id, body.detected_key)
+        )
+    logger.info(f"[MANUAL-KEY] Key set to '{body.detected_key}' for song {song_id}")
+    return {"status": "ok", "detected_key": body.detected_key}
 
 
 @router.get("/songs/{song_id}/exchanges")
