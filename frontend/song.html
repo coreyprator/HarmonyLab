@@ -21,7 +21,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v2.21.0</div>
+        <div class="nav-version">v2.26.0</div>
     </nav>
 
     <header>
@@ -4060,6 +4060,12 @@
                 keyLine += '<div style="font-size:11px;color:#7c3aed;margin-bottom:4px;">Pattern: ' + ex.pattern_identified + '</div>';
             }
 
+            // Correction of prior (HM19)
+            let correctionHtml = '';
+            if (ex.correction_of_prior) {
+                correctionHtml = '<div style="font-size:11px;color:#f59e0b;background:rgba(245,158,11,0.1);padding:4px 8px;border-radius:4px;margin-bottom:4px;border-left:2px solid #f59e0b;">⚠ Correction: ' + ex.correction_of_prior + '</div>';
+            }
+
             // Analysis text (condensed)
             const analysisPreview = (ex.ai_analysis || '').substring(0, 200) + ((ex.ai_analysis || '').length > 200 ? '...' : '');
 
@@ -4094,7 +4100,7 @@
             }
 
             div.innerHTML = '<div style="font-size:10px;color:var(--text-muted, #6b7280);margin-bottom:4px;">' + formatTimestamp(ex.exchange_at) + '</div>'
-                + userLine + keyLine
+                + userLine + keyLine + correctionHtml
                 + '<div style="font-size:12px;color:var(--text, #e2e8f0);margin-bottom:4px;white-space:pre-wrap;">' + analysisPreview + '</div>'
                 + reasoningHtml + outcomeHtml;
 
@@ -4111,7 +4117,14 @@
             if (!songId || !exchangeThread) return;
             try {
                 const resp = await fetch(API_BASE + '/api/v1/analysis/songs/' + songId + '/exchanges');
-                if (!resp.ok) return;
+                if (resp.status === 401) {
+                    console.warn('[HM19] Session expired — exchanges will reload after re-auth');
+                    return;
+                }
+                if (!resp.ok) {
+                    console.warn('[HM19] Load exchanges HTTP ' + resp.status);
+                    return;
+                }
                 const data = await resp.json();
                 exchangeThread.innerHTML = '';
                 (data.exchanges || []).forEach(function(ex) {
@@ -4119,7 +4132,8 @@
                 });
                 attachOutcomeListeners();
             } catch (e) {
-                console.warn('[HM18] Load exchanges failed:', e);
+                console.warn('[HM19] Load exchanges failed:', e);
+                exchangeThread.innerHTML = '';
             }
         }
 
@@ -4255,6 +4269,7 @@
                     pattern_identified: data.pattern_identified,
                     reasoning_trace: data.reasoning_steps || [],
                     confidence: data.confidence,
+                    correction_of_prior: data.correction_of_prior || null,
                     outcome: null
                 };
                 exchangeThread.appendChild(renderExchange(ex));
@@ -4287,6 +4302,13 @@
             // Give up after 10 seconds
             setTimeout(function() { clearInterval(checkInterval); }, 10000);
         }
+
+        // HM19: Reload exchanges when user returns to tab (after session reset)
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden && getSongId()) {
+                loadExchanges();
+            }
+        });
     })();
     // ===== END HARMONIC ANALYSIS CONVERSATION THREAD =====
     </script>

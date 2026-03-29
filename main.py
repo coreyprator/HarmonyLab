@@ -17,7 +17,7 @@ from app.api.routes import songs, sections, vocabulary, measures, chords, progre
 
 logger = logging.getLogger(__name__)
 
-VERSION = "2.25.0"  # HM18: AI harmonic analysis conversation thread
+VERSION = "2.26.0"  # HM19: Fix 4 HM18 UAT failures
 
 app = FastAPI(
     title="Harmony Lab API",
