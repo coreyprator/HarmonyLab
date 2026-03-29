@@ -17,7 +17,7 @@ from app.api.routes import songs, sections, vocabulary, measures, chords, progre
 
 logger = logging.getLogger(__name__)
 
-VERSION = "2.23.0"  # HM16: HarmonicTool drag-to-select replaces HM15 Shift+click
+VERSION = "2.24.0"  # HM17: Remove drag-to-select, fix ANTHROPIC_API_KEY wiring
 
 app = FastAPI(
     title="Harmony Lab API",
