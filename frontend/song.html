@@ -3901,7 +3901,6 @@
 
       init() {
         this.injectMeasureCheckboxes();
-        this.setupDragSelection();
         this.setupEventListeners();
         this.updateUI();
       },
@@ -3918,30 +3917,6 @@
           measure.style.position = 'relative';
           measure.prepend(wrapper);
         });
-      },
-
-      setupDragSelection() {
-        let isDragging = false;
-        let mode = true;
-
-        document.addEventListener('mousedown', (e) => {
-          const card = e.target.closest('.chord-card');
-          if (card) {
-            isDragging = true;
-            mode = !card.classList.contains('is-selected');
-            this.toggleChord(card, mode);
-            e.preventDefault();
-          }
-        });
-
-        document.addEventListener('mouseover', (e) => {
-          if (isDragging) {
-            const card = e.target.closest('.chord-card');
-            if (card) this.toggleChord(card, mode);
-          }
-        });
-
-        document.addEventListener('mouseup', () => (isDragging = false));
       },
 
       toggleChord(card, state) {
