@@ -36,6 +36,37 @@
             <span id="song-composer"></span>
             <span id="song-key" class="key-badge"></span>
             <span id="detected-key-header" class="key-badge detected"></span>
+            <button id="edit-key-btn" onclick="toggleKeyEdit()" title="Edit key center" style="background:none;border:none;cursor:pointer;font-size:14px;margin-left:2px;padding:0;">&#9998;</button>
+            <div id="key-edit-panel" style="display:none;align-items:center;gap:4px;">
+                <select id="key-edit-select" style="font-size:12px;padding:2px 4px;">
+                    <option value="C major">C major</option>
+                    <option value="Db major">Db major</option>
+                    <option value="D major">D major</option>
+                    <option value="Eb major">Eb major</option>
+                    <option value="E major">E major</option>
+                    <option value="F major">F major</option>
+                    <option value="F# major">F# major</option>
+                    <option value="G major">G major</option>
+                    <option value="Ab major">Ab major</option>
+                    <option value="A major">A major</option>
+                    <option value="Bb major">Bb major</option>
+                    <option value="B major">B major</option>
+                    <option value="C minor">C minor</option>
+                    <option value="C# minor">C# minor</option>
+                    <option value="D minor">D minor</option>
+                    <option value="Eb minor">Eb minor</option>
+                    <option value="E minor">E minor</option>
+                    <option value="F minor">F minor</option>
+                    <option value="F# minor">F# minor</option>
+                    <option value="G minor">G minor</option>
+                    <option value="G# minor">G# minor</option>
+                    <option value="A minor">A minor</option>
+                    <option value="Bb minor">Bb minor</option>
+                    <option value="B minor">B minor</option>
+                </select>
+                <button onclick="applyManualKey()" class="btn btn-xs" style="font-size:11px;">Apply</button>
+                <button onclick="cancelKeyEdit()" class="btn btn-xs" style="font-size:11px;">Cancel</button>
+            </div>
             <span id="song-genre" class="genre-badge"></span>
             <span id="song-time"></span>
         </div>
@@ -1059,6 +1090,7 @@
 
                 const data = await resp.json();
                 aiLastResponse = data;
+                window.lastExchangeId = data.exchange_id || null;
 
                 // Display response
                 document.getElementById('ai-response-text').textContent = data.analysis || 'No analysis returned.';
@@ -1082,14 +1114,34 @@
             }
         }
 
-        function acceptAICorrection() {
+        async function acceptAICorrection() {
             if (!aiLastResponse) return;
-            // Update detected key display if suggested
-            if (aiLastResponse.suggested_key) {
-                document.getElementById('ai-detected-key').textContent = aiLastResponse.suggested_key;
-                const mainKeyEl = document.getElementById('detected-key');
-                if (mainKeyEl) mainKeyEl.textContent = aiLastResponse.suggested_key;
+            const suggestedKey = aiLastResponse.suggested_key;
+
+            // Persist via /outcome endpoint if we have an exchange_id
+            const exchangeId = window.lastExchangeId;
+            const songId = window.songData?.id || new URLSearchParams(window.location.search).get('id');
+            if (exchangeId && songId) {
+                try {
+                    await fetch(API_BASE + '/api/v1/analysis/songs/' + songId + '/exchanges/' + exchangeId + '/outcome', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            outcome: 'accepted',
+                            update_key: true,
+                            rejection_reason: null
+                        })
+                    });
+                } catch (err) {
+                    console.error('[HM22] Failed to persist Accept:', err);
+                }
             }
+
+            // Update all key displays (header, main, AI panel)
+            if (suggestedKey) {
+                updateKeyDisplays(suggestedKey);
+            }
+
             // Show confirmation
             const responsePanel = document.getElementById('ai-response-panel');
             const banner = document.createElement('div');
@@ -4158,6 +4210,49 @@
             if (aiDetectedKey) aiDetectedKey.textContent = newKey;
             // Update analysisData in memory
             if (window.analysisData) window.analysisData.detected_key = newKey;
+        }
+
+        // HM22: Manual key edit
+        function toggleKeyEdit() {
+            const panel = document.getElementById('key-edit-panel');
+            if (!panel) return;
+            const isHidden = panel.style.display === 'none' || panel.style.display === '';
+            panel.style.display = isHidden ? 'flex' : 'none';
+            if (isHidden) {
+                // Pre-select current key
+                const currentKey = window.analysisData?.detected_key || '';
+                const sel = document.getElementById('key-edit-select');
+                if (sel) {
+                    for (var i = 0; i < sel.options.length; i++) {
+                        if (sel.options[i].value === currentKey) { sel.value = currentKey; break; }
+                    }
+                }
+            }
+        }
+
+        async function applyManualKey() {
+            var newKey = document.getElementById('key-edit-select')?.value;
+            if (!newKey) return;
+            var songId = getSongId();
+            if (!songId) return;
+            try {
+                var resp = await fetch(API_BASE + '/api/v1/analysis/songs/' + songId + '/manual-key', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ detected_key: newKey })
+                });
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                updateKeyDisplays(newKey);
+                cancelKeyEdit();
+            } catch (err) {
+                console.error('[HM22] Manual key update failed:', err);
+                alert('Failed to update key: ' + err.message);
+            }
+        }
+
+        function cancelKeyEdit() {
+            var panel = document.getElementById('key-edit-panel');
+            if (panel) panel.style.display = 'none';
         }
 
         async function handleOutcome(exchangeId, outcome, rejectionReason) {
