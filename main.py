@@ -17,7 +17,7 @@ from app.api.routes import songs, sections, vocabulary, measures, chords, progre
 
 logger = logging.getLogger(__name__)
 
-VERSION = "2.22.0"  # HM15: Harmonic Chord Analysis panel (green, collapsible, measure multiselect)
+VERSION = "2.23.0"  # HM16: HarmonicTool drag-to-select replaces HM15 Shift+click
 
 app = FastAPI(
     title="Harmony Lab API",
