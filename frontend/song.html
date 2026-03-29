@@ -333,13 +333,18 @@
         <div id="kc-debug" style="font-size:10px;color:#666;margin-bottom:4px;display:none;"></div>
         <div id="key-center-bar" style="display:flex;width:100%;margin-bottom:8px;min-height:24px;"></div>
 
-        <!-- HM15: Harmonic Chord Analysis Tool -->
+        <!-- HM18: Harmonic Chord Analysis Tool — Conversation Thread -->
         <div class="harmonic-analysis-container">
             <div class="analysis-header">
                 <span>🎵 Harmonic Chord Analysis Tool</span>
                 <span id="toggle-icon">▶</span>
             </div>
             <div class="analysis-content" style="display:none;">
+                <!-- Conversation thread -->
+                <div id="exchange-thread" style="max-height:400px;overflow-y:auto;margin-bottom:10px;"></div>
+                <!-- Separator -->
+                <hr style="border:none;border-top:1px solid var(--border, #374151);margin:8px 0;">
+                <!-- Selection + Input area -->
                 <div class="selection-toolbar">
                     <label>Selected Measures/Chords:</label>
                     <div class="button-group">
@@ -350,16 +355,9 @@
                 <div id="chord-multiselect-area">
                     <span class="placeholder">No chords selected. Click chords in the score or use 'Select All'.</span>
                 </div>
-                <label>Analysis Input / Annotation:</label>
+                <label>Your annotation:</label>
                 <textarea id="harmonic-input" placeholder="Enter your interpretation or question (e.g. 'This looks like a ii-V-I in C')"></textarea>
                 <button id="analyze-btn">🤖 Analyze with AI</button>
-                <div id="ai-analysis-result" style="display:none;">
-                    <div id="ai-analysis-text"></div>
-                    <div id="ai-suggested-key"></div>
-                    <div id="ai-pattern"></div>
-                    <button id="accept-analysis-btn">✅ Accept</button>
-                    <button id="dismiss-analysis-btn">✕ Dismiss</button>
-                </div>
             </div>
         </div>
 
@@ -4004,13 +4002,14 @@
     }
     // ===== END HARMONIC TOOL =====
 
-    // ===== HARMONIC ANALYSIS PANEL UI (toggle + analyze + accept/dismiss) =====
+    // ===== HM18: HARMONIC ANALYSIS CONVERSATION THREAD =====
     (function() {
-        // Toggle collapse/expand
+        const exchangeThread = document.getElementById('exchange-thread');
         const header = document.querySelector('.analysis-header');
         const content = document.querySelector('.analysis-content');
         const toggleIcon = document.getElementById('toggle-icon');
 
+        // Toggle collapse/expand
         if (header) {
             header.addEventListener('click', function() {
                 const isVisible = content.style.display !== 'none';
@@ -4019,80 +4018,277 @@
             });
         }
 
-        // Analyze with AI (REQ-004 — wired to HarmonicTool)
-        document.getElementById('analyze-btn')?.addEventListener('click', async function() {
-          const selected = HarmonicTool.getSelectedForAnalysis();
-          const input = document.getElementById('harmonic-input')?.value.trim() || '';
-          const resultDiv = document.getElementById('ai-analysis-result');
-          const analysisText = document.getElementById('ai-analysis-text');
-          const suggestedKey = document.getElementById('ai-suggested-key');
-          const patternDiv = document.getElementById('ai-pattern');
+        function formatTimestamp(ts) {
+            if (!ts) return '';
+            const d = new Date(ts);
+            if (isNaN(d.getTime())) return ts;
+            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
+                   ', ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+        }
 
-          if (selected.length === 0 && !input) {
-            alert('Select some chords first, or type an annotation.');
-            return;
-          }
+        function getConfidenceBadgeColor(confidence) {
+            if (confidence === 'high') return '#22c55e';
+            if (confidence === 'medium') return '#f59e0b';
+            return '#ef4444';
+        }
 
-          this.disabled = true;
-          this.textContent = '⏳ Analyzing...';
+        function renderExchange(ex) {
+            const div = document.createElement('div');
+            div.className = 'exchange-entry';
+            div.dataset.exchangeId = ex.id;
+            div.style.cssText = 'padding:10px;margin-bottom:8px;background:var(--bg-hover, #2a2a3e);border-radius:8px;border-left:3px solid #3b82f6;';
 
-          const songIdVal = window.songData?.id || new URLSearchParams(window.location.search).get('id');
-          const detectedKey = window.songData?.key || 'unknown';
-
-          const body = {
-            measures: [...new Set(selected.map(s => s.measure))],
-            comment: input,
-            song_context: {
-              detected_key: detectedKey,
-              chord_progression: selected.map(s => ({ measure: s.measure, chord: s.chord }))
+            // Timestamp + user context
+            let userLine = '';
+            if (ex.selected_chords) {
+                userLine += '<div style="font-size:11px;color:var(--text-muted, #9ca3af);margin-bottom:4px;">Selected: ' + ex.selected_chords + '</div>';
             }
-          };
+            if (ex.user_comment) {
+                userLine += '<div style="font-size:12px;color:var(--text, #e2e8f0);margin-bottom:6px;font-style:italic;">"' + ex.user_comment + '"</div>';
+            }
 
-          try {
-            const url = songIdVal ? `${API_BASE}/api/v1/analysis/songs/${songIdVal}/ai-analysis` : `${API_BASE}/api/v1/analysis/songs/0/ai-analysis`;
-            const resp = await fetch(url, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(body)
+            // Confidence badge
+            const confColor = getConfidenceBadgeColor(ex.confidence);
+            const confBadge = ex.confidence ? '<span style="display:inline-block;padding:1px 6px;border-radius:10px;font-size:10px;background:' + confColor + ';color:#fff;margin-left:6px;">' + ex.confidence + '</span>' : '';
+
+            // Key + pattern
+            let keyLine = '';
+            if (ex.suggested_key) {
+                keyLine = '<div style="font-size:13px;font-weight:600;margin-bottom:4px;">Key: ' + ex.suggested_key + confBadge + '</div>';
+            }
+            if (ex.pattern_identified) {
+                keyLine += '<div style="font-size:11px;color:#7c3aed;margin-bottom:4px;">Pattern: ' + ex.pattern_identified + '</div>';
+            }
+
+            // Analysis text (condensed)
+            const analysisPreview = (ex.ai_analysis || '').substring(0, 200) + ((ex.ai_analysis || '').length > 200 ? '...' : '');
+
+            // Reasoning toggle
+            const reasoning = ex.reasoning_trace || [];
+            let reasoningHtml = '';
+            if (reasoning.length > 0) {
+                const reasoningId = 'reasoning-' + ex.id;
+                reasoningHtml = '<div style="margin-top:6px;"><button onclick="document.getElementById(\'' + reasoningId + '\').style.display = document.getElementById(\'' + reasoningId + '\').style.display === \'none\' ? \'block\' : \'none\'; this.textContent = this.textContent.startsWith(\'+\') ? \'- Hide reasoning\' : \'+ Show reasoning\';" style="background:none;border:none;color:#3b82f6;cursor:pointer;font-size:11px;padding:0;">+ Show reasoning</button>';
+                reasoningHtml += '<div id="' + reasoningId + '" style="display:none;margin-top:4px;padding:6px 10px;background:var(--bg, #0f0f1a);border-radius:4px;border:1px solid var(--border, #374151);">';
+                reasoning.forEach(function(step, i) {
+                    reasoningHtml += '<div style="font-size:11px;color:var(--text-muted, #9ca3af);margin-bottom:2px;">' + (i + 1) + '. ' + step + '</div>';
+                });
+                reasoningHtml += '</div></div>';
+            }
+
+            // Outcome area
+            let outcomeHtml = '';
+            if (ex.outcome === 'accepted') {
+                outcomeHtml = '<div style="margin-top:6px;font-size:11px;color:#22c55e;font-weight:600;">✅ Accepted' + (ex.suggested_key ? ' — key updated to ' + ex.suggested_key : '') + '</div>';
+            } else if (ex.outcome === 'rejected') {
+                outcomeHtml = '<div style="margin-top:6px;font-size:11px;color:#ef4444;">✕ Rejected' + (ex.rejection_reason ? ': ' + ex.rejection_reason : '') + '</div>';
+            } else if (ex.outcome === 'no_action') {
+                outcomeHtml = '<div style="margin-top:6px;font-size:11px;color:#6b7280;">— No action taken</div>';
+            } else {
+                // Pending — show buttons
+                outcomeHtml = '<div class="exchange-actions" style="margin-top:8px;display:flex;gap:6px;align-items:center;">';
+                outcomeHtml += '<button class="ex-accept-btn" style="background:#22c55e;color:#fff;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px;" data-exchange-id="' + ex.id + '">✅ Accept' + (ex.suggested_key ? ' — update key to ' + ex.suggested_key : '') + '</button>';
+                outcomeHtml += '<button class="ex-reject-btn" style="background:#ef4444;color:#fff;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px;" data-exchange-id="' + ex.id + '">✕ Reject</button>';
+                outcomeHtml += '<button class="ex-noaction-btn" style="background:#6b7280;color:#fff;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px;" data-exchange-id="' + ex.id + '">— No action</button>';
+                outcomeHtml += '</div>';
+            }
+
+            div.innerHTML = '<div style="font-size:10px;color:var(--text-muted, #6b7280);margin-bottom:4px;">' + formatTimestamp(ex.exchange_at) + '</div>'
+                + userLine + keyLine
+                + '<div style="font-size:12px;color:var(--text, #e2e8f0);margin-bottom:4px;white-space:pre-wrap;">' + analysisPreview + '</div>'
+                + reasoningHtml + outcomeHtml;
+
+            return div;
+        }
+
+        function getSongId() {
+            return window.songData?.id || new URLSearchParams(window.location.search).get('id');
+        }
+
+        // Load existing exchanges on page load
+        async function loadExchanges() {
+            const songId = getSongId();
+            if (!songId || !exchangeThread) return;
+            try {
+                const resp = await fetch(API_BASE + '/api/v1/analysis/songs/' + songId + '/exchanges');
+                if (!resp.ok) return;
+                const data = await resp.json();
+                exchangeThread.innerHTML = '';
+                (data.exchanges || []).forEach(function(ex) {
+                    exchangeThread.appendChild(renderExchange(ex));
+                });
+                attachOutcomeListeners();
+            } catch (e) {
+                console.warn('[HM18] Load exchanges failed:', e);
+            }
+        }
+
+        // Get exchange IDs from thread (for prior context)
+        function getThreadExchangeIds() {
+            const entries = exchangeThread.querySelectorAll('.exchange-entry');
+            const ids = [];
+            entries.forEach(function(el) {
+                const id = parseInt(el.dataset.exchangeId);
+                if (!isNaN(id)) ids.push(id);
             });
-            if (!resp.ok) throw new Error('HTTP ' + resp.status);
-            const data = await resp.json();
-            if (analysisText) analysisText.textContent = data.analysis || 'No analysis returned.';
-            if (suggestedKey) suggestedKey.textContent = data.suggested_key ? 'Suggested key: ' + data.suggested_key : '';
-            if (patternDiv) patternDiv.textContent = data.pattern_identified ? 'Pattern: ' + data.pattern_identified : '';
-            if (resultDiv) resultDiv.style.display = 'flex';
-          } catch (err) {
-            if (analysisText) analysisText.textContent = 'Analysis error: ' + err.message;
-            if (resultDiv) resultDiv.style.display = 'flex';
-          } finally {
-            this.disabled = false;
-            this.textContent = '🤖 Analyze with AI';
-          }
+            return ids.slice(-5); // limit to last 5
+        }
+
+        function updateKeyDisplays(newKey) {
+            // Update all key center displays in the main song view
+            const detectedKeyHeader = document.getElementById('detected-key-header');
+            if (detectedKeyHeader) detectedKeyHeader.textContent = 'Detected: ' + newKey;
+            const detectedKey = document.getElementById('detected-key');
+            if (detectedKey) detectedKey.textContent = 'Key: ' + newKey;
+            const aiDetectedKey = document.getElementById('ai-detected-key');
+            if (aiDetectedKey) aiDetectedKey.textContent = newKey;
+            // Update analysisData in memory
+            if (window.analysisData) window.analysisData.detected_key = newKey;
+        }
+
+        async function handleOutcome(exchangeId, outcome, rejectionReason) {
+            const songId = getSongId();
+            if (!songId) return;
+            try {
+                const resp = await fetch(API_BASE + '/api/v1/analysis/songs/' + songId + '/exchanges/' + exchangeId + '/outcome', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        outcome: outcome,
+                        rejection_reason: rejectionReason || null,
+                        update_key: outcome === 'accepted'
+                    })
+                });
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                const data = await resp.json();
+
+                // Update key displays if accepted
+                if (outcome === 'accepted' && data.key_updated) {
+                    updateKeyDisplays(data.key_updated);
+                }
+
+                // Replace buttons with outcome badge
+                const entry = exchangeThread.querySelector('.exchange-entry[data-exchange-id="' + exchangeId + '"]');
+                if (entry) {
+                    const actions = entry.querySelector('.exchange-actions');
+                    if (actions) {
+                        if (outcome === 'accepted') {
+                            actions.innerHTML = '<div style="font-size:11px;color:#22c55e;font-weight:600;">✅ Accepted' + (data.key_updated ? ' — key updated to ' + data.key_updated : '') + '</div>';
+                        } else if (outcome === 'rejected') {
+                            actions.innerHTML = '<div style="font-size:11px;color:#ef4444;">✕ Rejected' + (rejectionReason ? ': ' + rejectionReason : '') + '</div>';
+                        } else {
+                            actions.innerHTML = '<div style="font-size:11px;color:#6b7280;">— No action taken</div>';
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error('[HM18] Outcome failed:', e);
+                alert('Failed to record outcome: ' + e.message);
+            }
+        }
+
+        function attachOutcomeListeners() {
+            exchangeThread.querySelectorAll('.ex-accept-btn').forEach(function(btn) {
+                btn.onclick = function() { handleOutcome(this.dataset.exchangeId, 'accepted'); };
+            });
+            exchangeThread.querySelectorAll('.ex-reject-btn').forEach(function(btn) {
+                btn.onclick = function() {
+                    const id = this.dataset.exchangeId;
+                    const actions = this.closest('.exchange-actions');
+                    // Show rejection reason input
+                    actions.innerHTML = '<div style="display:flex;gap:4px;align-items:center;"><input type="text" class="reject-reason-input" placeholder="Why? (optional)" style="flex:1;padding:3px 6px;border:1px solid var(--border, #374151);border-radius:4px;font-size:11px;background:var(--bg, #0f0f1a);color:var(--text, #e2e8f0);"><button class="reject-confirm-btn" style="background:#ef4444;color:#fff;border:none;padding:3px 8px;border-radius:4px;cursor:pointer;font-size:11px;" data-exchange-id="' + id + '">Confirm</button></div>';
+                    actions.querySelector('.reject-confirm-btn').onclick = function() {
+                        const reason = actions.querySelector('.reject-reason-input').value.trim();
+                        handleOutcome(id, 'rejected', reason);
+                    };
+                };
+            });
+            exchangeThread.querySelectorAll('.ex-noaction-btn').forEach(function(btn) {
+                btn.onclick = function() { handleOutcome(this.dataset.exchangeId, 'no_action'); };
+            });
+        }
+
+        // Analyze with AI — posts and appends to thread
+        document.getElementById('analyze-btn')?.addEventListener('click', async function() {
+            const selected = HarmonicTool.getSelectedForAnalysis();
+            const input = document.getElementById('harmonic-input')?.value.trim() || '';
+
+            if (selected.length === 0 && !input) {
+                alert('Select some chords first, or type an annotation.');
+                return;
+            }
+
+            this.disabled = true;
+            this.textContent = '⏳ Analyzing...';
+
+            const songId = getSongId();
+            const detectedKey = window.analysisData?.detected_key || window.songData?.key || 'unknown';
+            const priorIds = getThreadExchangeIds();
+
+            const body = {
+                measures: [...new Set(selected.map(function(s) { return s.measure; }))],
+                comment: input,
+                song_context: {
+                    detected_key: detectedKey,
+                    chord_progression: selected.map(function(s) { return { measure: s.measure, chord: s.chord }; })
+                },
+                prior_exchange_ids: priorIds
+            };
+
+            try {
+                const resp = await fetch(API_BASE + '/api/v1/analysis/songs/' + songId + '/ai-analysis', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                const data = await resp.json();
+
+                // Build exchange object for rendering
+                const ex = {
+                    id: data.exchange_id,
+                    exchange_at: new Date().toISOString(),
+                    selected_chords: selected.map(function(s) { return '[M' + s.measure + '] ' + s.chord; }).join(', '),
+                    user_comment: input,
+                    ai_analysis: data.analysis,
+                    suggested_key: data.suggested_key,
+                    pattern_identified: data.pattern_identified,
+                    reasoning_trace: data.reasoning_steps || [],
+                    confidence: data.confidence,
+                    outcome: null
+                };
+                exchangeThread.appendChild(renderExchange(ex));
+                attachOutcomeListeners();
+                exchangeThread.scrollTop = exchangeThread.scrollHeight;
+
+                // Clear input
+                document.getElementById('harmonic-input').value = '';
+            } catch (err) {
+                alert('Analysis error: ' + err.message);
+            } finally {
+                this.disabled = false;
+                this.textContent = '🤖 Analyze with AI';
+            }
         });
 
-        // Accept / Dismiss
-        const acceptBtn = document.getElementById('accept-analysis-btn');
-        if (acceptBtn) {
-            acceptBtn.addEventListener('click', function() {
-                document.getElementById('ai-analysis-result').style.display = 'none';
-                document.getElementById('harmonic-input').value = '';
-                document.querySelectorAll('.chord-card.is-selected').forEach(c => c.classList.remove('is-selected'));
-                document.querySelectorAll('.measure-toggle').forEach(t => t.checked = false);
-                HarmonicTool.updateUI();
-                const area = document.getElementById('chord-multiselect-area');
-                area.innerHTML = '<span style="color:#4CAF50">✅ Analysis accepted and stored.</span>';
-                setTimeout(() => HarmonicTool.updateUI(), 2000);
-            });
-        }
-
-        const dismissBtn = document.getElementById('dismiss-analysis-btn');
-        if (dismissBtn) {
-            dismissBtn.addEventListener('click', function() {
-                document.getElementById('ai-analysis-result').style.display = 'none';
-            });
+        // Load exchanges after song data loads
+        const origLoadSong = window._hm18LoadExchanges;
+        window._hm18LoadExchanges = loadExchanges;
+        // Try loading immediately if songData exists, otherwise wait
+        if (window.songData?.id) {
+            loadExchanges();
+        } else {
+            const checkInterval = setInterval(function() {
+                if (window.songData?.id) {
+                    clearInterval(checkInterval);
+                    loadExchanges();
+                }
+            }, 500);
+            // Give up after 10 seconds
+            setTimeout(function() { clearInterval(checkInterval); }, 10000);
         }
     })();
-    // ===== END HARMONIC ANALYSIS PANEL UI =====
+    // ===== END HARMONIC ANALYSIS CONVERSATION THREAD =====
     </script>
     <style>
         /* Audio Panel Styles */

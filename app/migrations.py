@@ -150,6 +150,9 @@ def run_migrations():
     # Migration 12: AI analysis RLHF columns on JazzTheoryPatterns (HM14 HL-055)
     _migration_12_ai_analysis_columns(db)
 
+    # Migration 13: HarmonicAnalysisExchanges table (HM18)
+    _migration_13_harmonic_analysis_exchanges(db)
+
     logger.info("Migrations complete.")
 
 
@@ -995,3 +998,40 @@ def _migration_12_ai_analysis_columns(db):
             logger.info("  Migration 12: AI analysis columns already exist.")
     except Exception as e:
         logger.warning(f"  Migration 12 warning: {e}")
+
+
+def _migration_13_harmonic_analysis_exchanges(db):
+    """HM18: HarmonicAnalysisExchanges table for AI conversation thread."""
+    try:
+        count = db.execute_scalar(
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'HarmonicAnalysisExchanges'"
+        )
+        if count == 0:
+            logger.info("  Migration 13: Creating HarmonicAnalysisExchanges table...")
+            db.execute_non_query("""
+                CREATE TABLE HarmonicAnalysisExchanges (
+                    id            INT IDENTITY(1,1) PRIMARY KEY,
+                    song_id       INT NOT NULL,
+                    exchange_at   DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+                    selected_measures  NVARCHAR(500) NULL,
+                    selected_chords    NVARCHAR(2000) NULL,
+                    user_comment  NVARCHAR(2000) NULL,
+                    ai_analysis   NVARCHAR(MAX) NOT NULL,
+                    suggested_key NVARCHAR(100) NULL,
+                    pattern_identified NVARCHAR(500) NULL,
+                    reasoning_trace    NVARCHAR(MAX) NULL,
+                    confidence    NVARCHAR(50) NULL,
+                    outcome       NVARCHAR(50) NULL,
+                    rejection_reason   NVARCHAR(1000) NULL,
+                    prior_exchange_ids NVARCHAR(500) NULL
+                )
+            """)
+            db.execute_non_query(
+                "CREATE INDEX IX_HarmonicAnalysisExchanges_SongId "
+                "ON HarmonicAnalysisExchanges(song_id, exchange_at DESC)"
+            )
+            logger.info("  Migration 13: HarmonicAnalysisExchanges table created.")
+        else:
+            logger.info("  Migration 13: HarmonicAnalysisExchanges table already exists.")
+    except Exception as e:
+        logger.warning(f"  Migration 13 warning: {e}")

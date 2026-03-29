@@ -1074,12 +1074,72 @@ class AIAnalysisRequest(BaseModel):
     measures: List[int] = []
     comment: str = ""
     song_context: SongContext = SongContext()
+    prior_exchange_ids: List[int] = []
+
+
+class OutcomeRequest(BaseModel):
+    outcome: str  # "accepted" | "rejected" | "no_action"
+    rejection_reason: Optional[str] = None
+    update_key: bool = False
+
+
+HARMONIC_ANALYSIS_SYSTEM_PROMPT = """You are a professional music theorist with strong opinions based on evidence. Your job is to analyze chord progressions and identify the correct harmonic interpretation.
+
+Rules:
+1. Lead with your conclusion. Don't hedge.
+2. If the user's interpretation is wrong, say so directly: "No — [reason]". Do not say "Great thinking, though..."
+3. Support every conclusion with specific music theory evidence: cadence types, voice leading, tritone resolution, scale degrees.
+4. If the user is right, confirm it briefly and explain why — don't just agree.
+5. Structure your response as:
+   - Key Signature: [tonic and mode, e.g. "C major"]
+   - Confidence: [high / medium / low — low only if genuinely ambiguous]
+   - Roman Numeral Analysis: [measure by measure]
+   - Function: [role of each chord: Tonic / Subdominant / Dominant / Secondary Dominant / Borrowed]
+   - Scale Suggestions: [for improvisation over selected measures]
+   - Reasoning: [2-4 specific music theory steps that led to your conclusion]
+   - Follow-up: [one specific question or observation to deepen the analysis]
+
+Prior exchange context will be provided as JSON. Use it to build on the conversation, not repeat it.
+
+Respond ONLY with a JSON object with these fields:
+- analysis (string): your full analysis text
+- suggested_key (string): e.g. "C major"
+- confidence (string): "high", "medium", or "low"
+- pattern_identified (string or null): e.g. "ii-V-I in C major"
+- roman_numeral_analysis (array of objects with measure, chord, roman, function)
+- scale_suggestions (array of strings)
+- reasoning_steps (array of strings — 2-4 specific music theory steps)
+- follow_up (string)
+
+No markdown, no preamble."""
+
+
+def _build_context_from_exchanges(prior_exchange_ids: list, db) -> str:
+    if not prior_exchange_ids:
+        return ""
+    placeholders = ",".join("?" * len(prior_exchange_ids))
+    exchanges = db.execute_query(
+        f"SELECT id, exchange_at, user_comment, ai_analysis, suggested_key, outcome "
+        f"FROM HarmonicAnalysisExchanges WHERE id IN ({placeholders}) "
+        f"ORDER BY exchange_at ASC",
+        tuple(prior_exchange_ids)
+    )
+    context = []
+    for ex in exchanges:
+        context.append({
+            "at": str(ex["exchange_at"]),
+            "user_said": ex["user_comment"],
+            "ai_concluded": ex["suggested_key"],
+            "outcome": ex["outcome"],
+            "summary": (ex["ai_analysis"] or "")[:300]
+        })
+    return json.dumps(context)
 
 
 @router.post("/songs/{song_id}/ai-analysis")
 async def ai_harmonic_analysis(song_id: int, request: AIAnalysisRequest,
                                 db: DatabaseConnection = Depends(get_db)):
-    """HM14 HL-055: AI-powered harmonic analysis with RLHF storage."""
+    """HM18: AI-powered harmonic analysis with conversation thread."""
     from anthropic import Anthropic
 
     # 1. Fetch song title
@@ -1102,37 +1162,33 @@ async def ai_harmonic_analysis(song_id: int, request: AIAnalysisRequest,
         f"m{c.measure}: {c.chord}" for c in request.song_context.chord_progression
     )
 
-    # 4. Call Anthropic API
+    # 4. Build prior exchange context (limit to last 5)
+    prior_ids = request.prior_exchange_ids[-5:] if request.prior_exchange_ids else []
+    prior_context = _build_context_from_exchanges(prior_ids, db)
+
+    # 5. Call Anthropic API
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         raise HTTPException(status_code=503, detail="AI analysis temporarily unavailable")
-
-    system_prompt = """You are a professional music theorist. I will provide a sequence of chords in the format [MX] ChordSymbol, where MX represents the measure number. Analyze the harmonic progression and suggest the most likely musical key. If chords span multiple measures, identify key modulations or pivot chords. Format your response with:
-1. Key Signature: The most likely tonic.
-2. Roman Numeral Analysis: A step-by-step breakdown.
-3. Function: The role of each chord (Tonic, Subdominant, Dominant).
-4. Scale Suggestions: Recommended scales for improvisation over these measures.
-
-Return a JSON object with: analysis (string), suggested_key (string),
-suggested_corrections (array of objects with measure, chord, function, confidence),
-pattern_identified (string or null).
-Respond ONLY with the JSON object — no preamble, no markdown fences."""
 
     user_prompt = f"""Song: {song_title}
 Detected key: {request.song_context.detected_key or 'Unknown'}
 Selected measures: {request.measures}
 Detected chords: {chord_prog_str}
 Prior RLHF overrides for this song: {json.dumps(prior_overrides) if prior_overrides else 'None'}
-User comment: {request.comment or 'No comment provided'}
+User comment: {request.comment or 'No comment provided'}"""
 
-Analyze the harmonic content of these measures."""
+    if prior_context:
+        user_prompt += f"\n\nPrior conversation exchanges:\n{prior_context}"
+
+    user_prompt += "\n\nAnalyze the harmonic content of these measures."
 
     try:
         client = Anthropic(api_key=api_key)
         response = client.messages.create(
             model="claude-sonnet-4-20250514",
-            max_tokens=800,
-            system=system_prompt,
+            max_tokens=1200,
+            system=HARMONIC_ANALYSIS_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_prompt}]
         )
         raw_text = response.content[0].text
@@ -1142,7 +1198,6 @@ Analyze the harmonic content of these measures."""
         try:
             result = json.loads(raw_text)
         except json.JSONDecodeError:
-            # Try to extract JSON from response
             json_match = re.search(r'\{.*\}', raw_text, re.DOTALL)
             if json_match:
                 result = json.loads(json_match.group())
@@ -1151,19 +1206,62 @@ Analyze the harmonic content of these measures."""
                     "analysis": raw_text,
                     "suggested_key": request.song_context.detected_key,
                     "suggested_corrections": [],
-                    "pattern_identified": None
+                    "pattern_identified": None,
+                    "confidence": "low",
+                    "reasoning_steps": ["Could not parse structured response"],
+                    "scale_suggestions": [],
+                    "roman_numeral_analysis": [],
+                    "follow_up": None
                 }
 
     except Exception as e:
         logger.error(f"[AI-ANALYSIS] Claude API error: {e}")
         raise HTTPException(status_code=503, detail="AI analysis temporarily unavailable")
 
-    # 5. Store RLHF: song-specific overrides
-    rlhf_stored = False
-    corrections = result.get("suggested_corrections", [])
-    if corrections:
+    # Ensure reasoning_steps exists
+    if "reasoning_steps" not in result:
+        reasoning = result.get("reasoning", result.get("analysis", ""))
+        result["reasoning_steps"] = [reasoning] if isinstance(reasoning, str) else reasoning
+    if not isinstance(result.get("reasoning_steps"), list):
+        result["reasoning_steps"] = [str(result["reasoning_steps"])]
+
+    # Ensure confidence exists
+    if "confidence" not in result:
+        result["confidence"] = "medium"
+
+    # 6. Store exchange in HarmonicAnalysisExchanges
+    measures_str = ",".join(str(m) for m in request.measures) if request.measures else None
+    selected_chords_str = chord_prog_str or None
+    reasoning_trace_json = json.dumps(result.get("reasoning_steps", []))
+    prior_ids_str = ",".join(str(i) for i in prior_ids) if prior_ids else None
+
+    try:
+        db.execute_non_query(
+            """INSERT INTO HarmonicAnalysisExchanges
+               (song_id, selected_measures, selected_chords, user_comment,
+                ai_analysis, suggested_key, pattern_identified,
+                reasoning_trace, confidence, prior_exchange_ids)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (song_id, measures_str, selected_chords_str, request.comment or None,
+             result.get("analysis", raw_text), result.get("suggested_key"),
+             result.get("pattern_identified"), reasoning_trace_json,
+             result.get("confidence"), prior_ids_str)
+        )
+        # Get the inserted ID
+        id_row = db.execute_query("SELECT IDENT_CURRENT('HarmonicAnalysisExchanges') AS last_id")
+        exchange_id = int(id_row[0]["last_id"]) if id_row else None
+        logger.info(f"[AI-ANALYSIS] Exchange stored: id={exchange_id}")
+    except Exception as e:
+        logger.warning(f"[AI-ANALYSIS] Exchange store failed: {e}")
+        exchange_id = None
+
+    # 7. Store RLHF: song-specific overrides (legacy)
+    corrections = result.get("suggested_corrections", result.get("roman_numeral_analysis", []))
+    if corrections and isinstance(corrections, list):
         for corr in corrections:
             m = corr.get("measure")
+            if m is None:
+                continue
             func = corr.get("function", "")
             key_ctx = result.get("suggested_key", "")
             try:
@@ -1182,11 +1280,10 @@ Analyze the harmonic content of these measures."""
                      song_id, m, func, key_ctx,
                      f"AI: {result.get('analysis', '')[:200]}")
                 )
-                rlhf_stored = True
             except Exception as e:
                 logger.warning(f"[AI-ANALYSIS] RLHF override store failed: {e}")
 
-    # 6. Store generalized pattern in JazzTheoryPatterns (REQ-B2)
+    # 8. Store generalized pattern in JazzTheoryPatterns
     pattern = result.get("pattern_identified")
     if pattern:
         suggested_key = result.get("suggested_key", "")
@@ -1206,13 +1303,95 @@ Analyze the harmonic content of these measures."""
                        (pattern_name, key_center, chord_sequence, description, source, confidence, occurrence_count, song_id)
                        VALUES (?, ?, ?, ?, 'rlhf', ?, 1, ?)""",
                     (pattern, suggested_key, chord_prog_str,
-                     result.get("analysis", "")[:500],
-                     corrections[0].get("confidence", 0.8) if corrections else 0.8,
-                     song_id)
+                     result.get("analysis", "")[:500], 0.8, song_id)
                 )
-            rlhf_stored = True
         except Exception as e:
             logger.warning(f"[AI-ANALYSIS] Pattern store failed: {e}")
 
-    result["rlhf_stored"] = rlhf_stored
-    return result
+    return {
+        "exchange_id": exchange_id,
+        "analysis": result.get("analysis", ""),
+        "suggested_key": result.get("suggested_key"),
+        "pattern_identified": result.get("pattern_identified"),
+        "confidence": result.get("confidence", "medium"),
+        "reasoning_steps": result.get("reasoning_steps", []),
+        "roman_numeral_analysis": result.get("roman_numeral_analysis", []),
+        "scale_suggestions": result.get("scale_suggestions", []),
+        "follow_up": result.get("follow_up")
+    }
+
+
+@router.post("/songs/{song_id}/exchanges/{exchange_id}/outcome")
+async def record_exchange_outcome(song_id: int, exchange_id: int,
+                                   body: OutcomeRequest,
+                                   db: DatabaseConnection = Depends(get_db)):
+    """HM18 REQ-003: Record Accept/Reject/NoAction on an exchange."""
+    if body.outcome not in ("accepted", "rejected", "no_action"):
+        raise HTTPException(status_code=400, detail="outcome must be accepted, rejected, or no_action")
+
+    # Verify exchange exists for this song
+    row = db.execute_query(
+        "SELECT id, suggested_key FROM HarmonicAnalysisExchanges WHERE id = ? AND song_id = ?",
+        (exchange_id, song_id)
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Exchange not found for this song")
+
+    # Update outcome
+    db.execute_non_query(
+        "UPDATE HarmonicAnalysisExchanges SET outcome = ?, rejection_reason = ? WHERE id = ? AND song_id = ?",
+        (body.outcome, body.rejection_reason, exchange_id, song_id)
+    )
+
+    # If accepted and update_key=True: update SongAnalysis.detected_key
+    if body.outcome == "accepted" and body.update_key:
+        suggested_key = row[0]["suggested_key"]
+        if suggested_key:
+            # Upsert SongAnalysis
+            existing = db.execute_query(
+                "SELECT id FROM SongAnalysis WHERE song_id = ?", (song_id,)
+            )
+            if existing:
+                db.execute_non_query(
+                    "UPDATE SongAnalysis SET detected_key = ?, updated_at = GETDATE() WHERE song_id = ?",
+                    (suggested_key, song_id)
+                )
+            else:
+                db.execute_non_query(
+                    "INSERT INTO SongAnalysis (song_id, detected_key) VALUES (?, ?)",
+                    (song_id, suggested_key)
+                )
+            logger.info(f"[AI-ANALYSIS] Key updated to '{suggested_key}' for song {song_id}")
+            return {"status": "ok", "outcome": body.outcome, "key_updated": suggested_key}
+
+    return {"status": "ok", "outcome": body.outcome}
+
+
+@router.get("/songs/{song_id}/exchanges")
+async def get_exchanges(song_id: int, db: DatabaseConnection = Depends(get_db)):
+    """HM18 REQ-004: Return conversation thread for a song."""
+    rows = db.execute_query(
+        """SELECT id, exchange_at, selected_measures, selected_chords,
+                  user_comment, ai_analysis, suggested_key, pattern_identified,
+                  reasoning_trace, confidence, outcome, rejection_reason
+           FROM HarmonicAnalysisExchanges
+           WHERE song_id = ?
+           ORDER BY exchange_at ASC""",
+        (song_id,)
+    )
+    exchanges = []
+    for r in rows:
+        ex = dict(r)
+        # Parse reasoning_trace from JSON string to array
+        if ex.get("reasoning_trace"):
+            try:
+                ex["reasoning_trace"] = json.loads(ex["reasoning_trace"])
+            except (json.JSONDecodeError, TypeError):
+                ex["reasoning_trace"] = [ex["reasoning_trace"]]
+        else:
+            ex["reasoning_trace"] = []
+        # Convert exchange_at to ISO string
+        if ex.get("exchange_at"):
+            ex["exchange_at"] = str(ex["exchange_at"])
+        exchanges.append(ex)
+    return {"song_id": song_id, "exchanges": exchanges}
