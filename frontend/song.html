@@ -21,7 +21,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v2.26.0</div>
+        <div class="nav-version">v2.27.0</div>
     </nav>
 
     <header>
@@ -4306,6 +4306,22 @@
         // HM19: Reload exchanges when user returns to tab (after session reset)
         document.addEventListener('visibilitychange', function() {
             if (!document.hidden && getSongId()) {
+                loadExchanges();
+            }
+        });
+
+        // HM20: Re-fetch exchanges on bfcache restore (back/forward navigation)
+        window.addEventListener('pageshow', function(event) {
+            if (event.persisted && getSongId()) {
+                exchangeThread.innerHTML = '';
+                loadExchanges();
+            }
+        });
+
+        // HM20: Re-fetch exchanges on popstate (browser back/forward)
+        window.addEventListener('popstate', function() {
+            if (getSongId()) {
+                exchangeThread.innerHTML = '';
                 loadExchanges();
             }
         });
