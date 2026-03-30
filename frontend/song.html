@@ -36,7 +36,7 @@
             <span id="song-composer"></span>
             <span id="song-key" class="key-badge"></span>
             <span id="detected-key-header" class="key-badge detected"></span>
-            <button id="edit-key-btn" onclick="toggleKeyEdit()" title="Edit key center" style="background:none;border:none;cursor:pointer;font-size:14px;margin-left:2px;padding:0;">&#9998;</button>
+            <button id="edit-key-btn" onclick="toggleKeyEdit()" title="Edit key center" style="background:none;border:none;cursor:pointer;font-size:14px;margin-left:4px;padding:0;line-height:1;">✏️</button>
             <div id="key-edit-panel" style="display:none;align-items:center;gap:4px;">
                 <select id="key-edit-select" style="font-size:12px;padding:2px 4px;">
                     <option value="C major">C major</option>
@@ -4296,8 +4296,8 @@
             }
         }
 
-        // HM23: Event delegation — single listener handles all outcome buttons
-        exchangeThread.addEventListener('click', function(e) {
+        // HM24: Event delegation on document — survives any innerHTML re-render
+        document.addEventListener('click', function(e) {
             const btn = e.target.closest('button');
             if (!btn) return;
             const exchangeId = btn.dataset.exchangeId;

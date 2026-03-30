@@ -17,7 +17,7 @@ from app.api.routes import songs, sections, vocabulary, measures, chords, progre
 
 logger = logging.getLogger(__name__)
 
-VERSION = "2.29.0"  # HM23: Event delegation for outcome buttons + expose key edit to global scope
+VERSION = "2.30.0"  # HM24: Move click delegation to document + fix pencil icon rendering
 
 app = FastAPI(
     title="Harmony Lab API",
