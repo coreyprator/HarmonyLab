@@ -17,7 +17,7 @@ from app.api.routes import songs, sections, vocabulary, measures, chords, progre
 
 logger = logging.getLogger(__name__)
 
-VERSION = "2.28.0"  # HM22: Fix exchange persistence + key center update + manual key edit
+VERSION = "2.29.0"  # HM23: Event delegation for outcome buttons + expose key edit to global scope
 
 app = FastAPI(
     title="Harmony Lab API",
