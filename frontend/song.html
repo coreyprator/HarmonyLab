@@ -21,7 +21,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v2.27.0</div>
+        <div class="nav-version">v2.29.0</div>
     </nav>
 
     <header>
@@ -4182,7 +4182,7 @@
                 (data.exchanges || []).forEach(function(ex) {
                     exchangeThread.appendChild(renderExchange(ex));
                 });
-                attachOutcomeListeners();
+                // HM23: delegation handles listeners — no attachOutcomeListeners needed
             } catch (e) {
                 console.warn('[HM19] Load exchanges failed:', e);
                 exchangeThread.innerHTML = '';
@@ -4296,26 +4296,25 @@
             }
         }
 
-        function attachOutcomeListeners() {
-            exchangeThread.querySelectorAll('.ex-accept-btn').forEach(function(btn) {
-                btn.onclick = function() { handleOutcome(this.dataset.exchangeId, 'accepted'); };
-            });
-            exchangeThread.querySelectorAll('.ex-reject-btn').forEach(function(btn) {
-                btn.onclick = function() {
-                    const id = this.dataset.exchangeId;
-                    const actions = this.closest('.exchange-actions');
-                    // Show rejection reason input
-                    actions.innerHTML = '<div style="display:flex;gap:4px;align-items:center;"><input type="text" class="reject-reason-input" placeholder="Why? (optional)" style="flex:1;padding:3px 6px;border:1px solid var(--border, #374151);border-radius:4px;font-size:11px;background:var(--bg, #0f0f1a);color:var(--text, #e2e8f0);"><button class="reject-confirm-btn" style="background:#ef4444;color:#fff;border:none;padding:3px 8px;border-radius:4px;cursor:pointer;font-size:11px;" data-exchange-id="' + id + '">Confirm</button></div>';
-                    actions.querySelector('.reject-confirm-btn').onclick = function() {
-                        const reason = actions.querySelector('.reject-reason-input').value.trim();
-                        handleOutcome(id, 'rejected', reason);
-                    };
-                };
-            });
-            exchangeThread.querySelectorAll('.ex-noaction-btn').forEach(function(btn) {
-                btn.onclick = function() { handleOutcome(this.dataset.exchangeId, 'no_action'); };
-            });
-        }
+        // HM23: Event delegation — single listener handles all outcome buttons
+        exchangeThread.addEventListener('click', function(e) {
+            const btn = e.target.closest('button');
+            if (!btn) return;
+            const exchangeId = btn.dataset.exchangeId;
+            if (!exchangeId) return;
+
+            if (btn.classList.contains('ex-accept-btn')) {
+                handleOutcome(exchangeId, 'accepted');
+            } else if (btn.classList.contains('ex-reject-btn')) {
+                const actions = btn.closest('.exchange-actions');
+                actions.innerHTML = '<div style="display:flex;gap:4px;align-items:center;"><input type="text" class="reject-reason-input" placeholder="Why? (optional)" style="flex:1;padding:3px 6px;border:1px solid var(--border, #374151);border-radius:4px;font-size:11px;background:var(--bg, #0f0f1a);color:var(--text, #e2e8f0);"><button class="reject-confirm-btn" style="background:#ef4444;color:#fff;border:none;padding:3px 8px;border-radius:4px;cursor:pointer;font-size:11px;" data-exchange-id="' + exchangeId + '">Confirm</button></div>';
+            } else if (btn.classList.contains('reject-confirm-btn')) {
+                const reason = btn.closest('div').querySelector('.reject-reason-input').value.trim();
+                handleOutcome(exchangeId, 'rejected', reason);
+            } else if (btn.classList.contains('ex-noaction-btn')) {
+                handleOutcome(exchangeId, 'no_action');
+            }
+        });
 
         // Analyze with AI — posts and appends to thread
         document.getElementById('analyze-btn')?.addEventListener('click', async function() {
@@ -4368,7 +4367,7 @@
                     outcome: null
                 };
                 exchangeThread.appendChild(renderExchange(ex));
-                attachOutcomeListeners();
+                // HM23: delegation handles listeners — no attachOutcomeListeners needed
                 exchangeThread.scrollTop = exchangeThread.scrollHeight;
 
                 // Clear input
@@ -4420,6 +4419,11 @@
                 loadExchanges();
             }
         });
+
+        // HM23: Expose key edit functions to global scope for inline onclick handlers
+        window.toggleKeyEdit = toggleKeyEdit;
+        window.applyManualKey = applyManualKey;
+        window.cancelKeyEdit = cancelKeyEdit;
     })();
     // ===== END HARMONIC ANALYSIS CONVERSATION THREAD =====
     </script>
