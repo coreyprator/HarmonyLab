@@ -17,7 +17,7 @@ from app.api.routes import songs, sections, vocabulary, measures, chords, progre
 
 logger = logging.getLogger(__name__)
 
-VERSION = "2.32.0"  # HM26: Pencil injection into kc-brackets + accept re-render fix
+VERSION = "2.33.0"  # HM27: Remove loadSongChords() from updateKeyDisplays — targeted DOM update only
 
 app = FastAPI(
     title="Harmony Lab API",
