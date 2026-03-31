@@ -17,7 +17,7 @@ from app.api.routes import songs, sections, vocabulary, measures, chords, progre
 
 logger = logging.getLogger(__name__)
 
-VERSION = "2.30.0"  # HM24: Move click delegation to document + fix pencil icon rendering
+VERSION = "2.31.0"  # HM25B: Fix pencil button selector (key-edit-btn + chord-pencil class)
 
 app = FastAPI(
     title="Harmony Lab API",
