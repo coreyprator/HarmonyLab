@@ -21,7 +21,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v2.31.0</div>
+        <div class="nav-version">v2.32.0</div>
     </nav>
 
     <header>
@@ -1687,6 +1687,27 @@
                     measureBlocks[0].insertBefore(label, measureBlocks[0].firstChild);
                 }
             }
+
+            // HM26: Inject pencil icons into every .kc-bracket
+            injectBracketPencils();
+        }
+
+        // HM26: Inject .chord-pencil-injected into each .kc-bracket label
+        function injectBracketPencils() {
+            document.querySelectorAll('.kc-bracket').forEach(bracket => {
+                if (bracket.querySelector('.chord-pencil-injected')) return; // no duplicates
+                const btn = document.createElement('button');
+                btn.className = 'chord-pencil-injected';
+                btn.setAttribute('aria-label', 'Edit chords');
+                btn.setAttribute('title', 'Edit chords');
+                btn.innerHTML = '✏️';
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const originalBtn = document.querySelector('#key-edit-btn.chord-pencil');
+                    if (originalBtn) originalBtn.click();
+                });
+                bracket.prepend(btn);
+            });
         }
 
         function renderTurnarounds() {
@@ -4210,6 +4231,11 @@
             if (aiDetectedKey) aiDetectedKey.textContent = newKey;
             // Update analysisData in memory
             if (window.analysisData) window.analysisData.detected_key = newKey;
+
+            // HM26: Re-render chords after key accept so score stays fresh
+            if (typeof loadSongChords === 'function') {
+                loadSongChords();
+            }
         }
 
         // HM22: Manual key edit
