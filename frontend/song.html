@@ -4222,20 +4222,31 @@
         }
 
         function updateKeyDisplays(newKey) {
-            // Update all key center displays in the main song view
-            const detectedKeyHeader = document.getElementById('detected-key-header');
-            if (detectedKeyHeader) detectedKeyHeader.textContent = 'Detected: ' + newKey;
-            const detectedKey = document.getElementById('detected-key');
-            if (detectedKey) detectedKey.textContent = 'Key: ' + newKey;
-            const aiDetectedKey = document.getElementById('ai-detected-key');
-            if (aiDetectedKey) aiDetectedKey.textContent = newKey;
-            // Update analysisData in memory
-            if (window.analysisData) window.analysisData.detected_key = newKey;
+            console.log('[HarmonyLab] Updating key center to:', newKey);
 
-            // HM26: Re-render chords after key accept so score stays fresh
-            if (typeof loadSongChords === 'function') {
-                loadSongChords();
+            // 1. Update all key label elements immediately — no network required
+            const elementsToUpdate = {
+                'detected-key-header': `Detected: ${newKey}`,
+                'detected-key': `Key: ${newKey}`,
+                'ai-detected-key': newKey
+            };
+
+            for (const [id, text] of Object.entries(elementsToUpdate)) {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.textContent = text;
+                    el.style.display = '';
+                }
             }
+
+            // 2. Safely update in-memory state
+            if (window.analysisData) {
+                window.analysisData.detected_key = newKey;
+            } else {
+                window.analysisData = { detected_key: newKey };
+            }
+
+            // 3. DO NOT call loadSongChords() — it blanks the score
         }
 
         // HM22: Manual key edit
