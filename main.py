@@ -17,7 +17,7 @@ from app.api.routes import songs, sections, vocabulary, measures, chords, progre
 
 logger = logging.getLogger(__name__)
 
-VERSION = "2.33.0"  # HM27: Remove loadSongChords() from updateKeyDisplays — targeted DOM update only
+VERSION = "2.34.0"  # HM28B: Full state reload after Accept — loadSong+loadSongChords+loadAnalysis
 
 app = FastAPI(
     title="Harmony Lab API",
