@@ -17,7 +17,7 @@ from app.api.routes import songs, sections, vocabulary, measures, chords, progre
 
 logger = logging.getLogger(__name__)
 
-VERSION = "2.34.0"  # HM28B: Full state reload after Accept — loadSong+loadSongChords+loadAnalysis
+VERSION = "2.35.0"  # HM29: Key center detection fix, transposition fix, brackets+color verification
 
 app = FastAPI(
     title="Harmony Lab API",

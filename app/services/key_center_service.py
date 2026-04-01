@@ -226,20 +226,33 @@ def detect_key_centers(chords: List[Dict], detected_key: str = None) -> List[Dic
         scale = h_minor_scale if 'minor' in mode else major_scale
         return interval in scale
 
-    # Step 3: Assign each chord to the best-fit key
+    # Step 3: Assign each chord to the best-fit key using scoring
+    # Score each candidate key for each chord; prefer home key on ties
     assignments = []
     for i, p in enumerate(parsed):
         if i in chord_key_map:
             assignments.append(chord_key_map[i])
         elif p:
             best = pattern_keys[0]
+            best_score = -1
             for k, m in pattern_keys:
+                score = 0
                 if _chord_fits_key(p['root_pc'], k, m):
+                    score += 2
+                # Bonus for home key to prevent fragmentation
+                if k == home_key and m == home_mode:
+                    score += 1
+                # Bonus for keys with strong pattern evidence nearby
+                for pat in patterns:
+                    if pat['target_key'] == k and abs(i - pat['indices'][1]) <= 4:
+                        score += 1
+                        break
+                if score > best_score:
+                    best_score = score
                     best = (k, m)
-                    break
             assignments.append(best)
         else:
-            assignments.append(pattern_keys[0])
+            assignments.append((home_key, home_mode))
 
     # Step 4: Build raw regions from consecutive same-key assignments
     raw_regions = []
