@@ -17,7 +17,7 @@ from app.api.routes import songs, sections, vocabulary, measures, chords, progre
 
 logger = logging.getLogger(__name__)
 
-VERSION = "2.35.0"  # HM29: Key center detection fix, transposition fix, brackets+color verification
+VERSION = "2.36.0"  # HM31B: Accept key center fix, O Barquinho M2 fix, jazz chord notation toggle
 
 app = FastAPI(
     title="Harmony Lab API",
