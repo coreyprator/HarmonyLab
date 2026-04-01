@@ -122,6 +122,7 @@
                     <button class="btn btn-xs stave-btn" onclick="setStaveGrouping(8)" data-bars="8">8-bar</button>
                 </span>
                 <button id="scales-toggle-btn" class="btn btn-xs stave-btn stave-btn-active" onclick="toggleScaleOverlay()" style="margin-left:8px;" title="Show recommended improvisation scale per chord">Scales</button>
+                <button id="notation-toggle-btn" class="btn btn-xs stave-btn" onclick="toggleNotationMode()" style="margin-left:8px;" title="Toggle chord symbol notation: Δ/-/ø/° vs maj7/m7/m7b5/dim7">Δ Symbol</button>
             </div>
             <div class="transpose-controls" id="transpose-controls">
                 <label>Transpose to:</label>
@@ -680,6 +681,13 @@
             await loadAnalysisForHeader();
             // Default to Analysis view (HL-010)
             switchView('analysis');
+            // HM31B: Init notation toggle button state from localStorage
+            const notBtn = document.getElementById('notation-toggle-btn');
+            if (notBtn) {
+                const mode = getNotationMode();
+                notBtn.classList.toggle('stave-btn-active', mode === 'symbol');
+                notBtn.textContent = mode === 'symbol' ? '\u0394 Symbol' : 'Abc Letter';
+            }
             // Load rhythm analysis (FAIL 4)
             loadRhythmAnalysis();
             // HL-006C: Check RLHF status
@@ -2359,6 +2367,33 @@
         // CHORD NOTATION NORMALIZATION (FAIL 2)
         // ==========================================
 
+        // HM31B REQ-007: Notation mode — 'symbol' (Δ/-/ø/°) vs 'letter' (maj7/m7/m7b5/dim7)
+        function getNotationMode() {
+            return localStorage.getItem('hl_notation_mode') || 'letter';
+        }
+
+        function toggleNotationMode() {
+            const current = getNotationMode();
+            const next = current === 'symbol' ? 'letter' : 'symbol';
+            localStorage.setItem('hl_notation_mode', next);
+            // Update toggle button state
+            const btn = document.getElementById('notation-toggle-btn');
+            if (btn) {
+                btn.classList.toggle('stave-btn-active', next === 'symbol');
+                btn.textContent = next === 'symbol' ? '\u0394 Symbol' : 'Abc Letter';
+            }
+            // Re-render all chord symbols
+            refreshChordNotation();
+        }
+
+        function refreshChordNotation() {
+            for (const chord of allChords) {
+                if (chord.symbolElement && chord.symbol) {
+                    chord.symbolElement.textContent = normalizeChordDisplay(chord.symbol);
+                }
+            }
+        }
+
         function normalizeChordDisplay(symbol) {
             if (!symbol) return '';
             // Extract root note first
@@ -2367,13 +2402,28 @@
             const root = rootMatch[1];
             let quality = rootMatch[2];
 
-            // Normalize MuseScore jazz font notation
+            // Normalize MuseScore jazz font notation to letter mode first
             quality = quality.replace(/^\^/, 'maj');      // ^7 -> maj7, ^9 -> maj9
             quality = quality.replace(/^-/, 'm');          // -7 -> m7, -9 -> m9
             quality = quality.replace(/^0(\d)/, 'dim$1');  // 07 -> dim7
             quality = quality.replace(/^o(\d)/, 'dim$1');  // o7 -> dim7
             if (quality === 't' || quality === '\u0394') quality = 'maj7';
             if (quality === 'Maj') quality = '';
+
+            // HM31B REQ-007: Convert to jazz symbol notation if mode is 'symbol'
+            if (getNotationMode() === 'symbol') {
+                quality = quality
+                    .replace(/^maj7/, '\u03947')       // maj7 → Δ7
+                    .replace(/^maj9/, '\u03949')       // maj9 → Δ9
+                    .replace(/^maj13/, '\u039413')     // maj13 → Δ13
+                    .replace(/^maj/, '\u0394')         // maj → Δ
+                    .replace(/^m7b5/, '\u00F87')       // m7b5 → ø7
+                    .replace(/^dim7/, '\u00B07')       // dim7 → °7
+                    .replace(/^dim/, '\u00B0')         // dim → °
+                    .replace(/^min/, '-')              // min → -
+                    .replace(/^m(\d)/, '-$1')          // m7 → -7, m9 → -9
+                    .replace(/^m$/, '-');              // m → -
+            }
 
             return root + quality;
         }
@@ -4288,6 +4338,8 @@
                 if (!resp.ok) throw new Error('HTTP ' + resp.status);
                 updateKeyDisplays(newKey);
                 cancelKeyEdit();
+                // HM31B: Reload analysis + key centers with new key
+                if (typeof loadAnalysis === 'function') await loadAnalysis(true);
             } catch (err) {
                 console.error('[HM22] Manual key update failed:', err);
                 alert('Failed to update key: ' + err.message);
@@ -4327,12 +4379,9 @@
                     if (actions) {
                         if (outcome === 'accepted') {
                             actions.innerHTML = '<div style="font-size:11px;color:#22c55e;font-weight:600;">✅ Accepted' + (data.key_updated ? ' — key updated to ' + data.key_updated : '') + '</div>';
-                            // HM28B: Full state reload from server after accept
-                            if (typeof loadSong === 'function') {
-                                await loadSong();
-                                if (typeof loadSongChords === 'function') await loadSongChords();
-                                if (typeof loadAnalysis === 'function') await loadAnalysis();
-                            }
+                            // HM31B: Force-refresh analysis (cache invalidated by backend)
+                            // then reload key centers with updated detected_key
+                            if (typeof loadAnalysis === 'function') await loadAnalysis(true);
                         } else if (outcome === 'rejected') {
                             actions.innerHTML = '<div style="font-size:11px;color:#ef4444;">✕ Rejected' + (rejectionReason ? ': ' + rejectionReason : '') + '</div>';
                         } else {

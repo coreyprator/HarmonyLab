@@ -273,6 +273,34 @@ def _parse_mscx_content(xml_content: str, default_title: str) -> ParsedScore:
             measures_with_harmony += 1
             logger.debug("Measure %d: %d harmony element(s)", measure_num, harmony_in_measure)
 
+    # HM31B BUG-007: Fill empty measures by carrying forward the previous chord.
+    # Jazz lead sheets omit chord symbols in measures where the harmony continues.
+    # Without this, measures like M2 in "O Barquinho" are missing from HarmonyLab.
+    if chords and measures_scanned > 0:
+        measures_with_chords = {c.measure_number for c in chords}
+        last_chord_symbol = None
+        filled = 0
+        for m_num in range(1, measures_scanned + 1):
+            if m_num in measures_with_chords:
+                # Update last known chord (use first chord in the measure)
+                for c in chords:
+                    if c.measure_number == m_num:
+                        last_chord_symbol = c.chord_symbol
+                        break
+            elif last_chord_symbol is not None:
+                # Carry forward previous chord into empty measure
+                chords.append(ScoreChord(
+                    measure_number=m_num,
+                    beat_position=1.0,
+                    chord_symbol=last_chord_symbol,
+                    chord_order=1,
+                ))
+                filled += 1
+        if filled:
+            # Re-sort by measure number to maintain order
+            chords.sort(key=lambda c: (c.measure_number, c.chord_order))
+            logger.info("BUG-007 fix: filled %d empty measures with carried-forward chords", filled)
+
     logger.info(
         "MuseScore parse complete: measures_scanned=%d measures_with_harmony=%d total_chords=%d",
         measures_scanned, measures_with_harmony, len(chords)
