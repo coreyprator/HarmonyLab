@@ -21,7 +21,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v2.36.0</div>
+        <div class="nav-version">v2.37.0</div>
     </nav>
 
     <header>
@@ -1485,6 +1485,28 @@
                 }
             }
 
+            // HL-044: Render transition chord annotations (tritone subs, dim passing)
+            if (currentView === 'analysis') {
+                for (const ac of analyzedChords) {
+                    if (!ac.transition_type) continue;
+                    const chordInfo = allChords[ac.index];
+                    if (!chordInfo) continue;
+                    let transEl = chordInfo.element.querySelector('.transition-annotation');
+                    if (!transEl) {
+                        transEl = document.createElement('div');
+                        transEl.className = 'transition-annotation';
+                        chordInfo.element.appendChild(transEl);
+                    }
+                    transEl.textContent = ac.transition_label || ac.transition_type;
+                    if (ac.transition_type === 'tritone_sub') {
+                        transEl.style.cssText = 'font-size:9px;color:#7c3aed;background:#ede9fe;border:1px solid #7c3aed;border-radius:3px;padding:1px 4px;margin-top:2px;white-space:nowrap;';
+                    } else {
+                        transEl.style.cssText = 'font-size:9px;color:#6b7280;background:#f3f4f6;border:1px solid #9ca3af;border-radius:3px;padding:1px 4px;margin-top:2px;white-space:nowrap;';
+                    }
+                    transEl.style.display = '';
+                }
+            }
+
             // Render patterns
             renderPatterns(analysisData.patterns || []);
 
@@ -1758,32 +1780,87 @@
         }
 
         function applyStaveGrouping() {
-            // Remove existing stave labels and line-breaks
+            // Remove existing stave labels, line-breaks, and phrase dividers
             document.querySelectorAll('.stave-row-label').forEach(el => el.remove());
             document.querySelectorAll('.stave-line-break').forEach(el => el.remove());
+            document.querySelectorAll('.phrase-divider').forEach(el => el.remove());
+            document.querySelectorAll('.phrase-label').forEach(el => el.remove());
             document.querySelectorAll('.measure-block').forEach(mb => {
                 mb.style.borderLeft = '';
             });
 
-            // Group measure-blocks into stave rows with forced line-breaks
+            // HL-046: Determine phrase boundaries from section markers or default grouping
+            const sectionMarkers = analysisData?.section_markers || [];
             const measureBlocks = document.querySelectorAll('.measure-block');
             if (measureBlocks.length === 0) return;
 
+            // Build phrase boundaries: use section markers if available, else default to grouping size
+            const phraseBoundaries = []; // [{measureIndex, label}]
+            if (sectionMarkers.length > 0) {
+                // Use rehearsal marks as phrase boundaries
+                const markerMeasures = new Map();
+                sectionMarkers.forEach(m => {
+                    markerMeasures.set(m.measure || m.measure_number, m.label || m.text || '');
+                });
+                let phraseCount = 0;
+                measureBlocks.forEach((mb, i) => {
+                    const mn = parseInt(mb.querySelector('.measure-number')?.textContent) || (i + 1);
+                    if (markerMeasures.has(mn)) {
+                        const markerLabel = markerMeasures.get(mn);
+                        phraseBoundaries.push({index: i, label: markerLabel || String.fromCharCode(65 + phraseCount)});
+                        phraseCount++;
+                    }
+                });
+            }
+
+            // Default: create phrase boundaries every N bars if no markers found
+            if (phraseBoundaries.length === 0) {
+                const groupSize = currentBarsPerStave;
+                measureBlocks.forEach((mb, i) => {
+                    if (i % groupSize === 0) {
+                        phraseBoundaries.push({index: i, label: `Phrase ${Math.floor(i / groupSize) + 1}`});
+                    }
+                });
+            }
+
+            // Build a set of phrase-start indices for quick lookup
+            const phraseStartSet = new Set(phraseBoundaries.map(p => p.index));
+            const phraseMap = new Map(phraseBoundaries.map(p => [p.index, p.label]));
+
             measureBlocks.forEach((mb, i) => {
                 const measureNum = parseInt(mb.querySelector('.measure-number')?.textContent) || (i + 1);
-                // Insert flex line-break before every Nth measure to force row wrap
-                if (i > 0 && i % currentBarsPerStave === 0) {
+
+                // Insert phrase divider + line-break before phrase boundaries (except first)
+                if (i > 0 && phraseStartSet.has(i)) {
+                    // Visual phrase divider
+                    const divider = document.createElement('div');
+                    divider.className = 'phrase-divider';
+                    divider.style.cssText = 'flex-basis:100%;height:2px;background:linear-gradient(to right,transparent,var(--text-muted,#6b7280),transparent);margin:6px 0 4px 0;opacity:0.5;';
+                    mb.parentNode.insertBefore(divider, mb);
+                } else if (i > 0 && i % currentBarsPerStave === 0 && !phraseStartSet.has(i)) {
+                    // Regular line break for non-phrase rows
                     const lineBreak = document.createElement('div');
                     lineBreak.className = 'stave-line-break';
                     lineBreak.style.cssText = 'flex-basis:100%;height:8px;';
                     mb.parentNode.insertBefore(lineBreak, mb);
                 }
-                // Add row label at start of each stave
+
+                // Add phrase label at phrase starts
+                if (phraseMap.has(i)) {
+                    const label = document.createElement('div');
+                    label.className = 'phrase-label';
+                    label.textContent = phraseMap.get(i);
+                    label.style.cssText = 'position:absolute;left:-28px;top:-2px;font-size:10px;color:#3b82f6;font-weight:700;white-space:nowrap;';
+                    mb.style.position = 'relative';
+                    mb.appendChild(label);
+                }
+
+                // Add row label at start of each stave row
                 if (i % currentBarsPerStave === 0) {
                     const label = document.createElement('div');
                     label.className = 'stave-row-label';
                     label.textContent = measureNum;
-                    label.style.cssText = 'position:absolute;left:-24px;top:0;font-size:10px;color:var(--text-muted,#6b7280);font-weight:600;';
+                    label.style.cssText = 'position:absolute;left:-24px;top:12px;font-size:10px;color:var(--text-muted,#6b7280);font-weight:600;';
                     mb.style.position = 'relative';
                     mb.appendChild(label);
                 }

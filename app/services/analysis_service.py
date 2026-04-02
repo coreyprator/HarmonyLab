@@ -125,6 +125,73 @@ class HarmonicAnalyzer:
                 if root is not None and nxt_root is not None:
                     if (root - nxt_root) % 12 == 7:
                         ch['secondary_dominant_target'] = nxt_sym
+
+        # HL-044: Detect tritone substitutions and diminished passing chords
+        analyzed = self._detect_transition_chords(analyzed)
+
+        return analyzed
+
+    def _detect_transition_chords(self, analyzed: list) -> list:
+        """HL-044: Detect tritone substitutions and diminished passing chords.
+
+        Tritone sub: dom7 chord whose root is a tritone (6 semitones) from the
+        next chord's root, substituting for V7 of that chord.
+        Diminished passing: dim/dim7 chord whose root is a half-step below or
+        above the next chord's root (chromatic passing function).
+        """
+        import re
+
+        def get_root_semitone(symbol: str):
+            _NOTE_SEMI = {
+                'C': 0, 'C#': 1, 'Db': 1, 'D': 2, 'D#': 3, 'Eb': 3,
+                'E': 4, 'F': 5, 'F#': 6, 'Gb': 6, 'G': 7, 'G#': 8,
+                'Ab': 8, 'A': 9, 'A#': 10, 'Bb': 10, 'B': 11,
+            }
+            m = re.match(r'^([A-G][#b]?)', symbol or '')
+            if not m:
+                return None
+            return _NOTE_SEMI.get(m.group(1))
+
+        def is_dom7_quality(symbol: str) -> bool:
+            if not symbol:
+                return False
+            quality = re.sub(r'^[A-G][#b]?', '', symbol)
+            return bool(re.match(r'^(7|7b9|7#9|7#11|9|13|7alt|7sus4|9sus4)$', quality))
+
+        def is_dim_quality(symbol: str) -> bool:
+            if not symbol:
+                return False
+            quality = re.sub(r'^[A-G][#b]?', '', symbol)
+            return bool(re.match(r'^(dim|dim7|o|o7|07|°|°7)$', quality))
+
+        for i, ch in enumerate(analyzed):
+            sym = ch.get('symbol', '')
+            if i >= len(analyzed) - 1:
+                continue
+            nxt_sym = analyzed[i + 1].get('symbol', '')
+            root = get_root_semitone(sym)
+            nxt_root = get_root_semitone(nxt_sym)
+            if root is None or nxt_root is None:
+                continue
+
+            interval = (root - nxt_root) % 12
+
+            # Tritone substitution: dom7 resolving down a half-step (tritone = 6 semitones from V)
+            if is_dom7_quality(sym) and interval == 1:
+                # This is a tritone sub if the "real" V would be 7 semitones above next root
+                # SubV root is 6 semitones from the "real" V root
+                ch['transition_type'] = 'tritone_sub'
+                ch['transition_label'] = f'SubV7/{nxt_sym.split("/")[0]}'
+
+            # Diminished passing chord: dim/dim7 a half-step below or above next chord
+            if is_dim_quality(sym):
+                if interval == 1:  # half-step above → descending passing
+                    ch['transition_type'] = 'dim_passing'
+                    ch['transition_label'] = f'dim pass → {nxt_sym.split("/")[0]}'
+                elif interval == 11:  # half-step below → ascending passing
+                    ch['transition_type'] = 'dim_passing'
+                    ch['transition_label'] = f'dim pass → {nxt_sym.split("/")[0]}'
+
         return analyzed
 
     def _detect_key(self, chords: List[str]) -> tuple:
