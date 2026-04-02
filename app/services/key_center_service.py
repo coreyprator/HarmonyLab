@@ -382,8 +382,8 @@ def detect_turnarounds(chords: List[Dict]) -> List[Dict]:
             pcs = [get_pc(s) for s in syms]
             if None in pcs:
                 continue
-            # Verify descending fourths: each root is 5 semitones above the next (= P4 down)
-            intervals = [(pcs[j] - pcs[j+1]) % 12 for j in range(3)]
+            # Verify ascending P4s: each next root is 5 semitones above current (iii→vi→ii→V)
+            intervals = [(pcs[j+1] - pcs[j]) % 12 for j in range(3)]
             if all(iv == 5 for iv in intervals):
                 turnarounds.append({
                     'start_measure': c1.get('measure', i),
