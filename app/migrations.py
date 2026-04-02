@@ -153,6 +153,9 @@ def run_migrations():
     # Migration 13: HarmonicAnalysisExchanges table (HM18)
     _migration_13_harmonic_analysis_exchanges(db)
 
+    # Migration 14: analysis_rules table (REQ-009 / HM30B)
+    _migration_14_analysis_rules(db)
+
     logger.info("Migrations complete.")
 
 
@@ -1035,3 +1038,51 @@ def _migration_13_harmonic_analysis_exchanges(db):
             logger.info("  Migration 13: HarmonicAnalysisExchanges table already exists.")
     except Exception as e:
         logger.warning(f"  Migration 13 warning: {e}")
+
+
+def _migration_14_analysis_rules(db):
+    """REQ-009 / HM30B: Editable harmonic analysis rules table."""
+    try:
+        count = db.execute_scalar(
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'analysis_rules'"
+        )
+        if count == 0:
+            logger.info("  Migration 14: Creating analysis_rules table...")
+            db.execute_non_query("""
+                CREATE TABLE analysis_rules (
+                    id INT IDENTITY(1,1) PRIMARY KEY,
+                    rule_order INT NOT NULL DEFAULT 0,
+                    category NVARCHAR(50) NOT NULL,
+                    title NVARCHAR(200) NOT NULL,
+                    rule_text NVARCHAR(MAX) NOT NULL,
+                    active BIT DEFAULT 1,
+                    created_at DATETIME DEFAULT GETDATE(),
+                    updated_at DATETIME DEFAULT GETDATE()
+                )
+            """)
+            logger.info("  Migration 14: analysis_rules table created.")
+            _seed_analysis_rules(db)
+        else:
+            logger.info("  Migration 14: analysis_rules table already exists.")
+    except Exception as e:
+        logger.warning(f"  Migration 14 warning: {e}")
+
+
+def _seed_analysis_rules(db):
+    """Seed initial analysis rules from Darren session feedback."""
+    rules = [
+        (1, 'key_center', 'Find all ii-V progressions first',
+         'The first step in harmonic analysis is to identify all ii-V progressions. These are the strongest indicators of key center.'),
+        (2, 'key_center', 'Look for root movements by circle of 5ths',
+         'Trace the root movement of chords around the circle of 5ths. Consistent movement by 5ths indicates a key center.'),
+        (3, 'key_center', 'Minor to dominant = same family clue',
+         'If you see a minor chord moving to a dominant chord, they are likely in the same harmonic family. The dominant resolves to the tonic, revealing the key center.'),
+        (4, 'pattern', 'iii-vi-ii-V is a turnaround',
+         'The progression iii-vi-ii-V is a turnaround. If vi is minor (not dominant), the turnaround is in harmonic minor context.'),
+    ]
+    for order, cat, title, text in rules:
+        db.execute_non_query(
+            "INSERT INTO analysis_rules (rule_order, category, title, rule_text) VALUES (?, ?, ?, ?)",
+            (order, cat, title, text)
+        )
+    logger.info(f"  Seeded {len(rules)} analysis rules.")

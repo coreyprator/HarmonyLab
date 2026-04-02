@@ -125,17 +125,19 @@ async def get_patterns(
     song_id: int,
     db: DatabaseConnection = Depends(get_db),
 ):
-    """Get detected harmonic patterns for a song."""
-    from app.services.key_center_service import detect_ii_v_i_patterns
+    """Get detected harmonic patterns for a song (ii-V-I + turnarounds)."""
+    from app.services.key_center_service import detect_ii_v_i_patterns, detect_turnarounds
 
     analysis = await get_analysis(song_id, db=db)
     chords = analysis.get('chords', [])
 
     patterns = detect_ii_v_i_patterns(chords)
+    turnarounds = detect_turnarounds(chords)
 
     return {
         'song_id': song_id,
         'patterns': patterns,
+        'turnarounds': turnarounds,
     }
 
 
@@ -264,6 +266,8 @@ async def get_analysis(
             result = _enrich_note_counts(result, song_id, db)
             # HL-006: Apply secondary dominant flags (cache predates this detection)
             result = _enrich_secondary_dominants(result)
+            # HL-044: Apply transition chord annotations (tritone subs, dim passing)
+            result = _enrich_transition_chords(result)
             return _apply_overrides(result, song_id, db)
 
     # Verify song exists
@@ -866,6 +870,56 @@ def _enrich_secondary_dominants(result: dict) -> dict:
     return result
 
 
+def _enrich_transition_chords(result: dict) -> dict:
+    """HL-044: Detect tritone subs and diminished passing chords on cached results."""
+    import re
+    _NOTE_SEMI = {
+        'C': 0, 'C#': 1, 'Db': 1, 'D': 2, 'D#': 3, 'Eb': 3, 'E': 4,
+        'F': 5, 'F#': 6, 'Gb': 6, 'G': 7, 'G#': 8, 'Ab': 8, 'A': 9,
+        'A#': 10, 'Bb': 10, 'B': 11,
+    }
+
+    def get_root(symbol):
+        m = re.match(r'^([A-G][#b]?)', symbol or '')
+        return _NOTE_SEMI.get(m.group(1)) if m else None
+
+    def is_dom7(symbol):
+        if not symbol:
+            return False
+        q = re.sub(r'^[A-G][#b]?', '', symbol)
+        return bool(re.match(r'^(7|7b9|7#9|7#11|9|13|7alt|7sus4|9sus4)$', q))
+
+    def is_dim(symbol):
+        if not symbol:
+            return False
+        q = re.sub(r'^[A-G][#b]?', '', symbol)
+        return bool(re.match(r'^(dim|dim7|o|o7|07|°|°7)$', q))
+
+    chords = result.get('chords', [])
+    for i, ch in enumerate(chords):
+        if ch.get('transition_type'):
+            continue  # already annotated
+        if i >= len(chords) - 1:
+            continue
+        sym = ch.get('symbol', '')
+        nxt_sym = chords[i + 1].get('symbol', '')
+        root = get_root(sym)
+        nxt_root = get_root(nxt_sym)
+        if root is None or nxt_root is None:
+            continue
+        interval = (root - nxt_root) % 12
+
+        if is_dom7(sym) and interval == 1:
+            ch['transition_type'] = 'tritone_sub'
+            ch['transition_label'] = f'SubV7/{nxt_sym.split("/")[0]}'
+        elif is_dim(sym):
+            if interval in (1, 11):
+                ch['transition_type'] = 'dim_passing'
+                ch['transition_label'] = f'dim pass \u2192 {nxt_sym.split("/")[0]}'
+
+    return result
+
+
 def _apply_overrides(result: dict, song_id: int, db: DatabaseConnection) -> dict:
     """Apply user overrides to analysis result."""
     overrides = db.execute_query(
@@ -1165,6 +1219,21 @@ async def ai_harmonic_analysis(song_id: int, request: AIAnalysisRequest,
     prior_ids = request.prior_exchange_ids[-5:] if request.prior_exchange_ids else []
     prior_context = _build_context_from_exchanges(prior_ids, db)
 
+    # 4.5. REQ-009: Load active analysis rules to prepend to prompt
+    analysis_rules_text = ""
+    try:
+        rules_rows = db.execute_query(
+            "SELECT rule_order, category, title, rule_text FROM analysis_rules "
+            "WHERE active = 1 ORDER BY rule_order, id"
+        )
+        if rules_rows:
+            analysis_rules_text = "\n".join([
+                f"{r['rule_order']}. [{r['category']}] {r['title']}: {r['rule_text']}"
+                for r in rules_rows
+            ])
+    except Exception as e:
+        logger.warning(f"[AI-ANALYSIS] Could not fetch analysis rules: {e}")
+
     # 5. Call Anthropic API
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
@@ -1176,6 +1245,9 @@ Selected measures: {request.measures}
 Detected chords: {chord_prog_str}
 Prior RLHF overrides for this song: {json.dumps(prior_overrides) if prior_overrides else 'None'}
 User comment: {request.comment or 'No comment provided'}"""
+
+    if analysis_rules_text:
+        user_prompt += f"\n\nAnalysis rules to follow:\n{analysis_rules_text}"
 
     if prior_context:
         user_prompt += f"\n\nPrior conversation exchanges:\n{prior_context}"

@@ -13,11 +13,11 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from config.settings import settings
 
 # Import routes
-from app.api.routes import songs, sections, vocabulary, measures, chords, progress, quiz, imports, analysis, auth, exports, midi_input, riffs, improvisation
+from app.api.routes import songs, sections, vocabulary, measures, chords, progress, quiz, imports, analysis, auth, exports, midi_input, riffs, improvisation, rules
 
 logger = logging.getLogger(__name__)
 
-VERSION = "2.36.0"  # HM31B: Accept key center fix, O Barquinho M2 fix, jazz chord notation toggle
+VERSION = "2.37.0"  # HM30B: Turnarounds, phrase breaks, transition chords, analysis rules table
 
 app = FastAPI(
     title="Harmony Lab API",
@@ -125,6 +125,7 @@ app.include_router(exports.router)
 app.include_router(midi_input.router)
 app.include_router(riffs.router)
 app.include_router(improvisation.router)
+app.include_router(rules.router)
 
 
 if __name__ == "__main__":
