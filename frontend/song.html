@@ -2030,6 +2030,10 @@
                     loadKeyCenters();
                 }
                 applyStaveGrouping();
+                // HM30C: Load dedicated badge endpoints
+                loadPatternBadges(songId);
+                loadPhraseBreaks(songId);
+                loadTransitionBadges(songId);
             } else {
                 loadAnalysis();
             }
