@@ -1427,20 +1427,16 @@ async def record_exchange_outcome(song_id: int, exchange_id: int,
             )
             if existing:
                 db.execute_non_query(
-                    "UPDATE SongAnalysis SET detected_key = ?, updated_at = GETDATE() WHERE song_id = ?",
-                    (suggested_key, song_id)
+                    "UPDATE SongAnalysis SET detected_key = ?, manual_key_override = ?, "
+                    "analysis_json = NULL, updated_at = GETDATE() WHERE song_id = ?",
+                    (suggested_key, suggested_key, song_id)
                 )
             else:
                 db.execute_non_query(
-                    "INSERT INTO SongAnalysis (song_id, detected_key) VALUES (?, ?)",
-                    (song_id, suggested_key)
+                    "INSERT INTO SongAnalysis (song_id, detected_key, manual_key_override) VALUES (?, ?, ?)",
+                    (song_id, suggested_key, suggested_key)
                 )
-            # HM31B: Invalidate cached analysis so next GET re-analyzes with new key
-            db.execute_non_query(
-                "UPDATE SongAnalysis SET analysis_json = NULL WHERE song_id = ?",
-                (song_id,)
-            )
-            logger.info(f"[AI-ANALYSIS] Key updated to '{suggested_key}' for song {song_id}")
+            logger.info(f"[AI-ANALYSIS] Key updated to '{suggested_key}' for song {song_id} (manual_key_override set)")
             return {"status": "ok", "outcome": body.outcome, "key_updated": suggested_key}
 
     return {"status": "ok", "outcome": body.outcome}
@@ -1459,20 +1455,16 @@ async def set_manual_key(song_id: int, body: ManualKeyRequest,
     )
     if existing:
         db.execute_non_query(
-            "UPDATE SongAnalysis SET detected_key = ?, updated_at = GETDATE() WHERE song_id = ?",
-            (body.detected_key, song_id)
+            "UPDATE SongAnalysis SET detected_key = ?, manual_key_override = ?, "
+            "analysis_json = NULL, updated_at = GETDATE() WHERE song_id = ?",
+            (body.detected_key, body.detected_key, song_id)
         )
     else:
         db.execute_non_query(
-            "INSERT INTO SongAnalysis (song_id, detected_key) VALUES (?, ?)",
-            (song_id, body.detected_key)
+            "INSERT INTO SongAnalysis (song_id, detected_key, manual_key_override) VALUES (?, ?, ?)",
+            (song_id, body.detected_key, body.detected_key)
         )
-    # HM31B: Invalidate cached analysis so next GET re-analyzes with new key
-    db.execute_non_query(
-        "UPDATE SongAnalysis SET analysis_json = NULL WHERE song_id = ?",
-        (song_id,)
-    )
-    logger.info(f"[MANUAL-KEY] Key set to '{body.detected_key}' for song {song_id}")
+    logger.info(f"[MANUAL-KEY] Key set to '{body.detected_key}' for song {song_id} (manual_key_override set)")
     return {"status": "ok", "detected_key": body.detected_key}
 
 

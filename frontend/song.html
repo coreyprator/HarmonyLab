@@ -2484,6 +2484,8 @@
             quality = quality.replace(/^-/, 'm');          // -7 -> m7, -9 -> m9
             quality = quality.replace(/^0(\d)/, 'dim$1');  // 07 -> dim7
             quality = quality.replace(/^o(\d)/, 'dim$1');  // o7 -> dim7
+            // HM31C: handle 't' prefix (MuseScore triangle = maj): t → maj7, t7 → maj7, t9 → maj9
+            quality = quality.replace(/^t(\d)/, 'maj$1');  // t7 → maj7, t9 → maj9
             if (quality === 't' || quality === '\u0394') quality = 'maj7';
             if (quality === 'Maj') quality = '';
 
