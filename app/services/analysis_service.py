@@ -43,7 +43,11 @@ class HarmonicAnalyzer:
 
         # Detect or use override key
         if key_override:
-            self.current_key = key.Key(key_override)
+            # HM31C: parse "Db major" / "C minor" / "C" into music21 Key properly
+            parts = key_override.split()
+            tonic = parts[0]
+            mode = parts[1] if len(parts) > 1 else 'major'
+            self.current_key = key.Key(tonic, mode)
             confidence = 1.0
         elif midi_notes:
             self.current_key, confidence = self._detect_key_from_notes(
