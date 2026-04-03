@@ -520,19 +520,30 @@ async def get_analysis(
         result['form'] = form_override
         result['form_source'] = 'override'
     else:
-        # Form detection based on measure count
-        tm = measure_count or 0
-        if tm <= 12:
-            result['form'] = '12-bar blues'
-        elif tm <= 16:
-            result['form'] = f'{tm}-bar'
-        elif tm <= 36:
-            result['form'] = f'AABA ({tm} bars)'
-        elif tm <= 48:
-            result['form'] = f'{tm}-bar (extended)'
-        elif tm > 0:
-            result['form'] = f'{tm}-bar (through-composed)'
-        result['form_source'] = 'auto'
+        # HM32 REQ-008: Prefer section markers (rehearsal marks) for form detection
+        section_markers = result.get('section_markers', [])
+        if section_markers:
+            labels = [m['label'] for m in section_markers]
+            unique_labels = list(dict.fromkeys(labels))  # preserve order, dedupe
+            if unique_labels:
+                result['form'] = ' '.join(unique_labels)
+                result['form_source'] = 'auto'
+            else:
+                result['form_source'] = 'auto'
+        else:
+            # Fallback: form detection based on measure count
+            tm = measure_count or 0
+            if tm <= 12:
+                result['form'] = '12-bar blues'
+            elif tm <= 16:
+                result['form'] = f'{tm}-bar'
+            elif tm <= 36:
+                result['form'] = f'AABA ({tm} bars)'
+            elif tm <= 48:
+                result['form'] = f'{tm}-bar (extended)'
+            elif tm > 0:
+                result['form'] = f'{tm}-bar (through-composed)'
+            result['form_source'] = 'auto'
 
     # D4: Compute key centers and recompute Roman numerals per region
     try:
