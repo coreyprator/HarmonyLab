@@ -123,6 +123,7 @@
                 </span>
                 <button id="scales-toggle-btn" class="btn btn-xs stave-btn stave-btn-active" onclick="toggleScaleOverlay()" style="margin-left:8px;" title="Show recommended improvisation scale per chord">Scales</button>
                 <button id="notation-toggle-btn" class="btn btn-xs stave-btn" onclick="toggleNotationMode()" style="margin-left:8px;" title="Toggle chord symbol notation: Δ/-/ø/° vs maj7/m7/m7b5/dim7">Δ Symbol</button>
+                <button id="color-coding-toggle" class="btn btn-xs stave-btn stave-btn-active" onclick="toggleColorCoding()" style="margin-left:8px;" title="Toggle key center color coding ON/OFF">Colors</button>
             </div>
             <div class="transpose-controls" id="transpose-controls">
                 <label>Transpose to:</label>
@@ -688,6 +689,9 @@
                 notBtn.classList.toggle('stave-btn-active', mode === 'symbol');
                 notBtn.textContent = mode === 'symbol' ? '\u0394 Symbol' : 'Abc Letter';
             }
+            // HL-040: Init color coding toggle from localStorage
+            const ccBtn = document.getElementById('color-coding-toggle');
+            if (ccBtn) ccBtn.classList.toggle('stave-btn-active', colorCodingEnabled);
             // Load rhythm analysis (FAIL 4)
             loadRhythmAnalysis();
             // HL-006C: Check RLHF status
@@ -1231,6 +1235,35 @@
         }
 
         // ==========================================
+        // COLOR CODING TOGGLE (HL-040)
+        // ==========================================
+
+        let colorCodingEnabled = localStorage.getItem('hl_color_coding') !== 'off';
+
+        function toggleColorCoding() {
+            colorCodingEnabled = !colorCodingEnabled;
+            localStorage.setItem('hl_color_coding', colorCodingEnabled ? 'on' : 'off');
+            const btn = document.getElementById('color-coding-toggle');
+            if (btn) btn.classList.toggle('stave-btn-active', colorCodingEnabled);
+            applyColorCoding();
+        }
+
+        function applyColorCoding() {
+            for (const ac of allChords) {
+                const card = ac.element;
+                if (!colorCodingEnabled) {
+                    // Strip function color classes, keep base chord-card class
+                    card.className = card.className.replace(/\bchord-function-\S+/g, '').trim();
+                    if (!card.classList.contains('chord-card')) card.classList.add('chord-card');
+                }
+            }
+            // Re-render analysis to reapply colors if enabled
+            if (colorCodingEnabled && analysisData) {
+                renderAnalysis();
+            }
+        }
+
+        // ==========================================
         // SECTION COLORS (Group E)
         // ==========================================
 
@@ -1416,8 +1449,10 @@
                 const card = chordInfo.element;
                 const romanEl = chordInfo.romanElement;
 
-                // Set function class and color
-                card.className = 'chord-card chord-function-' + ac.function;
+                // Set function class and color (HL-040: respect color coding toggle)
+                card.className = colorCodingEnabled
+                    ? 'chord-card chord-function-' + ac.function
+                    : 'chord-card';
                 if (ac.is_override) card.classList.add('is-override');
 
                 // HL-TRANSPOSE-001: Update chord symbol display for transposed chords

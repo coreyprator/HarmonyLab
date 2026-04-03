@@ -518,7 +518,17 @@ class HarmonicAnalyzer:
             'm9': 'm9',       # Minor 9
             '-9': 'm9',       # Jazz font m9
             '11': '11',       # 11th
+            'maj11': 'maj11', # Major 11th
+            'min11': 'm11',   # Minor 11th
+            'm11': 'm11',     # Minor 11th
+            '-11': 'm11',     # Jazz font minor 11th
             '13': '13',       # 13th
+            'maj13': 'maj13', # Major 13th
+            'min13': 'm13',   # Minor 13th
+            'm13': 'm13',     # Minor 13th
+            '-13': 'm13',     # Jazz font minor 13th
+            '7#11': '7#11',   # Lydian dominant
+            'maj7#11': 'maj7#11',  # Lydian major 7
             'sus4': 'sus4',   # Suspended 4
             'sus2': 'sus2',   # Suspended 2
             'add9': 'add9',   # Add 9
