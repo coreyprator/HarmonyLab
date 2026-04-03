@@ -348,7 +348,9 @@ class HarmonicAnalyzer:
         quality = re.sub(r'^-', 'm', quality)           # -7 → m7, -9 → m9
         quality = re.sub(r'^0(\d)', r'dim\1', quality)  # 07 → dim7
         quality = re.sub(r'^o(\d)', r'dim\1', quality)  # o7 → dim7
-        if quality in ('t', '\u0394'):                   # triangle = maj7
+        # HM31C: handle 't' prefix (MuseScore triangle = maj): t → maj7, t7 → maj7, t9 → maj9
+        quality = re.sub(r'^t(\d)', r'maj\1', quality)    # t7 → maj7, t9 → maj9
+        if quality in ('t', '\u0394'):                     # bare triangle = maj7
             quality = 'maj7'
         if quality == '6/9':
             quality = '69'

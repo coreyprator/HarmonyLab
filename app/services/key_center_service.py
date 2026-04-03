@@ -38,8 +38,10 @@ def _parse_chord(symbol: str) -> Optional[Dict]:
                or quality == '11' or quality.startswith('7') or quality.startswith('9sus')
                or quality.startswith('13sus'))
     # Handle '^' and 't' as maj7 notation (MuseScore triangle = '^'; 't7' = triangle 7)
+    # HM31C: also handle t9, t13 and bare 't' (MuseScore triangle prefix)
+    _t_match = bool(re.match(r'^[tT]\d*$', quality))
     is_maj7 = (quality.startswith('maj7') or quality.startswith('Maj7') or quality.startswith('M7')
-               or quality.startswith('^') or quality == 't7' or quality == 'T7')
+               or quality.startswith('^') or _t_match)
     is_half_dim = 'm7b5' in quality or '-7b5' in quality or quality.startswith('ø')
     is_dim = 'dim' in quality and not is_half_dim
     is_major_triad = not is_minor and not is_dom7 and not is_dim and not is_half_dim
@@ -168,15 +170,13 @@ def detect_key_centers(chords: List[Dict], detected_key: str = None) -> List[Dic
             home_mode = 'minor' if (p['is_minor'] or p['is_half_dim']) else 'major'
             break
 
-    # Refine with detected_key if it's in the same tonal center
+    # HM31C: When detected_key is provided (e.g. from Accept or manual override),
+    # always use it as the home key — it's authoritative.
     if detected_key:
         dk = detected_key.split()
         if dk:
-            det_name = dk[0]
-            det_mode = 'minor' if 'minor' in detected_key.lower() else 'major'
-            if _are_relative_keys(det_name, det_mode, home_key, home_mode):
-                home_key = det_name
-                home_mode = det_mode
+            home_key = dk[0]
+            home_mode = 'minor' if 'minor' in detected_key.lower() else 'major'
 
     # Step 2: Build chord-key map from patterns (first pattern wins per chord)
     chord_key_map = {}
