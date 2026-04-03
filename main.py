@@ -17,7 +17,7 @@ from app.api.routes import songs, sections, vocabulary, measures, chords, progre
 
 logger = logging.getLogger(__name__)
 
-VERSION = "2.37.0"  # HM31C: Accept key center fix + chord symbol Δ rendering
+VERSION = "2.38.0"  # HM30C: Visual features — turnaround/pattern/transition badges + phrase dividers
 
 app = FastAPI(
     title="Harmony Lab API",

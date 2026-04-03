@@ -141,6 +141,87 @@ async def get_patterns(
     }
 
 
+@router.get("/songs/{song_id}/phrases")
+async def get_phrases(
+    song_id: int,
+    db: DatabaseConnection = Depends(get_db),
+):
+    """HL-046: Get phrase boundaries for a song (from section markers or default 8-bar groups)."""
+    # Check song exists
+    songs = db.execute_query("SELECT id, section_markers_json FROM Songs WHERE id = ?", (song_id,))
+    if not songs:
+        raise HTTPException(status_code=404, detail="Song not found")
+
+    # Get total measures
+    measure_count = db.execute_scalar("""
+        SELECT COUNT(DISTINCT m.measure_number)
+        FROM Measures m JOIN Sections s ON m.section_id = s.id
+        WHERE s.song_id = ?
+    """, (song_id,))
+    total_measures = measure_count or 0
+
+    phrases = []
+    markers_json = songs[0].get('section_markers_json')
+    if markers_json:
+        try:
+            markers = json.loads(markers_json)
+            # Sort by measure
+            markers.sort(key=lambda m: m.get('measure', m.get('measure_number', 0)))
+            for i, marker in enumerate(markers):
+                start = marker.get('measure', marker.get('measure_number', 1))
+                # End is either next marker's measure - 1 or total_measures
+                end = (markers[i + 1].get('measure', markers[i + 1].get('measure_number', total_measures)) - 1) if i + 1 < len(markers) else total_measures
+                label = marker.get('label', marker.get('text', f'Phrase {i + 1}'))
+                phrases.append({
+                    'label': label,
+                    'start_measure': start,
+                    'end_measure': max(start, end),
+                })
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    # Fallback: default 8-bar phrases
+    if not phrases and total_measures > 0:
+        group_size = 8
+        for i in range(0, total_measures, group_size):
+            phrases.append({
+                'label': f'Phrase {i // group_size + 1}',
+                'start_measure': i + 1,
+                'end_measure': min(i + group_size, total_measures),
+            })
+
+    return {
+        'song_id': song_id,
+        'phrases': phrases,
+    }
+
+
+@router.get("/songs/{song_id}/transitions")
+async def get_transitions(
+    song_id: int,
+    db: DatabaseConnection = Depends(get_db),
+):
+    """HL-044: Get transition chords (tritone subs, dim passing) for a song."""
+    analysis = await get_analysis(song_id, db=db)
+    enriched = _enrich_transition_chords(analysis)
+    chords = enriched.get('chords', [])
+
+    transitions = []
+    for ch in chords:
+        if ch.get('transition_type'):
+            transitions.append({
+                'measure': ch.get('measure', 0),
+                'index': ch.get('index', 0),
+                'type': ch['transition_type'],
+                'label': ch.get('transition_label', ch['transition_type']),
+            })
+
+    return {
+        'song_id': song_id,
+        'transitions': transitions,
+    }
+
+
 class TransposeRequest(BaseModel):
     semitones: int
 

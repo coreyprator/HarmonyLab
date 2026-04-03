@@ -21,7 +21,7 @@
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v2.37.0</div>
+        <div class="nav-version">v2.38.0</div>
     </nav>
 
     <header>
@@ -882,6 +882,10 @@
                 renderAnalysis();
                 applyStaveGrouping();
                 loadKeyCenters();
+                // HM30C: Load dedicated badge endpoints
+                loadPatternBadges(songId);
+                loadPhraseBreaks(songId);
+                loadTransitionBadges(songId);
             } catch (err) {
                 console.error('Analysis error:', err);
                 document.getElementById('detected-key').textContent = 'Analysis unavailable';
@@ -1761,6 +1765,100 @@
                 label.textContent = `↻ ${t.type}`;
                 label.title = t.label;
                 info.element.appendChild(label);
+            }
+        }
+
+        // ==========================================
+        // HM30C: Dedicated endpoint badge rendering
+        // ==========================================
+
+        async function loadPatternBadges(songId) {
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/analysis/songs/${songId}/patterns`);
+                if (!res.ok) return;
+                const data = await res.json();
+                // Clean previous badges
+                document.querySelectorAll('.pattern-badge, .turnaround-badge').forEach(el => el.remove());
+                // Render pattern badges (ii-V-I etc.) on each chord in the pattern
+                for (const pattern of (data.patterns || [])) {
+                    for (const idx of (pattern.indices || [])) {
+                        const info = allChords[idx];
+                        if (!info || !info.element) continue;
+                        const badge = document.createElement('span');
+                        badge.className = 'pattern-badge';
+                        badge.textContent = pattern.label || pattern.type;
+                        badge.title = pattern.description || pattern.label || '';
+                        badge.style.cssText = 'font-size:8px;color:#065f46;background:#d1fae5;border:1px solid #10b981;border-radius:8px;padding:1px 6px;margin-top:2px;white-space:nowrap;display:inline-block;';
+                        info.element.appendChild(badge);
+                    }
+                }
+                // Render turnaround badges on each chord in range
+                for (const t of (data.turnarounds || [])) {
+                    for (let idx = t.start_index; idx <= t.end_index; idx++) {
+                        const info = allChords[idx];
+                        if (!info || !info.element) continue;
+                        const badge = document.createElement('span');
+                        badge.className = 'turnaround-badge';
+                        badge.textContent = `↻ ${t.type}`;
+                        badge.title = t.label;
+                        badge.style.cssText = 'font-size:8px;color:#92400e;background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:1px 6px;margin-top:2px;white-space:nowrap;display:inline-block;';
+                        info.element.appendChild(badge);
+                    }
+                }
+            } catch (e) {
+                console.error('loadPatternBadges failed:', e);
+            }
+        }
+
+        async function loadPhraseBreaks(songId) {
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/analysis/songs/${songId}/phrases`);
+                if (!res.ok) return;
+                const data = await res.json();
+                // Clean previous phrase dividers from this function (not stave grouping)
+                document.querySelectorAll('.phrase-divider-api').forEach(el => el.remove());
+                for (const phrase of (data.phrases || [])) {
+                    // Find the last measure-block matching end_measure
+                    const lastMeasure = document.querySelector(`.measure-block[data-measure="${phrase.end_measure}"]`);
+                    if (lastMeasure) {
+                        const divider = document.createElement('div');
+                        divider.className = 'phrase-divider phrase-divider-api';
+                        divider.style.cssText = 'flex-basis:100%;height:3px;background:linear-gradient(to right,transparent,#6366f1,transparent);margin:8px 0 4px 0;opacity:0.7;position:relative;';
+                        const label = document.createElement('span');
+                        label.className = 'phrase-label';
+                        label.textContent = phrase.label;
+                        label.style.cssText = 'position:absolute;left:50%;transform:translateX(-50%);top:-10px;font-size:10px;color:#6366f1;background:var(--bg,#0f0f1a);padding:0 6px;white-space:nowrap;';
+                        divider.appendChild(label);
+                        lastMeasure.after(divider);
+                    }
+                }
+            } catch (e) {
+                console.error('loadPhraseBreaks failed:', e);
+            }
+        }
+
+        async function loadTransitionBadges(songId) {
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/analysis/songs/${songId}/transitions`);
+                if (!res.ok) return;
+                const data = await res.json();
+                // Clean previous transition badges
+                document.querySelectorAll('.transition-badge').forEach(el => el.remove());
+                for (const t of (data.transitions || [])) {
+                    const info = allChords[t.index];
+                    if (!info || !info.element) continue;
+                    const badge = document.createElement('span');
+                    badge.className = 'transition-badge';
+                    badge.textContent = t.label;
+                    if (t.type === 'tritone_sub') {
+                        badge.style.cssText = 'font-size:8px;color:#7c3aed;background:#ede9fe;border:1px solid #7c3aed;border-radius:8px;padding:1px 6px;margin-top:2px;white-space:nowrap;display:inline-block;';
+                    } else {
+                        badge.style.cssText = 'font-size:8px;color:#0369a1;background:#e0f2fe;border:1px solid #0ea5e9;border-radius:8px;padding:1px 6px;margin-top:2px;white-space:nowrap;display:inline-block;';
+                    }
+                    info.element.appendChild(badge);
+                }
+            } catch (e) {
+                console.error('loadTransitionBadges failed:', e);
             }
         }
 
