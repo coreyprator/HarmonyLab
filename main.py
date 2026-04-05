@@ -17,7 +17,7 @@ from app.api.routes import songs, sections, vocabulary, measures, chords, progre
 
 logger = logging.getLogger(__name__)
 
-VERSION = "2.38.0"  # HM32: Form + color prefs + Roman numeral extended types + audio verification
+VERSION = "2.39.1"  # HM35: Key center accept scoped to selected measures, mode field
 
 app = FastAPI(
     title="Harmony Lab API",
