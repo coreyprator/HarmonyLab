@@ -94,6 +94,57 @@ async def get_roman_numeral(
         return {"roman": "?", "function": "unknown", "color": None}
 
 
+def _merge_key_regions(algorithm_regions: list, user_defined_regions: list) -> list:
+    """HM35D: Merge algorithm-detected and user-defined key regions.
+
+    User-defined regions take priority. Algorithm regions are trimmed/split
+    around them. Result is sorted by start_index.
+    """
+    if not user_defined_regions:
+        return algorithm_regions
+
+    merged = []
+    for algo in algorithm_regions:
+        a_start = algo.get('start_index', algo.get('start_chord_index', 0))
+        a_end = algo.get('end_index', algo.get('end_chord_index', 0))
+        remaining = [(a_start, a_end)]
+
+        for ud in user_defined_regions:
+            u_start = ud['start_index']
+            u_end = ud['end_index']
+            new_remaining = []
+            for (rs, re) in remaining:
+                if re < u_start or rs > u_end:
+                    new_remaining.append((rs, re))
+                else:
+                    if rs < u_start:
+                        new_remaining.append((rs, u_start - 1))
+                    if re > u_end:
+                        new_remaining.append((u_end + 1, re))
+            remaining = new_remaining
+
+        for (rs, re) in remaining:
+            if rs <= re:
+                region = dict(algo)
+                region['start_index'] = rs
+                region['end_index'] = re
+                region['start_chord_index'] = rs
+                region['end_chord_index'] = re
+                merged.append(region)
+
+    merged.extend(user_defined_regions)
+    merged.sort(key=lambda r: r.get('start_index', r.get('start_chord_index', 0)))
+
+    # Ensure all regions have both field name variants
+    for r in merged:
+        r['start_index'] = r.get('start_index', r.get('start_chord_index'))
+        r['end_index'] = r.get('end_index', r.get('end_chord_index'))
+        r['start_chord_index'] = r.get('start_chord_index', r.get('start_index'))
+        r['end_chord_index'] = r.get('end_chord_index', r.get('end_index'))
+
+    return merged
+
+
 @router.get("/songs/{song_id}/key-centers")
 async def get_key_centers(
     song_id: int,
@@ -102,36 +153,49 @@ async def get_key_centers(
     """Get key center regions for a song."""
     from app.services.key_center_service import detect_key_centers, detect_ii_v_i_patterns, detect_turnarounds
 
-    # HM35: Check for persisted key regions (user-defined AND algorithm-detected)
-    stored_regions = db.execute_query(
-        "SELECT start_chord_index, end_chord_index, key_center, transition_type, is_user_defined "
-        "FROM KeyRegions WHERE song_id = ? ORDER BY start_chord_index",
-        (song_id,)
-    )
-
     # Get analysis data
     analysis = await get_analysis(song_id, db=db)
     chords = analysis.get('chords', [])
     detected_key = analysis.get('detected_key', 'C')
 
-    if stored_regions:
-        regions = []
-        for sr in stored_regions:
-            kc = sr['key_center']
-            regions.append({
-                'key': kc,
-                'start_chord_index': sr['start_chord_index'],
-                'end_chord_index': sr['end_chord_index'],
-                'key_center': kc,
-                'transition_type': sr['transition_type'],
-                'is_user_defined': bool(sr['is_user_defined']),
-                'mode': 'minor' if 'minor' in kc.lower() else 'major',
-            })
-        # Use first user-defined region's key as detected_key, else first region
-        user_defined = [sr for sr in stored_regions if sr['is_user_defined']]
-        detected_key = (user_defined[0] if user_defined else stored_regions[0])['key_center']
-    else:
-        regions = detect_key_centers(chords, detected_key)
+    # HM35D: Always compute algorithm regions, then merge with user-defined KeyRegions
+    algorithm_regions = detect_key_centers(chords, detected_key)
+    # Ensure algorithm regions have all required fields
+    for ar in algorithm_regions:
+        ar.setdefault('start_chord_index', ar.get('start_index'))
+        ar.setdefault('end_chord_index', ar.get('end_index'))
+        ar.setdefault('key', ar.get('key_center'))
+        ar.setdefault('is_user_defined', False)
+
+    # Get user-defined regions from KeyRegions table
+    user_defined_rows = db.execute_query(
+        "SELECT start_chord_index, end_chord_index, key_center, transition_type, "
+        "is_user_defined "
+        "FROM KeyRegions WHERE song_id = ? AND is_user_defined = 1 "
+        "ORDER BY start_chord_index",
+        (song_id,)
+    )
+    user_defined_regions = []
+    for row in user_defined_rows:
+        kc = row['key_center']
+        user_defined_regions.append({
+            'start_index': row['start_chord_index'],
+            'end_index': row['end_chord_index'],
+            'start_chord_index': row['start_chord_index'],
+            'end_chord_index': row['end_chord_index'],
+            'key_center': kc,
+            'key': kc,
+            'mode': 'minor' if 'minor' in kc.lower() else 'major',
+            'transition_type': row.get('transition_type'),
+            'is_user_defined': True,
+        })
+
+    # Merge: user-defined regions take priority, algorithm regions fill remaining ranges
+    regions = _merge_key_regions(algorithm_regions, user_defined_regions)
+
+    # Use first user-defined region's key as detected_key if available
+    if user_defined_regions:
+        detected_key = user_defined_regions[0]['key_center']
 
     patterns = detect_ii_v_i_patterns(chords)
     turnarounds = detect_turnarounds(chords)
@@ -1555,7 +1619,7 @@ async def record_exchange_outcome(song_id: int, exchange_id: int,
                 )
             logger.info(f"[AI-ANALYSIS] Key updated to '{suggested_key}' for song {song_id} (manual_key_override set)")
 
-            # HM35: Upsert KeyRegions scoped to exchange's selected measures
+            # HM35C: Upsert KeyRegions scoped to exchange's selected measures (positional indices)
             try:
                 selected_measures_str = row[0].get("selected_measures")
                 start_ci = 0
@@ -1563,19 +1627,33 @@ async def record_exchange_outcome(song_id: int, exchange_id: int,
                 if selected_measures_str:
                     measure_nums = [int(m.strip()) for m in selected_measures_str.split(",") if m.strip()]
                     if measure_nums:
+                        placeholders = ",".join("?" * len(measure_nums))
                         chord_range = db.execute_query(
-                            """SELECT MIN(c.id) AS min_ci, MAX(c.id) AS max_ci
-                               FROM Chords c
-                               JOIN Measures m ON c.measure_id = m.id
-                               JOIN Sections s ON m.section_id = s.id
-                               WHERE s.song_id = ? AND m.measure_number IN ({})""".format(
-                                ",".join("?" * len(measure_nums))
-                            ),
-                            [song_id] + measure_nums
+                            """WITH RankedChords AS (
+                                SELECT c.id AS chord_id,
+                                    ROW_NUMBER() OVER (
+                                        ORDER BY s.section_order, m.measure_number, c.chord_order
+                                    ) - 1 AS positional_index
+                                FROM Chords c
+                                JOIN Measures m ON c.measure_id = m.id
+                                JOIN Sections s ON m.section_id = s.id
+                                WHERE s.song_id = ?
+                            )
+                            SELECT MIN(positional_index) AS start_index,
+                                   MAX(positional_index) AS end_index
+                            FROM RankedChords
+                            WHERE chord_id IN (
+                                SELECT c.id
+                                FROM Chords c
+                                JOIN Measures m ON c.measure_id = m.id
+                                JOIN Sections s ON m.section_id = s.id
+                                WHERE s.song_id = ? AND m.measure_number IN ({})
+                            )""".format(placeholders),
+                            [song_id, song_id] + measure_nums
                         )
-                        if chord_range and chord_range[0]["min_ci"] is not None:
-                            start_ci = chord_range[0]["min_ci"]
-                            end_ci = chord_range[0]["max_ci"]
+                        if chord_range and chord_range[0]["start_index"] is not None:
+                            start_ci = chord_range[0]["start_index"]
+                            end_ci = chord_range[0]["end_index"]
 
                 mode = 'minor' if 'minor' in suggested_key.lower() else 'major'
                 db.execute_non_query("""
@@ -1593,7 +1671,7 @@ async def record_exchange_outcome(song_id: int, exchange_id: int,
             except Exception as kr_err:
                 logger.warning(f"[AI-ANALYSIS] KeyRegions upsert failed (non-fatal): {kr_err}")
 
-            return {"status": "ok", "outcome": body.outcome, "key_updated": suggested_key, "accepted_key_center": suggested_key}
+            return {"status": "ok", "outcome": body.outcome, "key_updated": suggested_key, "accepted_key_center": suggested_key, "start_index": start_ci, "end_index": end_ci}
 
     return {"status": "ok", "outcome": body.outcome}
 
