@@ -102,10 +102,10 @@ async def get_key_centers(
     """Get key center regions for a song."""
     from app.services.key_center_service import detect_key_centers, detect_ii_v_i_patterns, detect_turnarounds
 
-    # HM33: Check for user-defined key regions first
-    user_regions = db.execute_query(
+    # HM35: Check for persisted key regions (user-defined AND algorithm-detected)
+    stored_regions = db.execute_query(
         "SELECT start_chord_index, end_chord_index, key_center, transition_type, is_user_defined "
-        "FROM KeyRegions WHERE song_id = ? AND is_user_defined = 1 ORDER BY start_chord_index",
+        "FROM KeyRegions WHERE song_id = ? ORDER BY start_chord_index",
         (song_id,)
     )
 
@@ -114,21 +114,22 @@ async def get_key_centers(
     chords = analysis.get('chords', [])
     detected_key = analysis.get('detected_key', 'C')
 
-    if user_regions:
-        # Use user-defined regions as the primary key center(s)
+    if stored_regions:
         regions = []
-        for ur in user_regions:
-            kc = ur['key_center']
+        for sr in stored_regions:
+            kc = sr['key_center']
             regions.append({
                 'key': kc,
-                'start_chord_index': ur['start_chord_index'],
-                'end_chord_index': ur['end_chord_index'],
+                'start_chord_index': sr['start_chord_index'],
+                'end_chord_index': sr['end_chord_index'],
                 'key_center': kc,
-                'transition_type': ur['transition_type'],
-                'is_user_defined': True,
+                'transition_type': sr['transition_type'],
+                'is_user_defined': bool(sr['is_user_defined']),
                 'mode': 'minor' if 'minor' in kc.lower() else 'major',
             })
-        detected_key = user_regions[0]['key_center']
+        # Use first user-defined region's key as detected_key, else first region
+        user_defined = [sr for sr in stored_regions if sr['is_user_defined']]
+        detected_key = (user_defined[0] if user_defined else stored_regions[0])['key_center']
     else:
         regions = detect_key_centers(chords, detected_key)
 
