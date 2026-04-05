@@ -102,12 +102,36 @@ async def get_key_centers(
     """Get key center regions for a song."""
     from app.services.key_center_service import detect_key_centers, detect_ii_v_i_patterns, detect_turnarounds
 
-    # Get analysis data first
+    # HM33: Check for user-defined key regions first
+    user_regions = db.execute_query(
+        "SELECT start_chord_index, end_chord_index, key_center, transition_type, is_user_defined "
+        "FROM KeyRegions WHERE song_id = ? AND is_user_defined = 1 ORDER BY start_chord_index",
+        (song_id,)
+    )
+
+    # Get analysis data
     analysis = await get_analysis(song_id, db=db)
     chords = analysis.get('chords', [])
     detected_key = analysis.get('detected_key', 'C')
 
-    regions = detect_key_centers(chords, detected_key)
+    if user_regions:
+        # Use user-defined regions as the primary key center(s)
+        regions = []
+        for ur in user_regions:
+            kc = ur['key_center']
+            regions.append({
+                'key': kc,
+                'start_chord_index': ur['start_chord_index'],
+                'end_chord_index': ur['end_chord_index'],
+                'key_center': kc,
+                'transition_type': ur['transition_type'],
+                'is_user_defined': True,
+                'mode': 'minor' if 'minor' in kc.lower() else 'major',
+            })
+        detected_key = user_regions[0]['key_center']
+    else:
+        regions = detect_key_centers(chords, detected_key)
+
     patterns = detect_ii_v_i_patterns(chords)
     turnarounds = detect_turnarounds(chords)
 
@@ -1497,7 +1521,7 @@ async def record_exchange_outcome(song_id: int, exchange_id: int,
 
     # Verify exchange exists for this song
     row = db.execute_query(
-        "SELECT id, suggested_key FROM HarmonicAnalysisExchanges WHERE id = ? AND song_id = ?",
+        "SELECT id, suggested_key, selected_measures FROM HarmonicAnalysisExchanges WHERE id = ? AND song_id = ?",
         (exchange_id, song_id)
     )
     if not row:
@@ -1529,7 +1553,46 @@ async def record_exchange_outcome(song_id: int, exchange_id: int,
                     (song_id, suggested_key, suggested_key)
                 )
             logger.info(f"[AI-ANALYSIS] Key updated to '{suggested_key}' for song {song_id} (manual_key_override set)")
-            return {"status": "ok", "outcome": body.outcome, "key_updated": suggested_key}
+
+            # HM35: Upsert KeyRegions scoped to exchange's selected measures
+            try:
+                selected_measures_str = row[0].get("selected_measures")
+                start_ci = 0
+                end_ci = 999
+                if selected_measures_str:
+                    measure_nums = [int(m.strip()) for m in selected_measures_str.split(",") if m.strip()]
+                    if measure_nums:
+                        chord_range = db.execute_query(
+                            """SELECT MIN(c.id) AS min_ci, MAX(c.id) AS max_ci
+                               FROM Chords c
+                               JOIN Measures m ON c.measure_id = m.id
+                               JOIN Sections s ON m.section_id = s.id
+                               WHERE s.song_id = ? AND m.measure_number IN ({})""".format(
+                                ",".join("?" * len(measure_nums))
+                            ),
+                            [song_id] + measure_nums
+                        )
+                        if chord_range and chord_range[0]["min_ci"] is not None:
+                            start_ci = chord_range[0]["min_ci"]
+                            end_ci = chord_range[0]["max_ci"]
+
+                mode = 'minor' if 'minor' in suggested_key.lower() else 'major'
+                db.execute_non_query("""
+                    MERGE KeyRegions AS target
+                    USING (SELECT ? AS song_id, ? AS start_chord_index, ? AS key_center, 1 AS is_user_defined) AS source
+                    ON target.song_id = source.song_id AND target.start_chord_index = source.start_chord_index
+                    WHEN MATCHED THEN
+                        UPDATE SET key_center = source.key_center, end_chord_index = ?,
+                                   transition_type = 'user_defined', is_user_defined = 1
+                    WHEN NOT MATCHED THEN
+                        INSERT (song_id, start_chord_index, end_chord_index, key_center, transition_type, is_user_defined)
+                        VALUES (source.song_id, ?, ?, source.key_center, 'user_defined', 1);
+                """, (song_id, start_ci, suggested_key, end_ci, start_ci, end_ci))
+                logger.info(f"[AI-ANALYSIS] KeyRegions upserted: song={song_id}, key={suggested_key}, range={start_ci}-{end_ci}, mode={mode}")
+            except Exception as kr_err:
+                logger.warning(f"[AI-ANALYSIS] KeyRegions upsert failed (non-fatal): {kr_err}")
+
+            return {"status": "ok", "outcome": body.outcome, "key_updated": suggested_key, "accepted_key_center": suggested_key}
 
     return {"status": "ok", "outcome": body.outcome}
 
