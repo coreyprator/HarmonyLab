@@ -117,6 +117,10 @@
                         <p style="color:var(--text-muted);font-size:0.9rem;">Upload a fakebook scan. Supported: PDF, JPG, PNG, SVG</p>
                         <input type="file" id="omr-file-input" accept=".pdf,.jpg,.jpeg,.png,.svg">
                         <button class="btn btn-secondary" onclick="omrPreview()" style="margin-top:8px;">Preview</button>
+                        <div id="omr-error" class="omr-error-panel" style="display:none;align-items:center;gap:8px;padding:10px 14px;margin-top:10px;background:var(--bg-danger,#fef2f2);border:1px solid var(--border-danger,#fca5a5);border-radius:6px;color:var(--text-danger,#991b1b);font-size:0.9rem;">
+                            <span class="error-icon">&#9888;&#65039;</span>
+                            <span id="omr-error-message"></span>
+                        </div>
                         <div id="omr-loading" style="display:none"><p class="loading">Running OMR recognition...</p></div>
                         <div id="omr-preview-result" style="display:none;margin-top:12px;">
                             <h4 style="margin:0 0 8px;">Extracted Chords Preview</h4>
@@ -347,23 +351,34 @@
             const fileInput = document.getElementById('omr-file-input');
             const file = fileInput.files[0];
             if (!file) { alert('Select an image or PDF first.'); return; }
-            document.getElementById('omr-loading').style.display = '';
+            document.getElementById('omr-error').style.display = 'none';
             document.getElementById('omr-preview-result').style.display = 'none';
+            document.getElementById('omr-loading').style.display = '';
             const formData = new FormData();
             formData.append('file', file);
             try {
                 const res = await fetch(`${API_BASE}/api/v1/imports/omr/preview`, { method: 'POST', body: formData });
-                if (!res.ok) { const e = await res.json(); throw new Error(e.detail || res.statusText); }
                 const data = await res.json();
+                if (!res.ok) {
+                    document.getElementById('omr-error-message').textContent =
+                        data.detail || `Error ${res.status}: OMR processing failed`;
+                    document.getElementById('omr-error').style.display = 'flex';
+                    return;
+                }
                 const grid = document.getElementById('omr-preview-grid');
                 const chords = data.data.chords || [];
                 grid.innerHTML = chords.slice(0, 20).map(c =>
                     `<div class="midi-chord-cell"><strong>M${c.measure_number}</strong><br>${c.chord_symbol}</div>`
                 ).join('');
                 document.getElementById('omr-title-input').value = data.data.title || '';
+                if (data.data.warning) {
+                    document.getElementById('omr-error-message').textContent = data.data.warning;
+                    document.getElementById('omr-error').style.display = 'flex';
+                }
                 document.getElementById('omr-preview-result').style.display = '';
             } catch (err) {
-                alert('OMR preview failed: ' + err.message);
+                document.getElementById('omr-error-message').textContent = 'Network error \u2014 could not reach server.';
+                document.getElementById('omr-error').style.display = 'flex';
             } finally {
                 document.getElementById('omr-loading').style.display = 'none';
             }
@@ -373,19 +388,26 @@
             const fileInput = document.getElementById('omr-file-input');
             const file = fileInput.files[0];
             if (!file) return;
+            document.getElementById('omr-error').style.display = 'none';
             const titleOverride = document.getElementById('omr-title-input').value.trim();
             const formData = new FormData();
             formData.append('file', file);
             if (titleOverride) formData.append('title_override', titleOverride);
             try {
                 const res = await fetch(`${API_BASE}/api/v1/imports/omr/import`, { method: 'POST', body: formData });
-                if (!res.ok) { const e = await res.json(); throw new Error(e.detail || res.statusText); }
                 const data = await res.json();
+                if (!res.ok) {
+                    document.getElementById('omr-error-message').textContent =
+                        data.detail || `Error ${res.status}: OMR import failed`;
+                    document.getElementById('omr-error').style.display = 'flex';
+                    return;
+                }
                 alert(`Imported: ${data.title} (ID: ${data.song_id})`);
                 closeImportModal();
                 loadSongs();
             } catch (err) {
-                alert('OMR import failed: ' + err.message);
+                document.getElementById('omr-error-message').textContent = 'Network error \u2014 could not reach server.';
+                document.getElementById('omr-error').style.display = 'flex';
             }
         }
 
