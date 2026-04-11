@@ -13,6 +13,38 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+# Target ~1.5M pixels instead of oemer's default 3-4.35M to keep
+# inference time under 120s on Cloud Run CPU.
+_TARGET_PIXELS_LB = 1_000_000
+_TARGET_PIXELS_UB = 1_500_000
+
+
+def _patch_oemer():
+    """Monkey-patch oemer.inference.resize_image to target fewer pixels."""
+    import oemer.inference as inf
+    from PIL import Image as PILImage
+    import numpy as np
+
+    _original_resize = inf.resize_image
+
+    def _fast_resize(image: PILImage.Image):
+        w, h = image.size
+        pix = w * h
+        if _TARGET_PIXELS_LB <= pix <= _TARGET_PIXELS_UB:
+            return image
+        lb = _TARGET_PIXELS_LB / pix
+        ub = _TARGET_PIXELS_UB / pix
+        ratio = pow((lb + ub) / 2, 0.5)
+        tar_w = round(ratio * w)
+        tar_h = round(ratio * h)
+        logger.info(f"OMR resize: {w}x{h} -> {tar_w}x{tar_h} ({tar_w*tar_h} px)")
+        return image.resize((tar_w, tar_h))
+
+    inf.resize_image = _fast_resize
+
+
+_patch_oemer()
+
 
 def _pdf_to_png(pdf_path: str, output_dir: str) -> str:
     """Convert first page of PDF to PNG using pdf2image (requires poppler)."""
@@ -52,9 +84,8 @@ def _run_oemer(image_path: str, output_dir: str) -> str:
     _validate_image(image_path)
 
     from oemer.ete import extract, clear_data
-
-    # Check checkpoints exist
     from oemer import MODULE_PATH
+
     chk_path = os.path.join(MODULE_PATH, "checkpoints/unet_big/model.onnx")
     if not os.path.exists(chk_path):
         raise RuntimeError(f"oemer checkpoints not found at {chk_path}")
