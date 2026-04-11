@@ -803,6 +803,9 @@ async def omr_preview(file: UploadFile = File(...)):
         return {"status": "preview", "data": result}
     except RuntimeError as e:
         raise HTTPException(422, detail=str(e))
+    except Exception as e:
+        logger.exception("OMR preview failed for %s", file.filename)
+        raise HTTPException(500, detail=f"OMR processing error: {e}")
 
 
 @router.post("/omr/import")
