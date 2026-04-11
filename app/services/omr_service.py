@@ -1,12 +1,14 @@
 """
 OMR service — oemer-based pipeline. Inputs: JPG, PNG, SVG, PDF.
 PDF is converted to PNG (first page) via pdf2image before processing.
+Uses oemer as an in-process Python library (not subprocess) to avoid
+model re-loading overhead on each request.
 """
 import subprocess
 import tempfile
 import os
-import glob
 import logging
+from argparse import Namespace
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -46,22 +48,33 @@ def _validate_image(image_path: str) -> None:
 
 
 def _run_oemer(image_path: str, output_dir: str) -> str:
-    """Run oemer CLI on image_path, return path to output MusicXML."""
+    """Run oemer in-process on image_path, return path to output MusicXML."""
     _validate_image(image_path)
-    result = subprocess.run(
-        ["oemer", image_path, "-o", output_dir, "--without-deskew"],
-        capture_output=True, text=True, timeout=300
-    )
-    logger.info(f"oemer stdout: {result.stdout[-1000:]}")
-    if result.returncode != 0:
-        logger.error(f"oemer stderr: {result.stderr[-1000:]}")
-        raise RuntimeError(f"oemer failed (rc={result.returncode}): {result.stderr[-400:]}")
 
-    xml_files = glob.glob(os.path.join(output_dir, "*.musicxml")) + \
-                glob.glob(os.path.join(output_dir, "*.xml"))
-    if not xml_files:
-        raise RuntimeError("oemer produced no MusicXML output. The image may not contain recognizable music notation.")
-    return xml_files[0]
+    from oemer.ete import extract, clear_data
+
+    # Check checkpoints exist
+    from oemer import MODULE_PATH
+    chk_path = os.path.join(MODULE_PATH, "checkpoints/unet_big/model.onnx")
+    if not os.path.exists(chk_path):
+        raise RuntimeError(f"oemer checkpoints not found at {chk_path}")
+
+    args = Namespace(
+        img_path=image_path,
+        output_path=output_dir,
+        use_tf=False,
+        save_cache=False,
+        without_deskew=True,
+    )
+
+    try:
+        clear_data()
+        xml_path = extract(args)
+        logger.info(f"oemer produced: {xml_path}")
+        return xml_path
+    except Exception as e:
+        logger.error(f"oemer processing error: {e}")
+        raise RuntimeError(f"oemer failed: {e}")
 
 
 def parse_omr_file(file_bytes: bytes, filename: str) -> dict:
