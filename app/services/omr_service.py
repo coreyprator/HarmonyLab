@@ -104,8 +104,8 @@ def _run_oemer(image_path: str, output_dir: str) -> str:
         logger.info(f"oemer produced: {xml_path}")
         return xml_path
     except Exception as e:
-        logger.error(f"oemer processing error: {e}")
-        raise RuntimeError(f"oemer failed: {e}")
+        logger.warning(f"oemer could not extract music: {e}")
+        return None
 
 
 def parse_omr_file(file_bytes: bytes, filename: str) -> dict:
@@ -132,6 +132,16 @@ def parse_omr_file(file_bytes: bytes, filename: str) -> dict:
         output_dir = os.path.join(tmpdir, "oemer_output")
         os.makedirs(output_dir)
         xml_path = _run_oemer(image_path, output_dir)
+
+        if xml_path is None:
+            return {
+                "title": Path(filename).stem,
+                "key": None,
+                "time_signature": None,
+                "tempo": None,
+                "chords": [],
+                "warning": "No chord symbols detected. Try a cleaner scan.",
+            }
 
         # Parse MusicXML via existing score_parser (music21 path)
         parsed = parse_music_file(xml_path, os.path.basename(xml_path))
