@@ -121,13 +121,15 @@ def parse_omr_file(file_bytes: bytes, filename: str) -> dict:
         with open(input_path, "wb") as f:
             f.write(file_bytes)
 
-        # Convert to PNG if needed
+        # Route by type — explicit branching, no fall-through
         if suffix == ".pdf":
             image_path = _pdf_to_png(input_path, tmpdir)
         elif suffix == ".svg":
             image_path = _svg_to_png(input_path, tmpdir)
+        elif suffix in {".jpg", ".jpeg", ".png"}:
+            image_path = input_path  # Pass directly to oemer — no conversion needed
         else:
-            image_path = input_path  # JPG/PNG: pass directly
+            raise ValueError(f"Unsupported file type: {suffix}")
 
         output_dir = os.path.join(tmpdir, "oemer_output")
         os.makedirs(output_dir)

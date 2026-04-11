@@ -17,7 +17,7 @@ from app.api.routes import songs, sections, vocabulary, measures, chords, progre
 
 logger = logging.getLogger(__name__)
 
-VERSION = "2.41.0"  # HM37: OMR engine — replace Audiveris with oemer
+VERSION = "2.42.0"  # HM38: OMR suffix fix + rsvg-convert + error transparency
 
 app = FastAPI(
     title="Harmony Lab API",

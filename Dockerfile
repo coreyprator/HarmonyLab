@@ -17,9 +17,10 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 
-# Install poppler for PDF-to-image conversion
+# Install poppler for PDF-to-image conversion + librsvg2 for SVG-to-PNG
 RUN apt-get update && apt-get install -y --no-install-recommends \
     poppler-utils \
+    librsvg2-bin \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
