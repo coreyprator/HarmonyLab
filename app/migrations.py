@@ -156,6 +156,12 @@ def run_migrations():
     # Migration 14: analysis_rules table (REQ-009 / HM30B)
     _migration_14_analysis_rules(db)
 
+    # Migration 15: UserPreferences table (HM34 REQ-011)
+    _migration_15_user_preferences(db)
+
+    # Migration 16: key_center_colors column on UserPreferences (HM36 REQ-010)
+    _migration_16_key_center_colors(db)
+
     logger.info("Migrations complete.")
 
 
@@ -1086,3 +1092,47 @@ def _seed_analysis_rules(db):
             (order, cat, title, text)
         )
     logger.info(f"  Seeded {len(rules)} analysis rules.")
+
+
+def _migration_15_user_preferences(db):
+    """Create UserPreferences table (HM34 REQ-011)."""
+    try:
+        count = db.execute_scalar(
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'UserPreferences'"
+        )
+        if count == 0:
+            logger.info("  Migration 15: Creating UserPreferences table...")
+            db.execute_non_query("""
+                CREATE TABLE UserPreferences (
+                    id INT IDENTITY(1,1) PRIMARY KEY,
+                    user_id INT NOT NULL UNIQUE,
+                    chord_symbol_mode VARCHAR(20) NOT NULL DEFAULT 'jazz',
+                    created_at DATETIME2 DEFAULT GETUTCDATE(),
+                    updated_at DATETIME2 DEFAULT GETUTCDATE(),
+                    FOREIGN KEY (user_id) REFERENCES Users(id)
+                )
+            """)
+            logger.info("  Migration 15: UserPreferences table created.")
+        else:
+            logger.info("  Migration 15: UserPreferences table already exists.")
+    except Exception as e:
+        logger.warning(f"  Migration 15 warning: {e}")
+
+
+def _migration_16_key_center_colors(db):
+    """Add key_center_colors column to UserPreferences (HM36 REQ-010)."""
+    try:
+        count = db.execute_scalar(
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
+            "WHERE TABLE_NAME = 'UserPreferences' AND COLUMN_NAME = 'key_center_colors'"
+        )
+        if count == 0:
+            logger.info("  Migration 16: Adding key_center_colors column...")
+            db.execute_non_query(
+                "ALTER TABLE UserPreferences ADD key_center_colors NVARCHAR(MAX) NULL"
+            )
+            logger.info("  Migration 16: key_center_colors column added.")
+        else:
+            logger.info("  Migration 16: key_center_colors column already exists.")
+    except Exception as e:
+        logger.warning(f"  Migration 16 warning: {e}")

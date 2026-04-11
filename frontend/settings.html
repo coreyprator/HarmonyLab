@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HarmonyLab — Settings</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body style="display: none;">
+    <nav class="main-nav">
+        <a href="index.html" class="nav-brand">HarmonyLab</a>
+        <div class="nav-links">
+            <a href="index.html" class="nav-link">Songs</a>
+            <a href="riffs.html" class="nav-link">Riffs</a>
+            <a href="quiz.html" class="nav-link">Quiz</a>
+            <a href="progress.html" class="nav-link">Progress</a>
+            <a href="settings.html" class="nav-link active">Settings</a>
+        </div>
+        <div id="auth-container" class="nav-auth">
+            <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
+        </div>
+    </nav>
+
+    <header>
+        <div class="header-content"><h1>Settings</h1></div>
+        <p class="subtitle">Customize your HarmonyLab experience</p>
+    </header>
+
+    <main style="max-width:700px;margin:0 auto;padding:20px;">
+        <section style="margin-bottom:32px;">
+            <h2 style="margin-bottom:12px;">Chord Symbol Mode</h2>
+            <div style="display:flex;gap:12px;">
+                <button id="btn-jazz" class="btn" onclick="setChordMode('jazz')">Jazz (&#916;7 / &#8722;7 / &#248;7)</button>
+                <button id="btn-plain" class="btn" onclick="setChordMode('plain')">Plain (maj7 / m7 / m7b5)</button>
+            </div>
+        </section>
+
+        <section>
+            <h2 style="margin-bottom:12px;">Key Center Colors</h2>
+            <p style="color:var(--text-muted,#9ca3af);font-size:0.9rem;margin-bottom:16px;">
+                Assign a color to each key center. Leave blank to use the default functional harmony colors.
+            </p>
+            <div id="color-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;"></div>
+            <div style="margin-top:16px;display:flex;gap:8px;">
+                <button class="btn btn-primary" onclick="saveColors()">Save Colors</button>
+                <button class="btn" onclick="resetColors()">Reset to Defaults</button>
+            </div>
+            <div id="save-status" style="margin-top:8px;font-size:0.85rem;color:#22c55e;display:none;"></div>
+        </section>
+    </main>
+
+    <script>
+        const API_BASE = window.location.hostname.includes('localhost')
+            ? 'http://localhost:8080'
+            : 'https://harmonylab-wmrla7fhwa-uc.a.run.app';
+
+        const ALL_KEYS = [
+            'C', 'C#', 'Db', 'D', 'D#', 'Eb', 'E', 'F',
+            'F#', 'Gb', 'G', 'G#', 'Ab', 'A', 'A#', 'Bb', 'B',
+            'Cm', 'C#m', 'Dm', 'Ebm', 'Em', 'Fm',
+            'F#m', 'Gm', 'Abm', 'Am', 'Bbm', 'Bm'
+        ];
+
+        const DEFAULT_COLORS = {
+            'C': '#1E40AF', 'G': '#3B82F6', 'D': '#6366F1', 'A': '#8B5CF6',
+            'E': '#A855F7', 'B': '#C084FC', 'F#': '#D946EF', 'Gb': '#D946EF',
+            'Db': '#EC4899', 'Ab': '#F43F5E', 'Eb': '#EF4444', 'Bb': '#F97316',
+            'F': '#F59E0B', 'C#': '#EAB308',
+            'D#': '#6366F1', 'G#': '#F43F5E', 'A#': '#F97316',
+            'Cm': '#22C55E', 'Dm': '#14B8A6', 'Em': '#06B6D4',
+            'Fm': '#0EA5E9', 'Gm': '#3B82F6', 'Am': '#6366F1',
+            'Bm': '#8B5CF6', 'C#m': '#A855F7', 'Ebm': '#D946EF',
+            'F#m': '#EC4899', 'Abm': '#F43F5E', 'Bbm': '#EF4444'
+        };
+
+        let currentColors = {};
+        let currentMode = 'jazz';
+
+        async function loadPrefs() {
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/preferences`, {
+                    headers: { 'Authorization': `Bearer ${window.auth?.getToken() || ''}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    currentMode = data.chord_symbol_mode || 'jazz';
+                    currentColors = data.key_center_colors || {};
+                }
+            } catch (e) { /* use defaults */ }
+            updateModeButtons();
+            renderColorGrid();
+        }
+
+        function updateModeButtons() {
+            document.getElementById('btn-jazz').style.fontWeight = currentMode === 'jazz' ? '700' : '400';
+            document.getElementById('btn-plain').style.fontWeight = currentMode === 'plain' ? '700' : '400';
+        }
+
+        async function setChordMode(mode) {
+            currentMode = mode;
+            updateModeButtons();
+            await fetch(`${API_BASE}/api/v1/preferences`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${window.auth?.getToken() || ''}` },
+                body: JSON.stringify({ chord_symbol_mode: mode })
+            });
+            showStatus('Chord mode saved: ' + mode);
+        }
+
+        function renderColorGrid() {
+            const grid = document.getElementById('color-grid');
+            grid.innerHTML = ALL_KEYS.map(k => {
+                const color = currentColors[k] || DEFAULT_COLORS[k] || '#6b7280';
+                return `<div style="display:flex;align-items:center;gap:6px;">
+                    <input type="color" value="${color}" data-key="${k}"
+                           style="width:32px;height:26px;border:1px solid #555;border-radius:4px;cursor:pointer;">
+                    <span style="font-size:0.85rem;min-width:30px;">${k}</span>
+                </div>`;
+            }).join('');
+        }
+
+        async function saveColors() {
+            const inputs = document.querySelectorAll('#color-grid input[type="color"]');
+            const colors = {};
+            inputs.forEach(inp => { colors[inp.dataset.key] = inp.value; });
+            currentColors = colors;
+            await fetch(`${API_BASE}/api/v1/preferences`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${window.auth?.getToken() || ''}` },
+                body: JSON.stringify({ key_center_colors: colors })
+            });
+            showStatus('Key center colors saved.');
+        }
+
+        function resetColors() {
+            currentColors = {};
+            renderColorGrid();
+            showStatus('Colors reset to defaults. Click Save to persist.');
+        }
+
+        function showStatus(msg) {
+            const el = document.getElementById('save-status');
+            el.textContent = msg;
+            el.style.display = '';
+            setTimeout(() => { el.style.display = 'none'; }, 3000);
+        }
+
+        // Auth handling (mirrors other pages)
+        document.body.style.display = '';
+        loadPrefs();
+    </script>
+</body>
+</html>

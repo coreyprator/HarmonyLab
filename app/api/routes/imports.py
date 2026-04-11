@@ -81,21 +81,44 @@ def _save_score_to_db(
         except Exception as _e:
             logger.warning(f"Could not store form: {_e}")
 
-    section_query = """
-        INSERT INTO Sections (song_id, name, section_order, repeat_count)
-        OUTPUT INSERTED.id
-        VALUES (?, 'Main', 1, 1)
-    """
-    section_result = db.execute_query(section_query, (song_id,))
-    section_id = section_result[0]['id']
+    # HM34 REQ-008: Create sections from rehearsal marks if available, else single "Main"
+    section_marks = getattr(parsed, 'section_markers', None) or []
+    section_map = {}  # measure_number -> section_id
+    if section_marks:
+        for order, mark in enumerate(section_marks, start=1):
+            sec_res = db.execute_query(
+                "INSERT INTO Sections (song_id, name, section_order, repeat_count) OUTPUT INSERTED.id VALUES (?, ?, ?, 1)",
+                (song_id, mark['label'], order)
+            )
+            sec_id = sec_res[0]['id']
+            section_map[mark['measure_number']] = sec_id
+    if not section_map:
+        sec_res = db.execute_query(
+            "INSERT INTO Sections (song_id, name, section_order, repeat_count) OUTPUT INSERTED.id VALUES (?, 'Main', 1, 1)",
+            (song_id,)
+        )
+        section_map[1] = sec_res[0]['id']
+
+    # Build sorted section boundaries for measure → section lookup
+    section_boundaries = sorted(section_map.keys())
+
+    def _get_section_id(measure_num):
+        sid = section_boundaries[0]
+        for boundary in section_boundaries:
+            if boundary <= measure_num:
+                sid = boundary
+            else:
+                break
+        return section_map[sid]
 
     measures_created: Dict[int, int] = {}
     for chord_data in parsed.chords:
         m = chord_data.measure_number
         if m not in measures_created:
+            sec_id = _get_section_id(m)
             m_res = db.execute_query(
                 "INSERT INTO Measures (section_id, measure_number) OUTPUT INSERTED.id VALUES (?, ?)",
-                (section_id, m)
+                (sec_id, m)
             )
             measures_created[m] = m_res[0]['id']
         measure_id = measures_created[m]
@@ -709,6 +732,98 @@ async def batch_import(
     results["summary"] = summary
     logger.info(summary)
     return results
+
+
+# ---------------------------------------------------------------------------
+# HM36 REQ-013: OMR Import (PDF/JPG/PNG/SVG via Audiveris)
+# ---------------------------------------------------------------------------
+
+OMR_ALLOWED = {".pdf", ".jpg", ".jpeg", ".png", ".svg"}
+
+
+def _save_omr_result(parsed: dict, filename: str, db: DatabaseConnection) -> int:
+    """Save OMR-parsed result to DB, mirroring _save_score_to_db logic."""
+    song_title = parsed["title"]
+    song_query = """
+        INSERT INTO Songs (title, original_key, time_signature, tempo_marking,
+                           source_file_name, source_file_type)
+        OUTPUT INSERTED.id
+        VALUES (?, ?, ?, ?, ?, 'omr')
+    """
+    tempo_str = f"{parsed['tempo']} BPM" if parsed.get("tempo") else None
+    song_result = db.execute_query(
+        song_query,
+        (song_title, parsed.get("key"), parsed.get("time_signature"),
+         tempo_str, filename)
+    )
+    song_id = song_result[0]["id"]
+
+    # Single section
+    sec_res = db.execute_query(
+        "INSERT INTO Sections (song_id, name, section_order, repeat_count) "
+        "OUTPUT INSERTED.id VALUES (?, 'Main', 1, 1)",
+        (song_id,)
+    )
+    section_id = sec_res[0]["id"]
+
+    # Insert measures and chords
+    created_measures = set()
+    for chord in parsed.get("chords", []):
+        m_num = chord["measure_number"]
+        if m_num not in created_measures:
+            db.execute_non_query(
+                "INSERT INTO Measures (section_id, measure_number) VALUES (?, ?)",
+                (section_id, m_num)
+            )
+            created_measures.add(m_num)
+        measure_rows = db.execute_query(
+            "SELECT id FROM Measures WHERE section_id = ? AND measure_number = ?",
+            (section_id, m_num)
+        )
+        measure_id = measure_rows[0]["id"]
+        db.execute_non_query(
+            "INSERT INTO Chords (measure_id, chord_symbol, beat_position, chord_order) "
+            "VALUES (?, ?, ?, ?)",
+            (measure_id, chord["chord_symbol"], chord.get("beat_position", 1.0),
+             chord.get("chord_order", 1))
+        )
+
+    return song_id
+
+
+@router.post("/omr/preview")
+async def omr_preview(file: UploadFile = File(...)):
+    """Preview OMR extraction from a scanned image or PDF."""
+    from pathlib import Path as P
+    from app.services.omr_service import parse_omr_file
+    if P(file.filename).suffix.lower() not in OMR_ALLOWED:
+        raise HTTPException(400, f"Unsupported type. Allowed: {', '.join(OMR_ALLOWED)}")
+    try:
+        result = parse_omr_file(await file.read(), file.filename)
+        return {"status": "preview", "data": result}
+    except RuntimeError as e:
+        raise HTTPException(422, detail=str(e))
+
+
+@router.post("/omr/import")
+async def omr_import(
+    file: UploadFile = File(...),
+    title_override: str = Form(None),
+):
+    """Import a song from OMR (scanned image or PDF)."""
+    from pathlib import Path as P
+    from app.services.omr_service import parse_omr_file
+    if P(file.filename).suffix.lower() not in OMR_ALLOWED:
+        raise HTTPException(400, "Unsupported file type")
+    db = DatabaseConnection(settings)
+    try:
+        parsed = parse_omr_file(await file.read(), file.filename)
+        if title_override:
+            parsed["title"] = title_override
+        song_id = _save_omr_result(parsed, file.filename, db)
+        return {"status": "imported", "song_id": song_id, "title": parsed["title"]}
+    except RuntimeError as e:
+        raise HTTPException(422, detail=str(e))
 
 
 # ---------------------------------------------------------------------------

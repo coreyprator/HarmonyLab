@@ -17,11 +17,12 @@
             <a href="riffs.html" class="nav-link">Riffs</a>
             <a href="quiz.html" class="nav-link">Quiz</a>
             <a href="progress.html" class="nav-link">Progress</a>
+            <a href="settings.html" class="nav-link">Settings</a>
         </div>
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
         </div>
-        <div class="nav-version">v2.38.0</div>
+        <div class="nav-version">v2.39.0</div>
     </nav>
 
     <header>
@@ -649,6 +650,22 @@
     </div>
 
     <script>
+        window.chordSymbolMode = 'jazz'; // safe default before preference loads
+
+        function formatChordSymbol(symbol) {
+          if (!symbol) return symbol;
+          if (window.chordSymbolMode === 'plain') return symbol;
+          return symbol
+            .replace(/maj7|Maj7|\^7/g, '\u03947')
+            .replace(/maj|Maj|\^(?!7)/g, '\u0394')
+            .replace(/\bt(?=\b|[0-9])/g, '\u0394')
+            .replace(/m7b5|m7\u266d5|-7b5/g, '\u00f87')
+            .replace(/dim7|\u00b07/g, '\u00b07')
+            .replace(/dim(?!7)/g, '\u00b0')
+            .replace(/(?<=[A-G][b#]?)m(?=[^a]|$)/g, '\u2212')
+            .replace(/(?<=[A-G][b#]?)-(?=[^0-9]|$)/g, '\u2212');
+        }
+
         const API_BASE = window.location.hostname.includes('localhost')
             ? 'http://localhost:8080'
             : 'https://harmonylab-wmrla7fhwa-uc.a.run.app';
@@ -668,12 +685,29 @@
         // INITIALIZATION
         // ==========================================
 
+        window.HL_PREFS = { chord_symbol_mode: 'jazz', key_center_colors: null };
+
+        async function loadUserPreference() {
+            try {
+                const resp = await fetch(`${API_BASE}/api/v1/preferences`, {
+                    headers: { 'Authorization': `Bearer ${window.auth?.getToken() || ''}` }
+                });
+                if (resp.ok) {
+                    const data = await resp.json();
+                    window.chordSymbolMode = data.chord_symbol_mode || 'jazz';
+                    window.HL_PREFS = data;
+                }
+            } catch (e) { window.chordSymbolMode = 'jazz'; }
+        }
+
         async function init() {
             if (!songId) {
                 document.getElementById('chord-display').innerHTML =
                     '<p class="error">No song ID provided.</p>';
                 return;
             }
+            // HM34 REQ-011: Load chord symbol preference before any rendering
+            await loadUserPreference();
             await loadSong();
             await loadSongChords();
             // HM16: Re-init HarmonicTool after chords are rendered (Q4 guard)
@@ -682,12 +716,12 @@
             await loadAnalysisForHeader();
             // Default to Analysis view (HL-010)
             switchView('analysis');
-            // HM31B: Init notation toggle button state from localStorage
+            // HM34 REQ-011: Init notation toggle button state from DB preference
             const notBtn = document.getElementById('notation-toggle-btn');
             if (notBtn) {
-                const mode = getNotationMode();
-                notBtn.classList.toggle('stave-btn-active', mode === 'symbol');
-                notBtn.textContent = mode === 'symbol' ? '\u0394 Symbol' : 'Abc Letter';
+                const isJazz = window.chordSymbolMode === 'jazz';
+                notBtn.classList.toggle('stave-btn-active', isJazz);
+                notBtn.textContent = isJazz ? '\u0394 Symbol' : 'Abc Letter';
             }
             // HL-040: Init color coding toggle from localStorage
             const ccBtn = document.getElementById('color-coding-toggle');
@@ -897,10 +931,14 @@
         }
 
         async function loadKeyCenters() {
+            window.HLDebug?.log('loadKeyCenters:before', { songId, keyCenterData: keyCenterData ? 'exists' : 'null' });
             try {
-                const res = await fetch(`${API_BASE}/api/v1/analysis/songs/${songId}/key-centers`);
+                const url = `${API_BASE}/api/v1/analysis/songs/${songId}/key-centers`;
+                const res = await fetch(url);
+                window.HLDebug?.log('fetch:key-centers', { url, status: res.status });
                 if (!res.ok) return;
                 keyCenterData = await res.json();
+                window.HLDebug?.log('loadKeyCenters:after', { regionCount: keyCenterData?.regions?.length, detectedKey: keyCenterData?.detected_key });
                 renderKeyCenterBar();
                 renderKeyCenters();
                 renderPatternAnnotations();
@@ -1136,6 +1174,7 @@
         }
 
         async function acceptAICorrection() {
+            window.HLDebug?.log('acceptHandler', { handler: 'acceptAICorrection', exchangeId: window.lastExchangeId });
             if (!aiLastResponse) return;
             const suggestedKey = aiLastResponse.suggested_key;
 
@@ -1162,6 +1201,9 @@
             if (suggestedKey) {
                 updateKeyDisplays(suggestedKey);
             }
+
+            // HM33: Reload key centers from server so brackets update
+            await loadKeyCenters();
 
             // Show confirmation
             const responsePanel = document.getElementById('ai-response-panel');
@@ -1618,6 +1660,11 @@
         };
 
         function getKeyCenterColor(keyCenter, homeKey) {
+            // REQ-010: Check user-defined color map first
+            const customColors = window.HL_PREFS?.key_center_colors;
+            if (customColors && customColors[keyCenter]) {
+                return customColors[keyCenter];
+            }
             const kcPc = KEY_SEMITONES_KC[keyCenter] ?? 0;
             const homePc = KEY_SEMITONES_KC[homeKey] ?? 0;
             const interval = (kcPc - homePc + 12) % 12;
@@ -1708,6 +1755,7 @@
         function renderKeyCenterBrackets() {
             if (!keyCenterData || currentView !== 'analysis') return;
             const regions = keyCenterData.regions || [];
+            window.HLDebug?.log('renderKeyCenterBrackets:entry', { regionCount: regions.length });
             if (regions.length === 0) return;
 
             // Clean up previous brackets
@@ -1723,14 +1771,14 @@
 
             const keyColorMap = {};
             for (const r of regions) {
-                const kLabel = r.key_center + ' ' + ({'major':'major','minor':'minor','harmonic_minor':'harmonic minor'}[r.mode] || r.mode);
+                const kLabel = r.key_center;
                 if (!(kLabel in keyColorMap)) {
                     keyColorMap[kLabel] = getKeyCenterColor(r.key_center, homeKey);
                 }
             }
 
             for (const r of regions) {
-                const kLabel = r.key_center + ' ' + ({'major':'major','minor':'minor','harmonic_minor':'harmonic minor'}[r.mode] || r.mode);
+                const kLabel = r.key_center;
                 const color = keyColorMap[kLabel];
 
                 // Collect unique measure-blocks in this region
@@ -1766,6 +1814,10 @@
 
             // HM26: Inject pencil icons into every .kc-bracket
             injectBracketPencils();
+            window.HLDebug?.log('renderKeyCenterBrackets:exit', {
+                regionCount: regions.length,
+                bracketCount: document.querySelectorAll('.kc-bracket').length
+            });
         }
 
         // HM26: Inject .chord-pencil-injected into each .kc-bracket label
@@ -2581,20 +2633,31 @@
         // CHORD NOTATION NORMALIZATION (FAIL 2)
         // ==========================================
 
-        // HM31B REQ-007: Notation mode — 'symbol' (Δ/-/ø/°) vs 'letter' (maj7/m7/m7b5/dim7)
+        // HM34 REQ-011: Chord symbol mode — 'jazz' (Δ/−/ø/°) vs 'plain' (maj7/m7/m7b5/dim7)
+        // Backed by DB preference via GET/PUT /api/v1/preferences
         function getNotationMode() {
-            return localStorage.getItem('hl_notation_mode') || 'letter';
+            return window.chordSymbolMode === 'jazz' ? 'symbol' : 'letter';
         }
 
-        function toggleNotationMode() {
-            const current = getNotationMode();
-            const next = current === 'symbol' ? 'letter' : 'symbol';
-            localStorage.setItem('hl_notation_mode', next);
+        async function toggleNotationMode() {
+            const next = window.chordSymbolMode === 'jazz' ? 'plain' : 'jazz';
+            window.chordSymbolMode = next;
+            // Persist to DB
+            try {
+                await fetch(`${API_BASE}/api/v1/preferences`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${window.auth?.getToken() || ''}`
+                    },
+                    body: JSON.stringify({ chord_symbol_mode: next })
+                });
+            } catch (e) { console.warn('Preference save failed:', e); }
             // Update toggle button state
             const btn = document.getElementById('notation-toggle-btn');
             if (btn) {
-                btn.classList.toggle('stave-btn-active', next === 'symbol');
-                btn.textContent = next === 'symbol' ? '\u0394 Symbol' : 'Abc Letter';
+                btn.classList.toggle('stave-btn-active', next === 'jazz');
+                btn.textContent = next === 'jazz' ? '\u0394 Symbol' : 'Abc Letter';
             }
             // Re-render all chord symbols
             refreshChordNotation();
@@ -2626,8 +2689,8 @@
             if (quality === 't' || quality === '\u0394') quality = 'maj7';
             if (quality === 'Maj') quality = '';
 
-            // HM31B REQ-007: Convert to jazz symbol notation if mode is 'symbol'
-            if (getNotationMode() === 'symbol') {
+            // HM34 REQ-007: Convert to jazz symbol notation if chordSymbolMode is 'jazz'
+            if (window.chordSymbolMode === 'jazz') {
                 quality = quality
                     .replace(/^maj7/, '\u03947')       // maj7 → Δ7
                     .replace(/^maj9/, '\u03949')       // maj9 → Δ9
@@ -4568,6 +4631,7 @@
         }
 
         async function handleOutcome(exchangeId, outcome, rejectionReason) {
+            window.HLDebug?.log('acceptHandler', { handler: 'handleOutcome', exchangeId, outcome });
             const songId = getSongId();
             if (!songId) return;
             try {
@@ -4586,6 +4650,7 @@
                 // Update key displays if accepted
                 if (outcome === 'accepted' && data.key_updated) {
                     updateKeyDisplays(data.key_updated);
+                    await loadKeyCenters();
                 }
 
                 // Replace buttons with outcome badge
@@ -4595,9 +4660,8 @@
                     if (actions) {
                         if (outcome === 'accepted') {
                             actions.innerHTML = '<div style="font-size:11px;color:#22c55e;font-weight:600;">✅ Accepted' + (data.key_updated ? ' — key updated to ' + data.key_updated : '') + '</div>';
-                            // HM31B: Force-refresh analysis (cache invalidated by backend)
-                            // then reload key centers with updated detected_key
-                            if (typeof loadAnalysis === 'function') await loadAnalysis(true);
+                            // HM33: Reload key centers (not loadAnalysis — which doesn't update brackets)
+                            await loadKeyCenters();
                         } else if (outcome === 'rejected') {
                             actions.innerHTML = '<div style="font-size:11px;color:#ef4444;">✕ Rejected' + (rejectionReason ? ': ' + rejectionReason : '') + '</div>';
                         } else {
@@ -4619,6 +4683,7 @@
             if (!exchangeId) return;
 
             if (btn.classList.contains('ex-accept-btn')) {
+                window.HLDebug?.log('acceptHandler', { handler: 'ex-accept-btn', exchangeId });
                 handleOutcome(exchangeId, 'accepted');
             } else if (btn.classList.contains('ex-reject-btn')) {
                 const actions = btn.closest('.exchange-actions');
@@ -5459,5 +5524,21 @@
           transform: translateY(-2px);
         }
     </style>
+
+    <!-- HM36 REQ-012: Debug instrumentation layer -->
+    <script>
+    (function() {
+        const ENABLED = new URLSearchParams(location.search).get('debug') === '1' ||
+                        localStorage.getItem('hl_debug') === 'true';
+        window.HLDebug = {
+            enabled: ENABLED,
+            log: function(event, data) {
+                if (!ENABLED) return;
+                console.log(JSON.stringify({ts: Date.now(), event, data}, null, 2));
+            }
+        };
+        if (ENABLED) console.log('[HLDebug] active — events logged as structured JSON');
+    })();
+    </script>
 </body>
 </html>
