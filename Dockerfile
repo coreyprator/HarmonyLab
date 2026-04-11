@@ -16,17 +16,6 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# OpenJDK + Audiveris OMR engine (optional — OMR endpoints return 422 if unavailable)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    openjdk-17-jre-headless wget unzip librsvg2-bin \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN mkdir -p /opt/audiveris && \
-    (wget -q https://github.com/Audiveris/audiveris/releases/download/5.3.1/Audiveris_5.3.1.zip \
-         -O /tmp/audiveris.zip && \
-    unzip -q /tmp/audiveris.zip -d /opt/audiveris && \
-    rm /tmp/audiveris.zip) || echo "Audiveris download failed — OMR will be unavailable"
-ENV AUDIVERIS_HOME=/opt/audiveris
 
 # Set working directory
 WORKDIR /app
