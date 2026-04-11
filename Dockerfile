@@ -27,9 +27,11 @@ WORKDIR /app
 
 # Copy requirements first for layer caching
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt && \
-    (pip uninstall -y onnxruntime-gpu || true) && \
-    pip install --no-cache-dir onnxruntime
+RUN pip install --no-cache-dir -r requirements.txt
+# oemer depends on onnxruntime-gpu which requires CUDA — swap for CPU-only onnxruntime
+RUN pip uninstall -y onnxruntime-gpu || true
+RUN pip install --no-cache-dir --force-reinstall onnxruntime
+RUN python -c "import onnxruntime; print('onnxruntime', onnxruntime.__version__, 'OK')"
 
 # Pre-download oemer model checkpoints at build time (avoids 10-min download on first request)
 # Files: unet_big/{model.onnx, weights.h5}, seg_net/{model.onnx, weights.h5}
