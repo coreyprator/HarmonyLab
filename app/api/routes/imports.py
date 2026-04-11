@@ -796,16 +796,22 @@ async def omr_preview(file: UploadFile = File(...)):
     """Preview OMR extraction from a scanned image or PDF."""
     from pathlib import Path as P
     from app.services.omr_service import parse_omr_file
-    if P(file.filename).suffix.lower() not in OMR_ALLOWED:
-        raise HTTPException(400, f"Unsupported type. Allowed: {', '.join(OMR_ALLOWED)}")
+    suffix = P(file.filename).suffix.lower()
+    if suffix not in OMR_ALLOWED:
+        raise HTTPException(400, detail=f"Unsupported file type '{suffix}'. Allowed: PDF, JPG, PNG, SVG")
     try:
-        result = parse_omr_file(await file.read(), file.filename)
+        file_bytes = await file.read()
+        result = parse_omr_file(file_bytes, file.filename)
+        if not result.get("chords"):
+            result["warning"] = "No chord symbols detected. Try a cleaner scan or higher resolution image."
         return {"status": "preview", "data": result}
+    except ValueError as e:
+        raise HTTPException(400, detail=str(e))
     except RuntimeError as e:
         raise HTTPException(422, detail=str(e))
     except Exception as e:
-        logger.exception("OMR preview failed for %s", file.filename)
-        raise HTTPException(500, detail=f"OMR processing error: {e}")
+        logger.exception("Unexpected OMR error for %s", file.filename)
+        raise HTTPException(500, detail=f"Unexpected error during OMR processing: {str(e)}")
 
 
 @router.post("/omr/import")
@@ -816,17 +822,24 @@ async def omr_import(
     """Import a song from OMR (scanned image or PDF)."""
     from pathlib import Path as P
     from app.services.omr_service import parse_omr_file
-    if P(file.filename).suffix.lower() not in OMR_ALLOWED:
-        raise HTTPException(400, "Unsupported file type")
+    suffix = P(file.filename).suffix.lower()
+    if suffix not in OMR_ALLOWED:
+        raise HTTPException(400, detail=f"Unsupported file type '{suffix}'. Allowed: PDF, JPG, PNG, SVG")
     db = DatabaseConnection(settings)
     try:
-        parsed = parse_omr_file(await file.read(), file.filename)
+        file_bytes = await file.read()
+        parsed = parse_omr_file(file_bytes, file.filename)
         if title_override:
             parsed["title"] = title_override
         song_id = _save_omr_result(parsed, file.filename, db)
         return {"status": "imported", "song_id": song_id, "title": parsed["title"]}
+    except ValueError as e:
+        raise HTTPException(400, detail=str(e))
     except RuntimeError as e:
         raise HTTPException(422, detail=str(e))
+    except Exception as e:
+        logger.exception("Unexpected OMR import error for %s", file.filename)
+        raise HTTPException(500, detail=f"Unexpected error during OMR import: {str(e)}")
 
 
 # ---------------------------------------------------------------------------
