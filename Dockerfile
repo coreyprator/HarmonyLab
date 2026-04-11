@@ -17,12 +17,23 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 
+# Install poppler for PDF-to-image conversion
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    poppler-utils \
+    && rm -rf /var/lib/apt/lists/*
+
 # Set working directory
 WORKDIR /app
 
 # Copy requirements first for layer caching
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Pre-download oemer model checkpoints at build time (avoids download on first request)
+RUN python -c "from oemer.ete import download_file; download_file()" || \
+    python -c "from oemer.inference import download_all_checkpoints; download_all_checkpoints()" || \
+    python -m oemer --help || \
+    echo "oemer checkpoint pre-download: manual verification needed"
 
 # Copy application code
 COPY . .

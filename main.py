@@ -17,7 +17,7 @@ from app.api.routes import songs, sections, vocabulary, measures, chords, progre
 
 logger = logging.getLogger(__name__)
 
-VERSION = "2.40.0"  # HM34: jazz notation everywhere + section labels + global preference
+VERSION = "2.41.0"  # HM37: OMR engine — replace Audiveris with oemer
 
 app = FastAPI(
     title="Harmony Lab API",
