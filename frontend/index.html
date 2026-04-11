@@ -15,6 +15,7 @@
             <a href="riffs.html" class="nav-link">Riffs</a>
             <a href="quiz.html" class="nav-link">Quiz</a>
             <a href="progress.html" class="nav-link">Progress</a>
+            <a href="settings.html" class="nav-link">Settings</a>
         </div>
         <div id="auth-container" class="nav-auth">
             <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-sm btn-primary">Sign in</a>
@@ -58,7 +59,12 @@
                 </div>
                 <div class="modal-body">
                     <div class="form-group">
-                        <label>Score File (.mid &nbsp;.mscz &nbsp;.mscx &nbsp;.musicxml)</label>
+                        <div class="import-tabs" style="display:flex;gap:8px;margin-bottom:12px;">
+                        <button class="btn btn-sm" id="tab-score-btn" onclick="switchImportTab('score')" style="font-weight:600">Score File</button>
+                        <button class="btn btn-sm" id="tab-omr-btn" onclick="switchImportTab('omr')">Image / PDF</button>
+                    </div>
+                    <div id="score-tab">
+                    <label>Score File (.mid &nbsp;.mscz &nbsp;.mscx &nbsp;.musicxml)</label>
                         <input type="file" id="score-file"
                                accept=".mid,.midi,.mscz,.mscx,.musicxml,.xml,.mxl"
                                onchange="onScoreFileSelected()">
@@ -102,6 +108,24 @@
                                 <option value="Blues">Blues</option>
                                 <option value="Pop">Pop</option>
                             </select>
+                        </div>
+                    </div>
+                </div><!-- end score-tab -->
+
+                    <!-- OMR tab (HM36 REQ-013) -->
+                    <div id="omr-tab" style="display:none;">
+                        <p style="color:var(--text-muted);font-size:0.9rem;">Upload a fakebook scan. Supported: PDF, JPG, PNG, SVG</p>
+                        <input type="file" id="omr-file-input" accept=".pdf,.jpg,.jpeg,.png,.svg">
+                        <button class="btn btn-secondary" onclick="omrPreview()" style="margin-top:8px;">Preview</button>
+                        <div id="omr-loading" style="display:none"><p class="loading">Running OMR recognition...</p></div>
+                        <div id="omr-preview-result" style="display:none;margin-top:12px;">
+                            <h4 style="margin:0 0 8px;">Extracted Chords Preview</h4>
+                            <div id="omr-preview-grid" class="midi-chords-grid"></div>
+                            <div class="form-group" style="margin-top:10px;">
+                                <label>Title (override)</label>
+                                <input type="text" id="omr-title-input" placeholder="Leave blank to use detected title">
+                            </div>
+                            <button class="btn btn-primary" onclick="omrImport()">Import Song</button>
                         </div>
                     </div>
                 </div>
@@ -301,6 +325,7 @@
             document.getElementById('score-preview').style.display = 'none';
             document.getElementById('score-loading').style.display = 'none';
             document.getElementById('btn-import-score').style.display = 'none';
+            switchImportTab('score');
             document.getElementById('import-modal').style.display = 'flex';
         }
 
@@ -308,6 +333,60 @@
             document.getElementById('import-modal').style.display = 'none';
             scorePreviewData = null;
             scoreSelectedFile = null;
+        }
+
+        function switchImportTab(tab) {
+            document.getElementById('score-tab').style.display = tab === 'score' ? '' : 'none';
+            document.getElementById('omr-tab').style.display = tab === 'omr' ? '' : 'none';
+            document.getElementById('btn-import-score').style.display = tab === 'score' && scorePreviewData ? '' : 'none';
+            document.getElementById('tab-score-btn').style.fontWeight = tab === 'score' ? '600' : '400';
+            document.getElementById('tab-omr-btn').style.fontWeight = tab === 'omr' ? '600' : '400';
+        }
+
+        async function omrPreview() {
+            const fileInput = document.getElementById('omr-file-input');
+            const file = fileInput.files[0];
+            if (!file) { alert('Select an image or PDF first.'); return; }
+            document.getElementById('omr-loading').style.display = '';
+            document.getElementById('omr-preview-result').style.display = 'none';
+            const formData = new FormData();
+            formData.append('file', file);
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/imports/omr/preview`, { method: 'POST', body: formData });
+                if (!res.ok) { const e = await res.json(); throw new Error(e.detail || res.statusText); }
+                const data = await res.json();
+                const grid = document.getElementById('omr-preview-grid');
+                const chords = data.data.chords || [];
+                grid.innerHTML = chords.slice(0, 20).map(c =>
+                    `<div class="midi-chord-cell"><strong>M${c.measure_number}</strong><br>${c.chord_symbol}</div>`
+                ).join('');
+                document.getElementById('omr-title-input').value = data.data.title || '';
+                document.getElementById('omr-preview-result').style.display = '';
+            } catch (err) {
+                alert('OMR preview failed: ' + err.message);
+            } finally {
+                document.getElementById('omr-loading').style.display = 'none';
+            }
+        }
+
+        async function omrImport() {
+            const fileInput = document.getElementById('omr-file-input');
+            const file = fileInput.files[0];
+            if (!file) return;
+            const titleOverride = document.getElementById('omr-title-input').value.trim();
+            const formData = new FormData();
+            formData.append('file', file);
+            if (titleOverride) formData.append('title_override', titleOverride);
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/imports/omr/import`, { method: 'POST', body: formData });
+                if (!res.ok) { const e = await res.json(); throw new Error(e.detail || res.statusText); }
+                const data = await res.json();
+                alert(`Imported: ${data.title} (ID: ${data.song_id})`);
+                closeImportModal();
+                loadSongs();
+            } catch (err) {
+                alert('OMR import failed: ' + err.message);
+            }
         }
 
         async function onScoreFileSelected() {

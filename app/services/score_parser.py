@@ -210,12 +210,18 @@ def _parse_mscx_content(xml_content: str, default_title: str) -> ParsedScore:
     # MuseScore 4 wraps measure content in <voice> elements, so Harmony may be
     # a grandchild (or deeper) of Measure. Use iter() to find at any depth.
     # MuseScore 4.6+ wraps name/root inside <harmonyInfo> subelement.
+    #
+    # BUG-007 fix: Use first Staff only to avoid counting measures from
+    # multiple staves (piano grand staff = 2x measures via root.iter).
     chords: List[ScoreChord] = []
     measure_num = 0
     measures_scanned = 0
     measures_with_harmony = 0
 
-    for measure in root.iter('Measure'):
+    chord_staff = root.find('.//Staff')
+    chord_root = chord_staff if chord_staff is not None else root
+
+    for measure in chord_root.iter('Measure'):
         measure_num += 1
         measures_scanned += 1
         chord_order = 1
@@ -301,6 +307,8 @@ def _parse_mscx_content(xml_content: str, default_title: str) -> ParsedScore:
             chords.sort(key=lambda c: (c.measure_number, c.chord_order))
             logger.info("BUG-007 fix: filled %d empty measures with carried-forward chords", filled)
 
+    logger.debug("score_parser: %s — %d measures extracted, %d chords",
+                 default_title, measures_scanned, len(chords))
     logger.info(
         "MuseScore parse complete: measures_scanned=%d measures_with_harmony=%d total_chords=%d",
         measures_scanned, measures_with_harmony, len(chords)

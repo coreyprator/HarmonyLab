@@ -43,6 +43,21 @@ def _eid() -> str:
     return str(uuid.uuid4().hex[:20])
 
 
+def format_chord_symbol_jazz(symbol: str) -> str:
+    """Convert chord quality to jazz notation (Δ/−/ø/°) for export display."""
+    if not symbol:
+        return symbol
+    import re
+    s = re.sub(r'maj7|Maj7', '\u03947', symbol)
+    s = re.sub(r'maj|Maj', '\u0394', s)
+    s = re.sub(r'\bt\b', '\u0394', s)
+    s = re.sub(r'm7b5|m7\u266d5', '\u00f87', s)
+    s = re.sub(r'dim7', '\u00b07', s)
+    s = re.sub(r'dim(?!7)', '\u00b0', s)
+    s = re.sub(r'(?<=[A-Gb#])m(?=[^a]|$)', '\u2212', s)
+    return s
+
+
 def _parse_root_from_symbol(symbol: str) -> tuple:
     """Extract root note and quality from chord symbol.
 
@@ -205,7 +220,7 @@ def export_mscx(
 
                 harm = ET.SubElement(voice, 'Harmony')
                 ET.SubElement(harm, 'root').text = str(tpc)
-                ET.SubElement(harm, 'name').text = quality
+                ET.SubElement(harm, 'name').text = format_chord_symbol_jazz(quality)
                 ET.SubElement(harm, 'eid').text = _eid()
 
                 # Add Roman numeral as StaffText below the chord
