@@ -28,7 +28,7 @@ WORKDIR /app
 # Copy requirements first for layer caching
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt && \
-    pip uninstall -y onnxruntime-gpu || true && \
+    (pip uninstall -y onnxruntime-gpu || true) && \
     pip install --no-cache-dir onnxruntime
 
 # Pre-download oemer model checkpoints at build time (avoids 10-min download on first request)
