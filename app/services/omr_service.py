@@ -36,8 +36,18 @@ def _svg_to_png(svg_path: str, output_dir: str) -> str:
     return png_path
 
 
+def _validate_image(image_path: str) -> None:
+    """Reject images too small for OMR processing."""
+    from PIL import Image
+    img = Image.open(image_path)
+    w, h = img.size
+    if w < 100 or h < 100:
+        raise RuntimeError(f"Image too small for OMR ({w}x{h}). Minimum 100x100 pixels.")
+
+
 def _run_oemer(image_path: str, output_dir: str) -> str:
     """Run oemer CLI on image_path, return path to output MusicXML."""
+    _validate_image(image_path)
     result = subprocess.run(
         ["oemer", image_path, "-o", output_dir, "--without-deskew"],
         capture_output=True, text=True, timeout=300
