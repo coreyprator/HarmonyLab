@@ -324,7 +324,7 @@ class Auth {
             `;
         } else {
             authContainer.innerHTML = `
-                <a href="https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login" class="btn btn-primary">
+                <a href="/api/v1/auth/google/login" class="btn btn-primary">
                     Sign in with Google
                 </a>
             `;
@@ -332,7 +332,7 @@ class Auth {
     }
 
     getGoogleLoginUrl() {
-        return 'https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/login';
+        return '/api/v1/auth/google/login';
     }
 }
 
