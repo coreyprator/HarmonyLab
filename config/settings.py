@@ -130,10 +130,19 @@ class Settings:
             return os.getenv("GOOGLE_CLIENT_SECRET")
 
     @property
+    def anthropic_api_key(self) -> str:
+        """Anthropic API key for Vision OMR."""
+        return get_secret("anthropic-api-key", self._project_id)
+
+    @property
+    def omr_model(self) -> str:
+        return "claude-sonnet-4-5"
+
+    @property
     def google_redirect_uri(self) -> Optional[str]:
         """Google OAuth redirect URI."""
         if os.getenv("K_SERVICE"):
-            return "https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/callback"
+            return "https://harmonylab.rentyourcio.com/api/v1/auth/google/callback"
         return os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8080/api/v1/auth/google/callback")
 
 
