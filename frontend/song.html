@@ -73,6 +73,12 @@
         </div>
     </header>
 
+    <!-- BUG-022: OMR import notice (shown when source_file_type = 'omr') -->
+    <div id="omr-notice" style="display:none;max-width:900px;margin:8px auto;padding:10px 16px;background:var(--bg-info,#eff6ff);border:1px solid var(--border-info,#93c5fd);border-radius:6px;color:var(--text-info,#1e40af);font-size:0.9rem;">
+        This song was imported from an image scan (OMR). Chord symbols are available for analysis and quiz,
+        but individual note data (MIDI) is not available for image imports.
+    </div>
+
     <main>
         <!-- View Toggle + Analysis Controls -->
         <div class="controls-bar">
@@ -779,6 +785,11 @@
                     const auditLink = document.getElementById('audit-link');
                     auditLink.href = `audit.html?id=${songId}`;
                     auditLink.style.display = '';
+                }
+                // BUG-022: Show OMR notice for image-imported songs
+                if (songData.source_file_type === 'omr') {
+                    const omrNotice = document.getElementById('omr-notice');
+                    if (omrNotice) omrNotice.style.display = '';
                 }
             } catch (err) {
                 document.getElementById('song-title').textContent = 'Error loading song';
@@ -2239,7 +2250,9 @@
                             html += '</table>';
                             actualNotesEl.innerHTML = html;
                         } else {
-                            actualNotesEl.innerHTML = '<span style="color:var(--text-muted)">No note data for this measure</span>';
+                            actualNotesEl.innerHTML = songData && songData.source_file_type === 'omr'
+                                ? '<span style="color:var(--text-muted)">This song was imported via OMR (image scan). Note-level MIDI data is not available \u2014 only chord symbols.</span>'
+                                : '<span style="color:var(--text-muted)">No note data for this measure</span>';
                         }
                     })
                     .catch(() => {
@@ -3474,19 +3487,46 @@
             if (e.target === e.currentTarget) closeChordModal();
         });
     </script>
+    <!-- HM41 BUG-021: Debug layer initializes BEFORE auth -->
+    <script>
+    (function() {
+        var ENABLED = new URLSearchParams(window.location.search).get('debug') === '1' ||
+                      localStorage.getItem('hl-debug') === '1';
+        window.HLDebug = {
+            enabled: ENABLED,
+            log: function(component, event, data) {
+                if (!this.enabled) return;
+                console.log('[HLDebug] ' + component + ' | ' + event, data || '');
+            }
+        };
+        if (ENABLED) {
+            document.body.style.display = '';
+            console.log('[HLDebug] active — debug layer initialized before auth');
+        }
+    })();
+    </script>
+    <div id="debug-panel" style="display:none;position:fixed;bottom:0;left:0;right:0;background:#1a1a2e;color:#0f0;font-family:monospace;font-size:12px;padding:6px 12px;z-index:9999;border-top:2px solid #0f0;">
+        HLDebug active | <span id="debug-panel-info">?debug=1</span>
+    </div>
+    <script>
+    if (window.HLDebug && window.HLDebug.enabled) {
+        document.getElementById('debug-panel').style.display = 'block';
+        window.HLDebug.log('Init', 'Debug layer active', { url: window.location.href });
+    }
+    </script>
     <script src="js/auth.js"></script>
     <script src="js/audio.js"></script>
     <script>
         // Auth gate - check before showing page
         document.addEventListener('DOMContentLoaded', async () => {
             const isAuthenticated = await window.auth.checkAuth();
-            if (!isAuthenticated) {
+            if (!isAuthenticated && !window.HLDebug?.enabled) {
                 window.location.href = '/login.html';
                 return;
             }
-            // Authenticated - show page and load content
+            // Show page and load content
             document.body.style.display = '';
-            window.auth.updateAuthUI();
+            if (isAuthenticated) window.auth.updateAuthUI();
             await init();
             setupChordAudio();
             setupPlaybackTransport();
@@ -5525,20 +5565,6 @@
         }
     </style>
 
-    <!-- HM36 REQ-012: Debug instrumentation layer -->
-    <script>
-    (function() {
-        const ENABLED = new URLSearchParams(location.search).get('debug') === '1' ||
-                        localStorage.getItem('hl_debug') === 'true';
-        window.HLDebug = {
-            enabled: ENABLED,
-            log: function(event, data) {
-                if (!ENABLED) return;
-                console.log(JSON.stringify({ts: Date.now(), event, data}, null, 2));
-            }
-        };
-        if (ENABLED) console.log('[HLDebug] active — events logged as structured JSON');
-    })();
-    </script>
+    <!-- HLDebug moved to before auth gate (BUG-021) -->
 </body>
 </html>

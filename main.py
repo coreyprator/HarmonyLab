@@ -17,7 +17,7 @@ from app.api.routes import songs, sections, vocabulary, measures, chords, progre
 
 logger = logging.getLogger(__name__)
 
-VERSION = "2.43.0"  # HM40: Vision API OMR, CORS fix, PDF title fix
+VERSION = "2.44.0"  # HM41: saveColors scope, debug init, OMR UX
 
 app = FastAPI(
     title="Harmony Lab API",
@@ -107,7 +107,7 @@ async def health_check():
         "service": "harmonylab",
         "component": "backend",
         "version": VERSION,
-        "canary": "PINEAPPLE-HM40"
+        "canary": "PINEAPPLE-HM41"
     }
 
 
