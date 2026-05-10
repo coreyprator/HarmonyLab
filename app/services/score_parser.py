@@ -218,7 +218,9 @@ def _parse_mscx_content(xml_content: str, default_title: str) -> ParsedScore:
     measures_scanned = 0
     measures_with_harmony = 0
 
-    chord_staff = root.find('.//Staff')
+    # BUG-019 fix: MuseScore 4.6.x adds part-definition <Staff> elements (no id)
+    # before content <Staff id="N"> elements. Use [@id] to skip empty definition staves.
+    chord_staff = root.find('.//Staff[@id]') or root.find('.//Staff')
     chord_root = chord_staff if chord_staff is not None else root
 
     for measure in chord_root.iter('Measure'):
@@ -334,7 +336,8 @@ def _parse_mscx_content(xml_content: str, default_title: str) -> ParsedScore:
     note_measure_num = 0
 
     # Use first Staff element to avoid duplicate measures from multi-staff scores
-    first_staff = root.find('.//Staff')
+    # BUG-019 fix: prefer Staff[@id] (content staff) over Staff without id (part-definition)
+    first_staff = root.find('.//Staff[@id]') or root.find('.//Staff')
     note_root = first_staff if first_staff is not None else root
     logger.debug("Note extraction: searching from <%s>, first_staff found=%s",
                  note_root.tag, first_staff is not None)

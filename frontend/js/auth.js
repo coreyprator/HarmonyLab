@@ -334,6 +334,25 @@ class Auth {
     getGoogleLoginUrl() {
         return '/api/v1/auth/google/login';
     }
+
+    // REQ-016: Fetch debug_mode preference and enable HLDebug if set
+    async applyDebugModePreference() {
+        try {
+            const token = this.getToken();
+            if (!token) return;
+            const resp = await fetch('/api/v1/preferences', {
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            if (!resp.ok) return;
+            const prefs = await resp.json();
+            if (prefs.debug_mode && window.HLDebug) {
+                window.HLDebug.enabled = true;
+                const panel = document.getElementById('debug-panel');
+                if (panel) panel.style.display = 'block';
+                console.log('[HLDebug] enabled via debug_mode preference');
+            }
+        } catch (e) { /* non-blocking */ }
+    }
 }
 
 // Create global auth instance
@@ -356,6 +375,8 @@ window.auth = new Auth();
 document.addEventListener('DOMContentLoaded', () => {
     if (window.auth.isAuthenticated()) {
         window.auth.updateAuthUI();
+        // REQ-016: Apply debug_mode preference from server
+        window.auth.applyDebugModePreference();
     } else {
         window.auth.updateAuthUI();
     }

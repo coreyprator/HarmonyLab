@@ -905,3 +905,31 @@ Source: Handoff architectural decisions file in `handoffs/inbox/`.
 ---
 
 *End of PROJECT_KNOWLEDGE.md*
+
+---
+
+## OAuth Redirect URIs (TSK-004 / HM42)
+
+Both URIs must remain registered in the GCP Console OAuth 2.0 client at all times.
+Removing either URI will break Google login for users on that access path.
+
+### Registered URIs
+
+| URI | Purpose |
+|-----|---------|
+| `https://harmonylab.rentyourcio.com/api/v1/auth/google/callback` | Custom domain (primary — all normal users) |
+| `https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/callback` | Cloud Run direct URL (fallback / CI health checks) |
+
+### How to update
+
+1. GCP Console → APIs & Services → Credentials → OAuth 2.0 Client IDs → HarmonyLab client
+2. Under "Authorized redirect URIs", ensure BOTH URIs above are present
+3. Save. Changes propagate within ~5 minutes.
+
+### debug_mode preference (REQ-016 / HM42)
+
+The `UserPreferences.debug_mode` column (`BIT NOT NULL DEFAULT 0`) controls per-user HLDebug overlay.
+- GET `/api/v1/preferences` returns `"debug_mode": true/false`
+- PUT `/api/v1/preferences` with `{"debug_mode": true}` enables it
+- `auth.js` calls `applyDebugModePreference()` on DOMContentLoaded and sets `window.HLDebug.enabled = true` if the preference is set
+- Users toggle this in Settings → Debug Mode section

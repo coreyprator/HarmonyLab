@@ -162,7 +162,29 @@ def run_migrations():
     # Migration 16: key_center_colors column on UserPreferences (HM36 REQ-010)
     _migration_16_key_center_colors(db)
 
+    # Migration 17: debug_mode column on UserPreferences (HM42 REQ-016)
+    _migration_17_debug_mode(db)
+
     logger.info("Migrations complete.")
+
+
+def _migration_17_debug_mode(db):
+    """Add debug_mode column to UserPreferences (HM42 REQ-016)."""
+    try:
+        count = db.execute_scalar(
+            "SELECT COUNT(*) FROM sys.columns "
+            "WHERE object_id = OBJECT_ID('UserPreferences') AND name = 'debug_mode'"
+        )
+        if count == 0:
+            logger.info("  Migration 17: Adding debug_mode column to UserPreferences...")
+            db.execute_non_query(
+                "ALTER TABLE UserPreferences ADD debug_mode BIT NOT NULL DEFAULT 0"
+            )
+            logger.info("  Migration 17: debug_mode column added.")
+        else:
+            logger.info("  Migration 17: debug_mode column already exists.")
+    except Exception as e:
+        logger.warning(f"  Migration 17 warning: {e}")
 
 
 def _migration_5_note_import_tables(db):

@@ -148,6 +148,9 @@ def parse_omr_file(file_bytes: bytes, filename: str) -> dict:
             raise HTTPException(status_code=500,
                 detail={"detail": str(e), "stage": "vision_api"})
 
+        # REQ-015: Second Vision API pass for MIDI note extraction (non-blocking)
+        midi_notes = _run_vision_midi_extraction(image_path)
+
     # BUG-018: Use original filename as title when Vision returns generic title
     if original_filename:
         stem = Path(original_filename).stem
@@ -170,7 +173,60 @@ def parse_omr_file(file_bytes: bytes, filename: str) -> dict:
         "time_signature": result.get("time_signature"),
         "tempo": result.get("tempo"),
         "chords": chords,
+        "notes": midi_notes,
     }
     if not chords:
         output["warning"] = result.get("_warning", "No chord symbols detected. Try a cleaner scan.")
     return output
+
+
+def _run_vision_midi_extraction(image_path: str) -> list:
+    """Run a second Vision API pass to extract individual notes from a lead sheet image.
+
+    Returns a list of dicts: {measure, beat, pitch (MIDI int), duration_type, voice}.
+    Returns empty list on failure (non-blocking — chord extraction is the primary pass).
+    """
+    try:
+        image_path = _resize_if_needed(image_path)
+        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+
+        with open(image_path, "rb") as f:
+            image_data = base64.standard_b64encode(f.read()).decode()
+
+        ext = Path(image_path).suffix.lower()
+        media_type = "image/jpeg" if ext in {".jpg", ".jpeg"} else "image/png"
+
+        response = client.messages.create(
+            model=settings.omr_model,
+            max_tokens=4096,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {"type": "base64", "media_type": media_type, "data": image_data}
+                    },
+                    {
+                        "type": "text",
+                        "text": """Extract the melody notes from this jazz lead sheet.
+Return ONLY valid JSON, no markdown, no prose:
+{
+  "notes": [
+    {"measure": 1, "beat": 1, "pitch": 60, "duration_type": "quarter", "voice": 1}
+  ]
+}
+pitch is MIDI note number (middle C = 60).
+duration_type: whole, half, quarter, eighth, 16th.
+Include all melody notes in order."""
+                    }
+                ]
+            }]
+        )
+
+        raw = response.content[0].text.strip()
+        raw = re.sub(r'^```[a-z]*\n?', '', raw).rstrip('`').strip()
+        result = json.loads(raw)
+        return result.get("notes", [])
+    except Exception as e:
+        logger.warning("MIDI extraction failed (non-blocking): %s", e)
+        return []
