@@ -17,7 +17,7 @@ from app.api.routes import songs, sections, vocabulary, measures, chords, progre
 
 logger = logging.getLogger(__name__)
 
-VERSION = "2.44.0"  # HM41: saveColors scope, debug init, OMR UX
+VERSION = "2.45.0"  # HM42: BUG-019/023, REQ-014/015/016, TSK-004/005
 
 app = FastAPI(
     title="Harmony Lab API",

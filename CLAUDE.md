@@ -269,3 +269,17 @@ See `project-methodology/CLAUDE.md` for full policy.
 
 **Last Updated**: 2026-02-07
 **Methodology Version**: 3.17
+
+---
+
+## OAuth Redirect URIs (TSK-004 / HM42)
+
+Both URIs **must** remain registered in GCP Console → OAuth 2.0 Client IDs at all times.
+
+| URI | Purpose |
+|-----|---------|
+| `https://harmonylab.rentyourcio.com/api/v1/auth/google/callback` | Custom domain (primary) |
+| `https://harmonylab-wmrla7fhwa-uc.a.run.app/api/v1/auth/google/callback` | Cloud Run direct (fallback) |
+
+Removing either URI will break Google OAuth login for that access path.
+To add/edit: GCP Console → APIs & Services → Credentials → HarmonyLab OAuth client → Authorized redirect URIs.

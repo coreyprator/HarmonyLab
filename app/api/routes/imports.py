@@ -740,6 +740,12 @@ async def batch_import(
 
 OMR_ALLOWED = {".pdf", ".jpg", ".jpeg", ".png", ".svg"}
 
+_NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+
+
+def _midi_to_note_name(midi_pitch: int) -> str:
+    return _NOTE_NAMES[midi_pitch % 12]
+
 
 def _save_omr_result(parsed: dict, filename: str, db: DatabaseConnection) -> int:
     """Save OMR-parsed result to DB, mirroring _save_score_to_db logic."""
@@ -819,7 +825,7 @@ async def omr_import(
     file: UploadFile = File(...),
     title_override: str = Form(None),
 ):
-    """Import a song from OMR (scanned image or PDF)."""
+    """Import a song from OMR (scanned image or PDF). REQ-015: also extracts MIDI notes."""
     from pathlib import Path as P
     from app.services.omr_service import parse_omr_file
     suffix = P(file.filename).suffix.lower()
@@ -832,7 +838,31 @@ async def omr_import(
         if title_override:
             parsed["title"] = title_override
         song_id = _save_omr_result(parsed, file.filename, db)
-        return {"status": "imported", "song_id": song_id, "title": parsed["title"]}
+
+        # REQ-015: Save extracted MIDI notes to song_notes table
+        notes_saved = 0
+        for note in parsed.get("notes", []):
+            try:
+                pitch = int(note.get("pitch", 60))
+                db.execute_non_query(
+                    "INSERT INTO song_notes "
+                    "(song_id, measure_num, beat, midi_pitch, duration_type, voice, note_name, duration_quarters, offset_quarters) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, 1.0, 0.0)",
+                    (song_id, int(note.get("measure", 1)), float(note.get("beat", 1.0)),
+                     pitch, note.get("duration_type", "quarter"),
+                     int(note.get("voice", 1)),
+                     _midi_to_note_name(pitch))
+                )
+                notes_saved += 1
+            except Exception as e:
+                logger.debug("Note insert skip: %s", e)
+
+        return {
+            "status": "imported",
+            "song_id": song_id,
+            "title": parsed["title"],
+            "note_count": notes_saved,
+        }
     except ValueError as e:
         raise HTTPException(400, detail=str(e))
     except RuntimeError as e:

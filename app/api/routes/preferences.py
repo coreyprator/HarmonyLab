@@ -14,6 +14,7 @@ router = APIRouter(prefix="/api/v1/preferences", tags=["preferences"])
 class PreferenceUpdate(BaseModel):
     chord_symbol_mode: Optional[str] = None
     key_center_colors: Optional[dict] = None
+    debug_mode: Optional[bool] = None
 
 
 @router.get("")
@@ -24,7 +25,7 @@ async def get_preferences(
     """Get current user's preferences."""
     user = get_current_user(request)
     row = db.execute_query(
-        "SELECT chord_symbol_mode, key_center_colors FROM UserPreferences WHERE user_id = ?",
+        "SELECT chord_symbol_mode, key_center_colors, debug_mode FROM UserPreferences WHERE user_id = ?",
         (user['id'],)
     )
     if row:
@@ -33,8 +34,9 @@ async def get_preferences(
         return {
             "chord_symbol_mode": row[0]['chord_symbol_mode'],
             "key_center_colors": colors,
+            "debug_mode": bool(row[0].get('debug_mode', 0)),
         }
-    return {"chord_symbol_mode": "jazz", "key_center_colors": None}
+    return {"chord_symbol_mode": "jazz", "key_center_colors": None, "debug_mode": False}
 
 
 @router.put("")
@@ -58,6 +60,9 @@ async def update_preferences(
     if body.key_center_colors is not None:
         updates.append("key_center_colors = ?")
         params.append(json.dumps(body.key_center_colors))
+    if body.debug_mode is not None:
+        updates.append("debug_mode = ?")
+        params.append(1 if body.debug_mode else 0)
 
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")
@@ -67,6 +72,7 @@ async def update_preferences(
     # Build INSERT values
     mode = body.chord_symbol_mode or 'jazz'
     colors_json = json.dumps(body.key_center_colors) if body.key_center_colors else None
+    debug_val = (1 if body.debug_mode else 0) if body.debug_mode is not None else 0
 
     db.execute_non_query(f"""
         MERGE UserPreferences AS target
@@ -75,7 +81,11 @@ async def update_preferences(
         WHEN MATCHED THEN
             UPDATE SET {set_clause}
         WHEN NOT MATCHED THEN
-            INSERT (user_id, chord_symbol_mode, key_center_colors) VALUES (?, ?, ?);
-    """, (user['id'], *params, user['id'], mode, colors_json))
+            INSERT (user_id, chord_symbol_mode, key_center_colors, debug_mode) VALUES (?, ?, ?, ?);
+    """, (user['id'], *params, user['id'], mode, colors_json, debug_val))
 
-    return {"chord_symbol_mode": mode, "key_center_colors": body.key_center_colors}
+    return {
+        "chord_symbol_mode": mode,
+        "key_center_colors": body.key_center_colors,
+        "debug_mode": bool(body.debug_mode) if body.debug_mode is not None else False,
+    }
