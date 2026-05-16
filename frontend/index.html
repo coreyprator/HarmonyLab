@@ -239,7 +239,17 @@
                 return;
             }
             document.getElementById('select-all-toggle').style.display = 'flex';
-            container.innerHTML = songs.map(s => `
+            container.innerHTML = songs.map(s => {
+                // REQ-017: render fs_modified_at in PL's local timezone (CDT/CST, UTC-5/-6)
+                let fsModStr = '';
+                let fsModTitle = '';
+                if (s.fs_modified_at) {
+                    const d = new Date(s.fs_modified_at);
+                    // Render in client's local timezone; tooltip shows full ISO + TZ offset
+                    fsModStr = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+                    fsModTitle = d.toLocaleString(undefined, { timeZoneName: 'short' });
+                }
+                return `
                 <div class="song-card-wrapper" data-song-id="${s.id}">
                     <input type="checkbox" class="song-checkbox" data-id="${s.id}"
                            onclick="event.stopPropagation(); updateBulkUI()"
@@ -250,11 +260,12 @@
                             ${s.composer ? `<span>${escHtml(s.composer)}</span>` : ''}
                             ${s.original_key ? `<span class="key-badge">${escHtml(s.original_key)}</span>` : ''}
                             ${s.genre ? `<span class="genre-badge">${escHtml(s.genre)}</span>` : ''}
+                            ${fsModStr ? `<span title="${escHtml(fsModTitle)}" style="font-size:0.75rem;color:var(--text-muted,#9ca3af);">src: ${escHtml(fsModStr)}</span>` : ''}
                             ${s.has_note_data ? `<a href="audit.html?id=${s.id}" class="btn btn-sm" style="font-size:0.7rem;padding:2px 8px;margin-left:auto" onclick="event.stopPropagation()">Audit</a>` : ''}
                         </div>
                     </a>
                 </div>
-            `).join('');
+            `}).join('');
             updateBulkUI();
         }
 
@@ -351,16 +362,19 @@
             const fileInput = document.getElementById('omr-file-input');
             const file = fileInput.files[0];
             if (!file) { alert('Select an image or PDF first.'); return; }
+            window.HLDebug?.emit('import:omr-file-selected', { name: file.name, size: file.size });
             document.getElementById('omr-error').style.display = 'none';
             document.getElementById('omr-preview-result').style.display = 'none';
             document.getElementById('omr-loading').style.display = '';
             const formData = new FormData();
             formData.append('file', file);
             try {
+                window.HLDebug?.emit('import:omr-preview-start', { name: file.name });
                 const res = await fetch(`${API_BASE}/api/v1/imports/omr/preview`, { method: 'POST', body: formData });
                 const data = await res.json();
                 if (!res.ok) {
                     const msg = data?.detail?.detail || data?.detail || `Error ${res.status}: OMR processing failed`;
+                    window.HLDebug?.emit('import:omr-preview-fail', { status: res.status, msg: msg });
                     document.getElementById('omr-error-message').textContent = msg;
                     document.getElementById('omr-error').style.display = 'flex';
                     return;
@@ -370,6 +384,7 @@
                 grid.innerHTML = chords.slice(0, 20).map(c =>
                     `<div class="midi-chord-cell"><strong>M${c.measure_number}</strong><br>${c.chord_symbol}</div>`
                 ).join('');
+                window.HLDebug?.emit('import:omr-preview-end', { chords: chords.length });
                 document.getElementById('omr-title-input').value = data.data.title || '';
                 if (data.data.warning) {
                     document.getElementById('omr-error-message').textContent = data.data.warning;
@@ -394,14 +409,17 @@
             formData.append('file', file);
             if (titleOverride) formData.append('title_override', titleOverride);
             try {
+                window.HLDebug?.emit('import:omr-post-start', { name: file.name });
                 const res = await fetch(`${API_BASE}/api/v1/imports/omr/import`, { method: 'POST', body: formData });
                 const data = await res.json();
                 if (!res.ok) {
                     const msg = data?.detail?.detail || data?.detail || `Error ${res.status}: OMR import failed`;
+                    window.HLDebug?.emit('import:omr-post-fail', { status: res.status });
                     document.getElementById('omr-error-message').textContent = msg;
                     document.getElementById('omr-error').style.display = 'flex';
                     return;
                 }
+                window.HLDebug?.emit('import:omr-post-end', { song_id: data.song_id });
                 alert(`Imported: ${data.title} (ID: ${data.song_id})`);
                 closeImportModal();
                 loadSongs();
@@ -416,6 +434,7 @@
             const file = fileInput.files[0];
             if (!file) return;
 
+            window.HLDebug?.emit('import:score-file-selected', { name: file.name, size: file.size });
             scoreSelectedFile = file;
             document.getElementById('score-preview').style.display = 'none';
             document.getElementById('score-loading').style.display = '';
@@ -425,6 +444,7 @@
             formData.append('file', file);
 
             try {
+                window.HLDebug?.emit('import:score-preview-start', { name: file.name });
                 const res = await fetch(`${API_BASE}/api/v1/imports/score/preview`, {
                     method: 'POST',
                     body: formData,
@@ -433,10 +453,12 @@
                 if (!res.ok) {
                     await window.logFetchError(res, 'POST', `${API_BASE}/api/v1/imports/score/preview`);
                     const err = await res.json();
+                    window.HLDebug?.emit('import:score-preview-fail', { status: res.status });
                     throw new Error(err.detail || 'Failed to parse file');
                 }
 
                 scorePreviewData = await res.json();
+                window.HLDebug?.emit('import:score-preview-end', { chords: scorePreviewData.chord_count });
 
                 document.getElementById('score-format').textContent = scorePreviewData.format || '?';
                 document.getElementById('score-detected-title').textContent = scorePreviewData.title || '(none)';
@@ -494,14 +516,21 @@
                 const btn = document.getElementById('btn-import-score');
                 btn.disabled = true;
                 btn.textContent = 'Importing...';
+                window.HLDebug?.emit('import:score-post-start', { url: url });
 
                 const res = await fetch(url, { method: 'POST', body: formData });
                 const result = await res.json();
+                window.HLDebug?.emit('import:score-post-end', { status: res.status, song_id: result.song_id });
 
                 // Show import result card (handles 200, 207, 422)
                 showImportResult(result, res.status);
 
-                if (result.song_id) loadSongs();
+                // BUG-025: hide the Import button after a successful import
+                if (result.song_id) {
+                    document.getElementById('btn-import-score').style.display = 'none';
+                    scoreSelectedFile = null;
+                    loadSongs();
+                }
             } catch (err) {
                 showToast('Error importing: ' + err.message);
             } finally {

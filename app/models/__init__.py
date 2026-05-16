@@ -59,6 +59,8 @@ class Song(SongBase):
     total_notes: Optional[int] = None
     version_number: Optional[int] = None
     base_title: Optional[str] = None
+    # REQ-017: source file modification timestamp from song_imports
+    fs_modified_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

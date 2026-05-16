@@ -140,6 +140,7 @@
                 const color = window.currentColors[k] || DEFAULT_COLORS[k] || '#6b7280';
                 return '<div style="display:flex;align-items:center;gap:6px;">' +
                     '<input type="color" value="' + color + '" data-key="' + k + '"' +
+                           ' oninput="window.HLDebug?.emit(\'settings:color-change\',{key:this.dataset.key,color:this.value})"' +
                            ' style="width:32px;height:26px;border:1px solid #555;border-radius:4px;cursor:pointer;">' +
                     '<span style="font-size:0.85rem;min-width:30px;">' + k + '</span>' +
                 '</div>';
@@ -147,7 +148,7 @@
         };
 
         window.saveColors = async function() {
-            window.PortfolioDebug?.log('Settings', 'saveColors fired', {});
+            window.HLDebug?.emit('settings:save-colors-start', {});
             const token = window.auth?.getToken();
             const colors = {};
             document.querySelectorAll('#color-grid input[type="color"]').forEach(function(input) {
@@ -161,7 +162,7 @@
                 },
                 body: JSON.stringify({ key_center_colors: colors })
             });
-            window.PortfolioDebug?.log('Settings', 'API response', { ok: response.ok, status: response.status });
+            window.HLDebug?.emit('settings:save-colors-end', { ok: response.ok, status: response.status });
             const statusEl = document.getElementById('save-status');
             if (statusEl) {
                 statusEl.textContent = response.ok ? 'Key center colors saved.' : 'Save failed.';
@@ -177,13 +178,14 @@
         };
 
         window.toggleDebugMode = async function(enabled) {
-            window.PortfolioDebug?.log('Settings', 'toggleDebugMode', {enabled});
+            window.HLDebug?.emit('settings:debug-toggle', { enabled: enabled });
             const token = window.auth?.getToken();
             const response = await fetch(API_BASE + '/api/v1/preferences', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json', ...(token ? {'Authorization': 'Bearer ' + token} : {}) },
                 body: JSON.stringify({ debug_mode: enabled })
             });
+            window.HLDebug?.emit('settings:debug-toggle-saved', { ok: response.ok });
             const statusEl = document.getElementById('debug-save-status');
             if (statusEl) {
                 statusEl.textContent = response.ok ? 'Debug mode ' + (enabled ? 'enabled' : 'disabled') + '.' : 'Save failed.';

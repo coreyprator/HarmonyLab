@@ -98,10 +98,12 @@ class Auth {
                 this.accessToken = data.access_token;
                 localStorage.setItem('harmonylab_token', data.access_token);
                 this._scheduleRefresh(data.access_token);
+                window.HLDebug?.emit('auth:token-refreshed', {});
                 console.log('Token refreshed successfully');
                 return true;
             } else {
                 console.warn('Refresh failed:', response.status);
+                window.HLDebug?.emit('auth:token-refresh-failed', { status: response.status });
                 this.clearAuth();
                 return false;
             }
@@ -127,6 +129,7 @@ class Auth {
                 };
 
                 this.setAuth(token, user);
+                window.HLDebug?.emit('auth:login-success', { email: user.email });
                 console.log('Token stored from OAuth callback');
 
                 // Clean URL
@@ -227,6 +230,7 @@ class Auth {
 
             if (response.status === 401) {
                 // Token expired - try refresh
+                window.HLDebug?.emit('auth:401', { url: '/api/v1/auth/me' });
                 const refreshed = await this.refreshToken();
                 return refreshed;
             }
@@ -355,8 +359,65 @@ class Auth {
     }
 }
 
+// BUG-028 Defect A: HLDebug initialized here so it is available on EVERY authenticated page.
+// Previously only in song.html; moved to auth.js which loads on all pages.
+// Canonical debug name: window.HLDebug — see PROJECT_KNOWLEDGE.md for what it shows.
+(function () {
+    var ENABLED =
+        new URLSearchParams(window.location.search).get('debug') === '1' ||
+        localStorage.getItem('hl-debug') === '1';
+    var _events = [];
+
+    function _push(tag, data) {
+        _events.push({ t: new Date().toISOString(), tag: tag, data: data });
+        if (_events.length > 20) _events.shift();
+        try {
+            document.dispatchEvent(new CustomEvent('hldebugevent', {
+                detail: { tag: tag, data: data, t: _events[_events.length - 1].t }
+            }));
+        } catch (e) { /* non-blocking */ }
+    }
+
+    window.HLDebug = {
+        enabled: ENABLED,
+        _events: _events,
+        // BUG-028 Defect B: accept both (tag, payload) AND (tag, event, payload)
+        log: function (component, eventOrData, data) {
+            if (!this.enabled) return;
+            var tag, payload;
+            if (typeof eventOrData === 'object' && eventOrData !== null && data === undefined) {
+                tag = component;
+                payload = eventOrData;
+            } else {
+                tag = component + ' | ' + eventOrData;
+                payload = data;
+            }
+            console.log('[HLDebug]', tag, payload !== undefined ? payload : '');
+            _push(tag, payload);
+        },
+        emit: function (tag, data) {
+            if (!this.enabled) return;
+            console.log('[HLDebug]', tag, data !== undefined ? data : '');
+            _push(tag, data);
+        }
+    };
+
+    if (ENABLED) {
+        console.log('[HLDebug] active — initialized in auth.js (BUG-028 fix)');
+    }
+}());
+
 // Create global auth instance
 window.auth = new Auth();
+
+// BUG-028: Route change emit wiring (page load + hash change)
+(function () {
+    if (!window.HLDebug) return;
+    window.HLDebug.emit('route:load', { url: window.location.href });
+    window.addEventListener('hashchange', function () {
+        window.HLDebug.emit('route:hashchange', { hash: window.location.hash });
+    });
+}()); 
 
 // HL-011: Fetch version from backend and update nav on all pages
 (async () => {
@@ -448,4 +509,5 @@ window.logFetchError = async function(response, method, url) {
         statusText: response.statusText,
         body: errorBody
     });
+    window.HLDebug?.emit('fetch:error', { method: method || 'GET', url: url, status: response.status });
 };

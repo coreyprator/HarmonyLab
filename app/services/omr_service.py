@@ -2,6 +2,10 @@
 OMR service — Claude Vision API pipeline. Inputs: JPG, PNG, SVG, PDF.
 PDF is converted to PNG (first page) via pdf2image before processing.
 SVG is converted to PNG via rsvg-convert before processing.
+
+System dependencies required (installed via Dockerfile):
+  - rsvg-convert  (from librsvg2-bin) — used for SVG-to-PNG conversion
+  - poppler-utils (pdf2image backend) — used for PDF-to-PNG conversion
 """
 import anthropic
 import base64
@@ -59,20 +63,31 @@ def _resize_if_needed(image_path: str, max_px: int = 2000) -> str:
     return out_path
 
 
-def _run_vision_extraction(image_path: str) -> dict:
+def _encode_image(image_path: str) -> tuple[str, str]:
+    """Base64-encode an image file once and return (encoded_data, media_type).
+
+    TSK-003: callers share this result so the file is read and encoded only once.
+    """
+    ext = Path(image_path).suffix.lower()
+    media_type = "image/jpeg" if ext in {".jpg", ".jpeg"} else "image/png"
+    with open(image_path, "rb") as f:
+        image_data = base64.standard_b64encode(f.read()).decode()
+    return image_data, media_type
+
+
+def _run_vision_extraction(image_path: str, image_data: str = None, media_type: str = None) -> dict:
     """Extract chord symbols from a lead sheet image using Claude Vision API."""
     image_path = _resize_if_needed(image_path)
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
-    with open(image_path, "rb") as f:
-        image_data = base64.standard_b64encode(f.read()).decode()
-
-    ext = Path(image_path).suffix.lower()
-    media_type = "image/jpeg" if ext in {".jpg", ".jpeg"} else "image/png"
+    # TSK-003: accept pre-encoded image data to avoid encoding twice when both passes run
+    if image_data is None or media_type is None:
+        image_data, media_type = _encode_image(image_path)
 
     response = client.messages.create(
         model=settings.omr_model,
         max_tokens=4096,
+        timeout=120,
         messages=[{
             "role": "user",
             "content": [
@@ -138,8 +153,15 @@ def parse_omr_file(file_bytes: bytes, filename: str) -> dict:
         else:
             raise ValueError(f"Unsupported file type: {suffix}")
 
+        # TSK-003: encode image once; share with both Vision passes to avoid double I/O
+        image_path = _resize_if_needed(image_path)
+        encoded_data, media_type = _encode_image(image_path)
+
         try:
-            result = _run_vision_extraction(image_path)
+            result = _run_vision_extraction(image_path, image_data=encoded_data, media_type=media_type)
+        except json.JSONDecodeError as e:
+            raise HTTPException(status_code=422,
+                detail={"detail": str(e), "stage": "json_parse"})
         except ValueError as e:
             stage, msg = str(e).split(":", 1) if ":" in str(e) else ("vision_api", str(e))
             raise HTTPException(status_code=422,
@@ -149,8 +171,7 @@ def parse_omr_file(file_bytes: bytes, filename: str) -> dict:
                 detail={"detail": str(e), "stage": "vision_api"})
 
         # REQ-015: Second Vision API pass for MIDI note extraction (non-blocking)
-        midi_notes = _run_vision_midi_extraction(image_path)
-
+        midi_notes = _run_vision_midi_extraction(image_path, image_data=encoded_data, media_type=media_type)
     # BUG-018: Use original filename as title when Vision returns generic title
     if original_filename:
         stem = Path(original_filename).stem
@@ -180,7 +201,7 @@ def parse_omr_file(file_bytes: bytes, filename: str) -> dict:
     return output
 
 
-def _run_vision_midi_extraction(image_path: str) -> list:
+def _run_vision_midi_extraction(image_path: str, image_data: str = None, media_type: str = None) -> list:
     """Run a second Vision API pass to extract individual notes from a lead sheet image.
 
     Returns a list of dicts: {measure, beat, pitch (MIDI int), duration_type, voice}.
@@ -190,15 +211,14 @@ def _run_vision_midi_extraction(image_path: str) -> list:
         image_path = _resize_if_needed(image_path)
         client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
-        with open(image_path, "rb") as f:
-            image_data = base64.standard_b64encode(f.read()).decode()
-
-        ext = Path(image_path).suffix.lower()
-        media_type = "image/jpeg" if ext in {".jpg", ".jpeg"} else "image/png"
+        # TSK-003: accept pre-encoded image data to avoid encoding twice
+        if image_data is None or media_type is None:
+            image_data, media_type = _encode_image(image_path)
 
         response = client.messages.create(
             model=settings.omr_model,
             max_tokens=4096,
+            timeout=120,
             messages=[{
                 "role": "user",
                 "content": [
@@ -227,6 +247,12 @@ Include all melody notes in order."""
         raw = re.sub(r'^```[a-z]*\n?', '', raw).rstrip('`').strip()
         result = json.loads(raw)
         return result.get("notes", [])
-    except Exception as e:
-        logger.warning("MIDI extraction failed (non-blocking): %s", e)
+    except anthropic.APIError as e:
+        logger.warning("MIDI extraction API error (non-blocking): %s", type(e).__name__, e)
+        return []
+    except json.JSONDecodeError as e:
+        logger.warning("MIDI extraction JSON parse error (non-blocking): %s", e)
+        return []
+    except ValueError as e:
+        logger.warning("MIDI extraction bad image (non-blocking): %s", e)
         return []

@@ -338,6 +338,7 @@ Unified parser for all supported music file formats. Key components:
 - **Diagnostic logging** (added 2026-02-22): logs measures_scanned, measures_with_harmony, total_chords. Warns if 0 chords found.
 - **MuseScore 4 note** (2026-02-22): MuseScore 4 wraps content in `<voice>` elements. Fixed by using `iter()` instead of direct child iteration.
 - **Import data capture audit** (HL-033, 2026-03-05): Captured: chord symbols, melody notes (first staff only via MelodyNotes table), key signature, time signature, tempo. NOT captured: inner voices (harmony/bass parts), dynamics, per-section tempo/key changes, phrase breaks/rehearsal marks.
+- **Instrumental intro / pickup bar behavior** (BUG-027, 2026-04-27): Songs with instrumental intros or pickup bars show empty chord columns on the first measures when the composer did not write a chord there. This is correct behavior matching the source MuseScore file. Verified for Corcovado (measures 1-2 melody-only intro, harmonic form begins m3 with "Intro" StaffText) and Days-of-Wine (measure 1 is a 1/4 pickup bar with irregular=1). Future REQ-018 will add chord inference for these cases.
 
 ### MIDI Parser (`app/services/midi_parser.py`)
 
