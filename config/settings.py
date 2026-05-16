@@ -141,9 +141,13 @@ class Settings:
     @property
     def google_redirect_uri(self) -> Optional[str]:
         """Google OAuth redirect URI."""
+        # Allow override via env var (used for test fork / non-prod services)
+        override = os.getenv("GOOGLE_REDIRECT_URI")
+        if override:
+            return override
         if os.getenv("K_SERVICE"):
             return "https://harmonylab.rentyourcio.com/api/v1/auth/google/callback"
-        return os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8080/api/v1/auth/google/callback")
+        return "http://localhost:8080/api/v1/auth/google/callback"
 
 
 @lru_cache()
