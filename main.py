@@ -8,6 +8,7 @@ import traceback
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from config.settings import settings
@@ -52,6 +53,7 @@ app.add_middleware(
     allow_origins=[
         "https://harmonylab.rentyourcio.com",
         "https://harmonylab-frontend-wmrla7fhwa-uc.a.run.app",
+        "https://harmonylab-redesign-wmrla7fhwa-uc.a.run.app",
         "http://localhost:8080",
         "http://localhost:3000",
     ],
@@ -128,6 +130,9 @@ app.include_router(riffs.router)
 app.include_router(improvisation.router)
 app.include_router(rules.router)
 app.include_router(preferences.router)
+
+# HM43 Phase 2: Serve redesign prototype at /redesign/ (redesign/hm44 branch only)
+app.mount("/redesign", StaticFiles(directory="frontend-redesign", html=True), name="redesign")
 
 
 if __name__ == "__main__":

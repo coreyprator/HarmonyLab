@@ -1,0 +1,2568 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=1320" />
+<title>HarmonyLab — Studio Light · Redesign Specification</title>
+<link rel="stylesheet" href="redesign.css" />
+</head>
+<body>
+<div class="staff-edge" aria-hidden="true"></div>
+
+<div class="shell">
+  <!-- ====================================================== -->
+  <!-- TOC                                                    -->
+  <!-- ====================================================== -->
+  <aside class="toc">
+    <h1>HarmonyLab</h1>
+    <div class="kicker">Studio Light · v1 redesign</div>
+    <nav>
+      <h4>Spec</h4>
+      <ol>
+        <li><a href="#ia">Information architecture</a></li>
+        <li><a href="#tokens">Design tokens</a></li>
+        <li><a href="#components">Component library</a></li>
+      </ol>
+      <h4>Mockups</h4>
+      <ol>
+        <li><a href="#m-list">Song list</a></li>
+        <li><a href="#m-song">Song detail · Chords + Notation</a></li>
+        <li><a href="#m-inferred">Corcovado · inferred chords</a></li>
+        <li><a href="#m-analysis">Analysis tab</a></li>
+        <li><a href="#m-notation">Notation pane focus</a></li>
+        <li><a href="#m-settings">Settings</a></li>
+        <li><a href="#m-import">Import modal</a></li>
+        <li><a href="#m-audit">Audit page</a></li>
+        <li><a href="#m-chat">AI Theory Chat</a></li>
+      </ol>
+      <h4>Specs</h4>
+      <ol>
+        <li><a href="#i-edit">Inline chord edit flow</a></li>
+        <li><a href="#i-reanalyze">Re-analyze w/ manual key</a></li>
+        <li><a href="#i-import">PDF import + error resolve</a></li>
+      </ol>
+      <h4>Reconciliation</h4>
+      <ol>
+        <li><a href="#rationale">Rationale</a></li>
+        <li><a href="#matrix">Endpoint matrix</a></li>
+        <li><a href="#new-be">New BE required</a></li>
+        <li><a href="#stub">Stub features verdict</a></li>
+      </ol>
+    </nav>
+    <div class="footer">
+      CD · 2026-05-15<br />
+      For PL → CAI → HM44<br />
+      <br />
+      One user · 42 songs<br />
+      Dark primary · iPad min<br />
+    </div>
+  </aside>
+
+  <!-- ====================================================== -->
+  <!-- Document                                               -->
+  <!-- ====================================================== -->
+  <main class="doc">
+
+    <!-- ---------- Cover ---------- -->
+    <section>
+      <div class="sec-kicker">Brief · One pager</div>
+      <h2>The page is the music stand.</h2>
+      <p class="sec-lede">
+        HarmonyLab is one person's lead-sheet workshop. The redesign treats the song
+        like a document being studied, not a SaaS dashboard. Notation goes on top.
+        Chords become editable cells. Roman numerals look like Roman numerals.
+        Stub features get out of the way. The user's key-center colors stay user data.
+      </p>
+      <div style="margin-top:24px;padding:16px 20px;border:1px solid var(--amber);border-radius:6px;background:oklch(0.79 0.13 75 / .07);display:flex;justify-content:space-between;align-items:center;gap:16px">
+        <div>
+          <div class="tiny upper" style="color:var(--amber)">Working interactive prototype available →</div>
+          <div style="font-family:var(--t-display);font-style:italic;font-size:20px;margin-top:4px">prototype.html · click any chord to edit · five hand-curated songs</div>
+        </div>
+        <a href="prototype.html" class="btn btn--primary">Open prototype →</a>
+      </div>
+
+      <div style="margin-top:12px;padding:14px 18px;border:1px solid var(--line-2);border-radius:6px;background:var(--bg-1);font-size:13px;color:var(--ink-1)">
+        <div class="tiny upper" style="color:var(--ink-blue);margin-bottom:4px">Reconciliation report · 2026-05-16</div>
+        See <a href="RECONCILIATION.md" style="color:var(--ink-blue);text-decoration:underline">RECONCILIATION.md</a> for the authoritative endpoint-mapped matrix.
+        Eight post-original revisions are catalogued there: merged score workbench (no tabs), auto system-break, multi-select + AI key-center dialog,
+        right-rail Study Notes, chord-vocabulary dropdown, per-column sort + filter, Genre column, Lab reclassification (REVIVE not DEPRECATE for AI Improv + RLHF).
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;margin-top:32px">
+        <div>
+          <div class="tiny upper" style="color:var(--amber)">Pattern · primary</div>
+          <h3 style="margin-top:6px">Notation lives on top.</h3>
+          <p style="font-size:13px">OSMD render is the document, not a sidebar. Chord cells sit below as the editable analytical layer.</p>
+        </div>
+        <div>
+          <div class="tiny upper" style="color:var(--amber)">Pattern · edit</div>
+          <h3 style="margin-top:6px">Click the cell. Type.</h3>
+          <p style="font-size:13px">Inline edit on click; popover handles the related fields (Roman, function, voicing, comment); drawer handles depth.</p>
+        </div>
+        <div>
+          <div class="tiny upper" style="color:var(--amber)">Pattern · inferred</div>
+          <h3 style="margin-top:6px">Inferred is triple-cued.</h3>
+          <p style="font-size:13px">Italic + dotted underline + 60% opacity + leading <code>·</code>. The user never wonders which chords the machine guessed.</p>
+        </div>
+      </div>
+    </section>
+
+    <hr class="rule" />
+
+    <!-- ====================================================== -->
+    <!-- 1. Information architecture                            -->
+    <!-- ====================================================== -->
+    <section id="ia">
+      <div class="sec-kicker">01 · Information architecture</div>
+      <h2>Five surfaces, one workbench.</h2>
+      <p class="sec-lede">
+        The redesign collapses ten pages into a single workbench (song detail) plus four
+        ambient surfaces. Stubbed features become a single optional <em>Lab</em> drawer
+        rather than top-level pages.
+      </p>
+
+      <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:16px;margin-top:24px">
+        <div class="ia-node">
+          <div class="ttl">Song</div>
+          <div class="sub">/songs/:id · the workbench</div>
+          <div class="children">
+            <div class="child">Notation pane (OSMD) — primary</div>
+            <div class="child">Chords tab — edit grid</div>
+            <div class="child">Analysis tab — RN + function + key</div>
+            <div class="child">Notes tab — comments + AI exchanges</div>
+            <div class="child">Right drawer: chord editor / AI / overrides / audit</div>
+            <div class="child new">Export menu (MuseScore · MusicXML)</div>
+          </div>
+        </div>
+        <div class="ia-node">
+          <div class="ttl">Library</div>
+          <div class="sub">/ · the 42 songs</div>
+          <div class="children">
+            <div class="child">Song table — dual timestamps (REQ-017)</div>
+            <div class="child">Genre filter + search</div>
+            <div class="child">Import modal — Score / OMR / Batch</div>
+            <div class="child">Bulk delete</div>
+            <div class="child">Seed standards (debug)</div>
+          </div>
+        </div>
+        <div class="ia-node">
+          <div class="ttl">Settings</div>
+          <div class="sub">/settings</div>
+          <div class="children">
+            <div class="child">Chord notation: jazz / plain</div>
+            <div class="child">Key-center colors (user data)</div>
+            <div class="child">Debug mode · HLDebug toggle</div>
+            <div class="child new">Default notation pane height</div>
+            <div class="child new">Voicing notation defaults</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:16px">
+        <div class="ia-node">
+          <div class="ttl">Audit</div>
+          <div class="sub">/songs/:id/audit</div>
+          <div class="children">
+            <div class="child">Notes / lyrics / dynamics / time / key / tempo</div>
+            <div class="child">Import history (per-version)</div>
+            <div class="child">Diagnostics (parser warnings)</div>
+          </div>
+        </div>
+        <div class="ia-node">
+          <div class="ttl">Theory Chat</div>
+          <div class="sub">Drawer on song · also full-page</div>
+          <div class="children">
+            <div class="child">Selectable chord context</div>
+            <div class="child">Prior exchanges (50 rows)</div>
+            <div class="child">Accept / reject outcome</div>
+          </div>
+        </div>
+        <div class="ia-node">
+          <div class="ttl">Lab</div>
+          <div class="sub">/lab — deemphasized stubs</div>
+          <div class="children">
+            <div class="child stub">Improvise (0 sessions ever)</div>
+            <div class="child stub">Quiz (0 attempts ever)</div>
+            <div class="child stub">Progress (0 rows)</div>
+            <div class="child stub">RLHF activate / revert (0 sessions)</div>
+            <div class="child">Riffs library (10 hardcoded)</div>
+          </div>
+        </div>
+      </div>
+
+      <h3>What's gone</h3>
+      <p>
+        Top-level Quiz, Progress, Riffs and Improvise pages collapse into the Lab drawer
+        — none have ever held data. <code>admin.html</code> stays unchanged (it's developer
+        plumbing for <code>analysis_rules</code>, not user surface). Login flow stays as-is
+        and is not redesigned (out of scope, per brief).
+      </p>
+    </section>
+
+    <hr class="rule" />
+
+    <!-- ====================================================== -->
+    <!-- 2. Design tokens                                       -->
+    <!-- ====================================================== -->
+    <section id="tokens">
+      <div class="sec-kicker">02 · Design tokens</div>
+      <h2>The system, codified.</h2>
+      <p class="sec-lede">
+        Tokens are CSS custom properties on <code>:root</code>. The full file is in
+        <code>redesign.css</code>; what follows is the visible inventory.
+      </p>
+
+      <h3>Surfaces (dark primary)</h3>
+      <div class="swatch-grid">
+        <div class="swatch"><div class="chip" style="background:var(--bg-0)"></div><div class="meta"><div class="name">bg-0 · page</div><div class="val">oklch(.14 .006 70)</div></div></div>
+        <div class="swatch"><div class="chip" style="background:var(--bg-1)"></div><div class="meta"><div class="name">bg-1 · surface</div><div class="val">oklch(.175 .006 70)</div></div></div>
+        <div class="swatch"><div class="chip" style="background:var(--bg-2)"></div><div class="meta"><div class="name">bg-2 · raised</div><div class="val">oklch(.215 .007 70)</div></div></div>
+        <div class="swatch"><div class="chip" style="background:var(--bg-3)"></div><div class="meta"><div class="name">bg-3 · selected</div><div class="val">oklch(.26 .008 70)</div></div></div>
+        <div class="swatch"><div class="chip" style="background:var(--line)"></div><div class="meta"><div class="name">line</div><div class="val">oklch(.30 .006 70)</div></div></div>
+        <div class="swatch"><div class="chip" style="background:var(--line-2)"></div><div class="meta"><div class="name">line-2</div><div class="val">oklch(.38 .006 70)</div></div></div>
+      </div>
+
+      <h3>Ink (text)</h3>
+      <div class="swatch-grid">
+        <div class="swatch"><div class="chip" style="background:var(--ink-0)"></div><div class="meta"><div class="name">ink-0 · primary</div><div class="val">oklch(.97 .005 80)</div></div></div>
+        <div class="swatch"><div class="chip" style="background:var(--ink-1)"></div><div class="meta"><div class="name">ink-1 · secondary</div><div class="val">oklch(.78 .005 80)</div></div></div>
+        <div class="swatch"><div class="chip" style="background:var(--ink-2)"></div><div class="meta"><div class="name">ink-2 · meta</div><div class="val">oklch(.58 .005 80)</div></div></div>
+        <div class="swatch"><div class="chip" style="background:var(--ink-3)"></div><div class="meta"><div class="name">ink-3 · inferred</div><div class="val">oklch(.42 .005 80)</div></div></div>
+        <div class="swatch"><div class="chip" style="background:var(--ink-4)"></div><div class="meta"><div class="name">ink-4</div><div class="val">oklch(.32 .005 80)</div></div></div>
+        <div class="swatch"><div class="chip" style="background:#000"></div><div class="meta"><div class="name">—</div><div class="val">reserved</div></div></div>
+      </div>
+
+      <h3>Accent · sparingly</h3>
+      <div class="swatch-grid">
+        <div class="swatch"><div class="chip" style="background:var(--amber)"></div><div class="meta"><div class="name">amber · primary</div><div class="val">oklch(.79 .13 75)</div></div></div>
+        <div class="swatch"><div class="chip" style="background:var(--ink-blue)"></div><div class="meta"><div class="name">ink-blue · info</div><div class="val">oklch(.68 .11 250)</div></div></div>
+        <div class="swatch"><div class="chip" style="background:var(--teal)"></div><div class="meta"><div class="name">teal · ai</div><div class="val">oklch(.72 .11 195)</div></div></div>
+        <div class="swatch"><div class="chip" style="background:var(--rose)"></div><div class="meta"><div class="name">rose · destruct</div><div class="val">oklch(.68 .17 25)</div></div></div>
+        <div class="swatch"><div class="chip" style="background:var(--green)"></div><div class="meta"><div class="name">green · ok</div><div class="val">oklch(.72 .13 145)</div></div></div>
+        <div class="swatch"><div class="chip" style="background:var(--amber-2)"></div><div class="meta"><div class="name">amber-2</div><div class="val">oklch(.65 .11 75)</div></div></div>
+      </div>
+
+      <h3>Key-center palette · user data, defaults shown</h3>
+      <p style="margin-top:0">User-overridable per the <code>UserPreferences.key_center_colors</code> JSON dict. The system never overrides user picks; these are seed values that load into <code>/settings</code> for first-time edit.</p>
+      <div class="swatch-grid">
+        <div class="swatch"><div class="chip" style="background:var(--k-C)"></div><div class="meta"><div class="name">C major</div><div class="val">cream</div></div></div>
+        <div class="swatch"><div class="chip" style="background:var(--k-F)"></div><div class="meta"><div class="name">F major</div><div class="val">brass</div></div></div>
+        <div class="swatch"><div class="chip" style="background:var(--k-Bb)"></div><div class="meta"><div class="name">B♭ major</div><div class="val">gold</div></div></div>
+        <div class="swatch"><div class="chip" style="background:var(--k-Eb)"></div><div class="meta"><div class="name">E♭ major</div><div class="val">copper</div></div></div>
+        <div class="swatch"><div class="chip" style="background:var(--k-Ab)"></div><div class="meta"><div class="name">A♭ major</div><div class="val">rust</div></div></div>
+        <div class="swatch"><div class="chip" style="background:var(--k-Db)"></div><div class="meta"><div class="name">D♭ major</div><div class="val">claret</div></div></div>
+        <div class="swatch"><div class="chip" style="background:var(--k-G)"></div><div class="meta"><div class="name">G major</div><div class="val">spring</div></div></div>
+        <div class="swatch"><div class="chip" style="background:var(--k-D)"></div><div class="meta"><div class="name">D major</div><div class="val">sea</div></div></div>
+        <div class="swatch"><div class="chip" style="background:var(--k-A)"></div><div class="meta"><div class="name">A major</div><div class="val">sky</div></div></div>
+        <div class="swatch"><div class="chip" style="background:var(--k-E)"></div><div class="meta"><div class="name">E major</div><div class="val">periwinkle</div></div></div>
+        <div class="swatch"><div class="chip" style="background:var(--k-B)"></div><div class="meta"><div class="name">B major</div><div class="val">violet</div></div></div>
+        <div class="swatch"><div class="chip" style="background:var(--k-Fs)"></div><div class="meta"><div class="name">F♯ major</div><div class="val">magenta</div></div></div>
+      </div>
+
+      <h3>Type scale</h3>
+      <div>
+        <div class="type-spec">
+          <div class="label">display / italic · cormorant garamond 500</div>
+          <div class="sample" style="font-family:var(--t-display);font-style:italic;font-size:46px;line-height:1">Corcovado</div>
+        </div>
+        <div class="type-spec">
+          <div class="label">title · 26px</div>
+          <div class="sample" style="font-family:var(--t-display);font-style:italic;font-size:26px;line-height:1.2">Song detail · Chords</div>
+        </div>
+        <div class="type-spec">
+          <div class="label">chord symbol · petaluma 28px</div>
+          <div class="sample" style="font-family:var(--t-chord);font-size:28px">D−7♭5 · G7alt · Cmaj7 · F♯ø7</div>
+        </div>
+        <div class="type-spec">
+          <div class="label">roman · cormorant italic 15px (caps=major)</div>
+          <div class="sample" style="font-family:var(--t-roman);font-style:italic;font-size:15px"><span style="text-transform:uppercase">II</span><span>ø7</span>  <span style="text-transform:uppercase">V</span><sup>7</sup>  <span style="text-transform:uppercase">I</span><sup>Δ7</sup>  ·  iiø7 · V⁷ · I</div>
+        </div>
+        <div class="type-spec">
+          <div class="label">ui body · plex sans 14px</div>
+          <div class="sample">Click any chord cell to edit. <span class="kbd" style="font-family:var(--t-mono);font-size:11px;border:1px solid var(--line);padding:1px 5px;border-radius:3px;color:var(--ink-2)">⏎</span> commits · <span class="kbd" style="font-family:var(--t-mono);font-size:11px;border:1px solid var(--line);padding:1px 5px;border-radius:3px;color:var(--ink-2)">Esc</span> cancels.</div>
+        </div>
+        <div class="type-spec">
+          <div class="label">ui meta · plex sans 12px</div>
+          <div class="sample" style="color:var(--ink-2);font-size:12px">Imported 2025-08-12 · source modified 2024-11-04 · v2</div>
+        </div>
+        <div class="type-spec">
+          <div class="label">mono · jetbrains 11px</div>
+          <div class="sample" style="font-family:var(--t-mono);font-size:11px;color:var(--ink-3);letter-spacing:.08em;text-transform:uppercase">PUT /api/v1/chords/482 · 200 OK · 84ms</div>
+        </div>
+      </div>
+
+      <h3>Tokens · CSS export</h3>
+<pre>:root {
+  --bg-0:  oklch(.14  .006 70);   --bg-1:   oklch(.175 .006 70);
+  --bg-2:  oklch(.215 .007 70);   --bg-3:   oklch(.26  .008 70);
+  --line:  oklch(.30  .006 70);   --line-2: oklch(.38  .006 70);
+  --ink-0: oklch(.97  .005 80);   --ink-1:  oklch(.78  .005 80);
+  --ink-2: oklch(.58  .005 80);   --ink-3:  oklch(.42  .005 80);
+  --amber: oklch(.79 .13 75);     --ink-blue: oklch(.68 .11 250);
+  --teal:  oklch(.72 .11 195);    --rose:  oklch(.68 .17 25);
+  --green: oklch(.72 .13 145);
+
+  --t-display: "Cormorant Garamond", serif;
+  --t-ui:      "IBM Plex Sans", system-ui, sans-serif;
+  --t-chord:   "Petaluma", serif;
+  --t-mono:    "JetBrains Mono", monospace;
+
+  --s-1:4px; --s-2:8px; --s-3:12px; --s-4:16px; --s-5:20px;
+  --s-6:24px; --s-8:32px; --s-10:40px; --s-12:48px; --s-16:64px;
+  --r-1:2px; --r-2:4px; --r-3:6px; --r-4:10px; --r-pill:999px;
+  --motion-fast: 120ms cubic-bezier(.2,.6,.2,1);
+}</pre>
+    </section>
+
+    <hr class="rule" />
+
+    <!-- ====================================================== -->
+    <!-- 3. Component library                                   -->
+    <!-- ====================================================== -->
+    <section id="components">
+      <div class="sec-kicker">03 · Component library</div>
+      <h2>Primitives.</h2>
+      <p class="sec-lede">Every recurring control, with states. Built once in CSS; reused across every mockup below.</p>
+
+      <div class="comp-grid">
+        <div class="comp-card">
+          <h4>Buttons · default / hover / primary / ghost / danger / disabled</h4>
+          <div class="row">
+            <button class="btn">Default</button>
+            <button class="btn" style="background:var(--bg-3);border-color:var(--line-2)">Hover</button>
+            <button class="btn btn--primary">Re-analyze</button>
+            <button class="btn btn--ghost">Cancel</button>
+            <button class="btn btn--danger">Delete</button>
+            <button class="btn" disabled style="opacity:.45;cursor:not-allowed">Disabled</button>
+          </div>
+          <div class="row">
+            <button class="btn btn--sm">Small</button>
+            <button class="btn">Default</button>
+            <button class="btn btn--lg">Large</button>
+            <button class="btn">⏎ <span class="kbd">⏎</span></button>
+          </div>
+        </div>
+
+        <div class="comp-card">
+          <h4>Inputs · text / select / search / focus</h4>
+          <div class="row">
+            <input class="input" value="C△7" style="width:90px;font-family:var(--t-chord);font-size:18px" />
+            <select class="input select" style="width:120px"><option>iiø7 → V7</option><option>ii → V</option></select>
+            <input class="input" placeholder="Filter…" style="width:180px" />
+          </div>
+          <div class="row">
+            <input class="input" value="dropp 2 voicing" style="width:200px;border-color:var(--amber)" />
+            <span class="tiny upper">focus state</span>
+          </div>
+        </div>
+
+        <div class="comp-card">
+          <h4>Pills / badges</h4>
+          <div class="row">
+            <span class="pill pill--key" style="border-color:var(--k-Bb);color:var(--k-Bb)"><span class="swatch" style="background:var(--k-Bb)"></span>B♭ major</span>
+            <span class="pill pill--key" style="border-color:var(--k-D);color:var(--k-D)"><span class="swatch" style="background:var(--k-D)"></span>D minor</span>
+            <span class="pill pill--confidence">conf · 0.84</span>
+            <span class="pill pill--status-fresh"><span class="swatch" style="background:var(--green)"></span>analysis fresh</span>
+            <span class="pill pill--status-stale"><span class="swatch" style="background:var(--amber)"></span>analysis stale</span>
+          </div>
+          <div class="row">
+            <span class="badge b-new">new</span>
+            <span class="badge b-edited">edited</span>
+            <span class="badge b-stub">stub</span>
+            <span class="badge" style="color:var(--green)">imported</span>
+          </div>
+        </div>
+
+        <div class="comp-card">
+          <h4>Segmented · tabs</h4>
+          <div class="row">
+            <div class="seg">
+              <button class="is-on">Jazz Δ−ø</button>
+              <button>Plain maj/m</button>
+            </div>
+            <div class="seg">
+              <button>4-bar</button>
+              <button class="is-on">8-bar</button>
+              <button>flat</button>
+            </div>
+          </div>
+          <div class="row">
+            <div class="tabs" style="border-bottom:0;padding:0">
+              <div class="tab is-on">Chords <span class="count">96</span></div>
+              <div class="tab">Analysis</div>
+              <div class="tab">Notes</div>
+              <div class="tab">Notation</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="comp-card" style="grid-column:1/-1">
+          <h4>Chord cell — every state</h4>
+          <div class="chord-grid chord-grid--8" style="margin-top:8px">
+            <div class="chord-cell k-Bb"><div class="key-strip"></div><div class="meas">m.5</div><div class="sym">B♭△7</div><div class="roman major">I<sup>Δ7</sup></div><div class="func">tonic</div></div>
+            <div class="chord-cell k-Bb is-edited"><div class="key-strip"></div><div class="meas">m.6</div><div class="sym">Cm7</div><div class="roman minor">ii<sup>7</sup></div><div class="voicing">rootless A</div><div class="func">predominant</div></div>
+            <div class="chord-cell k-Bb has-comment"><div class="key-strip"></div><div class="meas">m.7</div><div class="sym">F7♭9</div><div class="roman major">V<sup>7♭9</sup></div><div class="func">dominant</div></div>
+            <div class="chord-cell k-Bb is-selected"><div class="key-strip"></div><div class="meas">m.8</div><div class="sym">B♭6</div><div class="roman major">I<sup>6</sup></div><div class="func">tonic</div></div>
+            <div class="chord-cell k-Bb is-inferred"><div class="key-strip"></div><div class="meas">m.9</div><div class="sym">Gm7</div><div class="roman minor">vi<sup>7</sup></div><div class="func">inferred</div></div>
+            <div class="chord-cell k-Bb is-editing"><div class="key-strip"></div><div class="meas">m.10</div><div class="sym" style="border-bottom:1px solid var(--amber);padding-bottom:2px">Cm7|</div><div class="roman minor" style="color:var(--ink-3)">ii<sup>7</sup></div><div class="func" style="color:var(--ink-blue)">editing…</div></div>
+            <div class="chord-cell k-F"><div class="key-strip"></div><div class="meas">m.11</div><div class="sym">F△7</div><div class="roman major">I<sup>Δ7</sup></div><div class="func">tonic · mod F</div></div>
+            <div class="chord-cell"><div class="meas">m.12</div><div class="sym" style="color:var(--ink-3)">—</div><div class="roman" style="color:var(--ink-4)">no chord</div></div>
+          </div>
+          <div class="row" style="margin-top:12px;font-size:12px;color:var(--ink-2);gap:24px">
+            <div>← <strong style="color:var(--ink-0)">default</strong></div>
+            <div>← <strong style="color:var(--ink-blue)">edited</strong> (override saved)</div>
+            <div>← <strong style="color:var(--amber)">has comment</strong> (orange dot)</div>
+            <div>← <strong style="color:var(--amber)">selected</strong></div>
+            <div>← <strong style="font-style:italic;color:var(--ink-3)">inferred</strong></div>
+            <div>← <strong style="color:var(--ink-blue)">editing</strong> in-place</div>
+            <div>← key change (color strip)</div>
+            <div>← empty measure</div>
+          </div>
+        </div>
+
+        <div class="comp-card">
+          <h4>Notation pane head</h4>
+          <div class="mini">
+            <div class="notation-head">
+              <span>OSMD · Corcovado</span>
+              <span style="margin:0 8px">·</span>
+              <span>m.1–16 of 32</span>
+              <span class="right">
+                <button class="btn btn--sm">−</button>
+                <button class="btn btn--sm">+</button>
+                <button class="btn btn--sm">Hide chords</button>
+              </span>
+            </div>
+            <div style="padding:14px 16px;color:var(--ink-2);font-size:12px">[ staff render ]</div>
+          </div>
+        </div>
+
+        <div class="comp-card">
+          <h4>Toast · save confirmation</h4>
+          <div style="position:relative;height:80px">
+            <div class="float-toast" style="position:relative;left:0;transform:none;bottom:0;margin-top:24px">
+              <span class="dot"></span> Saved — chord m.7 → F7♭9 <span class="tiny" style="margin-left:8px">PUT 200 · 84ms</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <hr class="rule" />
+
+    <!-- ====================================================== -->
+    <!-- 4. Mockup · Song list                                  -->
+    <!-- ====================================================== -->
+    <section id="m-list">
+      <div class="sec-kicker">Mockup 01 · library</div>
+      <h2>Song list.</h2>
+      <p class="sec-lede">42 songs, dual timestamps per REQ-017 (imported · source modified), key + form + chord count inline. No card grid — the table beats a grid at this density for a single user who knows the library.</p>
+
+      <div class="mockup-caption">
+        <span class="num">M-01</span>
+        <span class="ttl">/songs</span>
+        <span class="note">desktop · 1280w</span>
+      </div>
+      <div class="mockup">
+        <div class="app">
+          <div class="app-topbar">
+            <div class="app-brand">HarmonyLab</div>
+            <nav class="app-nav">
+              <a class="is-active">Library</a>
+              <a>Settings</a>
+              <a>Audit</a>
+              <a>Lab</a>
+            </nav>
+            <div class="app-spacer"></div>
+            <div class="app-meta"><span class="dot"></span>db · 42 songs · canary <code>PINEAPPLE-HM41</code></div>
+            <div class="user-chip"><span class="av"></span>pl</div>
+          </div>
+
+          <div style="display:flex;align-items:flex-end;justify-content:space-between;padding:32px 32px 16px">
+            <div>
+              <div class="tiny upper" style="color:var(--amber)">Library</div>
+              <div style="font-family:var(--t-display);font-style:italic;font-size:34px;line-height:1.1">Forty-two songs.</div>
+              <div style="color:var(--ink-2);font-size:13px;margin-top:6px">10 have raw_xml · 7 have lyrics · 6 have chord overrides</div>
+            </div>
+            <div style="display:flex;gap:8px">
+              <input class="input" placeholder="Filter title / composer…" style="width:220px" />
+              <select class="input select" style="width:140px"><option>All genres</option><option>Bossa Nova</option><option>Standard</option><option>Bebop</option></select>
+              <button class="btn btn--ghost">Bulk delete</button>
+              <button class="btn btn--primary">+ Import</button>
+            </div>
+          </div>
+
+          <table class="tbl" style="margin:0 32px;width:calc(100% - 64px)">
+            <thead>
+              <tr>
+                <th style="width:24px"></th>
+                <th>Title</th>
+                <th>Composer</th>
+                <th>Key</th>
+                <th>Form</th>
+                <th style="text-align:right">Measures</th>
+                <th style="text-align:right">Chords</th>
+                <th>Imported</th>
+                <th>Source · modified</th>
+                <th style="text-align:right">Data</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><input type="checkbox" /></td>
+                <td class="t-title">Corcovado</td>
+                <td class="t-composer">A. C. Jobim</td>
+                <td><span class="pill pill--key" style="border-color:var(--k-Bb);color:var(--k-Bb)"><span class="swatch" style="background:var(--k-Bb)"></span>B♭ maj</span></td>
+                <td>AABA</td>
+                <td class="t-mono" style="text-align:right">32</td>
+                <td class="t-mono" style="text-align:right">64</td>
+                <td class="t-mono">2025-08-12 14:02</td>
+                <td class="t-mono">2024-11-04 09:31</td>
+                <td style="text-align:right"><span class="tiny" style="color:var(--green)">XML · NOTES</span></td>
+                <td><a class="tiny" style="color:var(--ink-blue)">audit →</a></td>
+              </tr>
+              <tr>
+                <td><input type="checkbox" /></td>
+                <td class="t-title">Autumn Leaves</td>
+                <td class="t-composer">J. Kosma</td>
+                <td><span class="pill pill--key" style="border-color:var(--k-G);color:var(--k-G)"><span class="swatch" style="background:var(--k-G)"></span>G min</span></td>
+                <td>AABC</td>
+                <td class="t-mono" style="text-align:right">32</td>
+                <td class="t-mono" style="text-align:right">48</td>
+                <td class="t-mono">2025-07-30 09:18</td>
+                <td class="t-mono">2023-04-17 22:55</td>
+                <td style="text-align:right"><span class="tiny" style="color:var(--green)">XML · NOTES · LYRICS</span></td>
+                <td><a class="tiny" style="color:var(--ink-blue)">audit →</a></td>
+              </tr>
+              <tr>
+                <td><input type="checkbox" /></td>
+                <td class="t-title">All The Things You Are</td>
+                <td class="t-composer">J. Kern</td>
+                <td><span class="pill pill--key" style="border-color:var(--k-Ab);color:var(--k-Ab)"><span class="swatch" style="background:var(--k-Ab)"></span>A♭ maj</span></td>
+                <td>—</td>
+                <td class="t-mono" style="text-align:right">36</td>
+                <td class="t-mono" style="text-align:right">72</td>
+                <td class="t-mono">2025-07-22 13:44</td>
+                <td class="t-mono">—</td>
+                <td style="text-align:right"><span class="tiny" style="color:var(--ink-3)">NO XML</span></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td><input type="checkbox" checked /></td>
+                <td class="t-title">Stella By Starlight</td>
+                <td class="t-composer">V. Young</td>
+                <td><span class="pill pill--key" style="border-color:var(--k-Bb);color:var(--k-Bb)"><span class="swatch" style="background:var(--k-Bb)"></span>B♭ maj</span></td>
+                <td>—</td>
+                <td class="t-mono" style="text-align:right">32</td>
+                <td class="t-mono" style="text-align:right">56</td>
+                <td class="t-mono">2025-07-08 11:12</td>
+                <td class="t-mono">2022-09-09 15:00</td>
+                <td style="text-align:right"><span class="tiny" style="color:var(--green)">XML</span></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td><input type="checkbox" /></td>
+                <td class="t-title">Giant Steps</td>
+                <td class="t-composer">J. Coltrane</td>
+                <td><span class="pill pill--key" style="border-color:var(--k-B);color:var(--k-B)"><span class="swatch" style="background:var(--k-B)"></span>B maj</span></td>
+                <td>cycle</td>
+                <td class="t-mono" style="text-align:right">16</td>
+                <td class="t-mono" style="text-align:right">32</td>
+                <td class="t-mono">2025-06-01 19:40</td>
+                <td class="t-mono">2025-05-29 11:10</td>
+                <td style="text-align:right"><span class="tiny" style="color:var(--amber)">XML · 3 overrides</span></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td><input type="checkbox" /></td>
+                <td class="t-title">Body And Soul</td>
+                <td class="t-composer">J. Green</td>
+                <td><span class="pill pill--key" style="border-color:var(--k-Db);color:var(--k-Db)"><span class="swatch" style="background:var(--k-Db)"></span>D♭ maj</span></td>
+                <td>AABA</td>
+                <td class="t-mono" style="text-align:right">32</td>
+                <td class="t-mono" style="text-align:right">60</td>
+                <td class="t-mono">2025-05-19 08:55</td>
+                <td class="t-mono">2024-02-11 18:22</td>
+                <td style="text-align:right"><span class="tiny" style="color:var(--ink-3)">NO XML</span></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td><input type="checkbox" /></td>
+                <td class="t-title">'Round Midnight</td>
+                <td class="t-composer">T. Monk</td>
+                <td><span class="pill pill--key" style="border-color:var(--k-Eb);color:var(--k-Eb)"><span class="swatch" style="background:var(--k-Eb)"></span>E♭ min</span></td>
+                <td>AABA</td>
+                <td class="t-mono" style="text-align:right">32</td>
+                <td class="t-mono" style="text-align:right">68</td>
+                <td class="t-mono">2025-04-30 23:11</td>
+                <td class="t-mono">2024-06-04 10:05</td>
+                <td style="text-align:right"><span class="tiny" style="color:var(--green)">XML · NOTES</span></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td><input type="checkbox" /></td>
+                <td class="t-title">Misty</td>
+                <td class="t-composer">E. Garner</td>
+                <td><span class="pill pill--key" style="border-color:var(--k-Eb);color:var(--k-Eb)"><span class="swatch" style="background:var(--k-Eb)"></span>E♭ maj</span></td>
+                <td>AABA</td>
+                <td class="t-mono" style="text-align:right">32</td>
+                <td class="t-mono" style="text-align:right">54</td>
+                <td class="t-mono">2025-04-12 17:30</td>
+                <td class="t-mono">—</td>
+                <td style="text-align:right"><span class="tiny" style="color:var(--ink-3)">NO XML</span></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td><input type="checkbox" /></td>
+                <td class="t-title">Solar</td>
+                <td class="t-composer">M. Davis</td>
+                <td><span class="pill pill--key" style="border-color:var(--k-D);color:var(--k-D)"><span class="swatch" style="background:var(--k-D)"></span>C min</span></td>
+                <td>—</td>
+                <td class="t-mono" style="text-align:right">12</td>
+                <td class="t-mono" style="text-align:right">24</td>
+                <td class="t-mono">2025-03-22 12:08</td>
+                <td class="t-mono">2023-11-19 14:48</td>
+                <td style="text-align:right"><span class="tiny" style="color:var(--green)">XML</span></td>
+                <td></td>
+              </tr>
+              <tr style="opacity:.6">
+                <td colspan="11" style="text-align:center;color:var(--ink-3);font-family:var(--t-mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;padding:14px">⋯ 33 more songs</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div style="display:flex;justify-content:space-between;padding:16px 32px 28px;align-items:center">
+            <div class="tiny">1 selected · <button class="btn btn--sm btn--danger" style="margin-left:6px">Delete</button> <button class="btn btn--sm" style="margin-left:4px">Re-analyze</button> <button class="btn btn--sm" style="margin-left:4px">Export .mscz</button></div>
+            <div class="tiny" style="color:var(--ink-3)">GET /api/v1/songs/?limit=100 · 42 results · 31ms</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <hr class="rule" />
+
+    <!-- ====================================================== -->
+    <!-- 5. Mockup · Song detail · Chords + Notation (the one)  -->
+    <!-- ====================================================== -->
+    <section id="m-song">
+      <div class="sec-kicker">Mockup 02 · the workbench</div>
+      <h2>Song detail — Chords tab.</h2>
+      <p class="sec-lede">
+        Notation pane on top (the document being studied). Chords grid below, with inline
+        edit popover open on m.7 to show the edit pattern. Right drawer is collapsed; the
+        eye is on the music. This is the single mockup PL was asked to deliver.
+      </p>
+
+      <div class="mockup-caption">
+        <span class="num">M-02</span>
+        <span class="ttl">/songs/12 · Corcovado</span>
+        <span class="note">notation primary · chord m.7 in edit · iPad-min compatible</span>
+      </div>
+      <div class="mockup">
+        <div class="app">
+          <!-- topbar -->
+          <div class="app-topbar">
+            <div class="app-brand">HarmonyLab</div>
+            <nav class="app-nav">
+              <a>Library</a>
+              <a class="is-active">Corcovado</a>
+              <a>Settings</a>
+              <a>Lab</a>
+            </nav>
+            <div class="app-spacer"></div>
+            <div class="app-meta">
+              <span class="pill pill--status-fresh"><span class="swatch" style="background:var(--green)"></span>analysis fresh · cached 2m ago</span>
+            </div>
+            <button class="btn btn--sm">Theory chat</button>
+            <button class="btn btn--sm">⤓ Export ▾</button>
+            <div class="user-chip"><span class="av"></span>pl</div>
+          </div>
+
+          <!-- title strip -->
+          <div style="display:flex;align-items:flex-end;justify-content:space-between;padding:24px 32px 12px;gap:32px">
+            <div style="flex:1">
+              <div class="tiny upper" style="color:var(--amber)">Song · #12 · imported via mscz</div>
+              <div style="display:flex;align-items:baseline;gap:16px;margin-top:4px">
+                <h1 style="font-family:var(--t-display);font-style:italic;font-weight:500;font-size:46px;margin:0;line-height:1">Corcovado</h1>
+                <span style="color:var(--ink-2);font-size:15px">A. C. Jobim · 1960 · ♩=84 · 4/4</span>
+              </div>
+              <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
+                <span class="pill pill--key" style="border-color:var(--k-Bb);color:var(--k-Bb)"><span class="swatch" style="background:var(--k-Bb)"></span>B♭ major</span>
+                <span class="pill"><span style="color:var(--ink-3)">conf</span> 0.94</span>
+                <span class="pill">AABA · 32 bars</span>
+                <span class="pill" style="border-color:var(--ink-blue);color:var(--ink-blue)">2 overrides</span>
+                <button class="btn btn--ghost btn--sm">✎ key</button>
+                <button class="btn btn--sm">↻ Re-analyze</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- tabs -->
+          <div class="tabs">
+            <div class="tab is-on">Chords <span class="count">64</span></div>
+            <div class="tab">Analysis</div>
+            <div class="tab">Notes <span class="count">3</span></div>
+            <div class="tab">Notation</div>
+            <div style="margin-left:auto;display:flex;gap:6px;align-items:center;padding-bottom:6px">
+              <div class="seg">
+                <button>4-bar</button>
+                <button class="is-on">8-bar</button>
+                <button>flat</button>
+              </div>
+              <div class="seg">
+                <button class="is-on">Δ ø °</button>
+                <button>maj/m</button>
+              </div>
+              <div class="seg">
+                <button class="is-on">colors</button>
+                <button>mono</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- body : notation pane on top, chord grid below -->
+          <div style="padding:20px 32px 32px;background:var(--bg-0)">
+            <!-- NOTATION PANE -->
+            <div class="notation-pane" style="margin-bottom:24px">
+              <div class="notation-head">
+                <span>◎ Notation · OSMD</span>
+                <span style="color:var(--ink-3)">·</span>
+                <span>m.1 — 16 of 32</span>
+                <span class="right">
+                  <span class="tiny" style="color:var(--ink-3)">zoom</span>
+                  <button class="btn btn--sm">−</button>
+                  <button class="btn btn--sm">+</button>
+                  <button class="btn btn--sm">Fit</button>
+                  <button class="btn btn--sm">⤢ Expand</button>
+                </span>
+              </div>
+              <div class="notation-body">
+                <!-- Simulated staff render. SVG with treble + bass staves + chord symbols above. -->
+                <svg viewBox="0 0 1200 240" xmlns="http://www.w3.org/2000/svg" style="font-family:var(--t-chord)">
+                  <!-- chord symbols row -->
+                  <g fill="oklch(.78 .005 80)" font-family="Petaluma, serif" font-size="22">
+                    <!-- inferred (m.1-2) -->
+                    <text x="80"  y="22" font-style="italic" opacity=".55">· Gm7</text>
+                    <text x="200" y="22" font-style="italic" opacity=".55">· F♯m7♭5</text>
+                    <!-- composer (m.3 onwards) -->
+                    <text x="320" y="22">Am7</text>
+                    <text x="440" y="22">D7♭9</text>
+                    <text x="560" y="22">Gm7</text>
+                    <text x="680" y="22">G♭7</text>
+                    <text x="800" y="22">Fm7</text>
+                    <text x="920" y="22">B♭7♭9</text>
+                    <text x="1040" y="22" fill="oklch(.79 .13 75)">E♭△7</text>
+                  </g>
+                  <!-- inferred underline dots (cue 1: dotted underline on chord text) -->
+                  <g stroke="oklch(.42 .005 80)" stroke-dasharray="1.5 3" fill="none" stroke-width="1">
+                    <line x1="80" y1="28" x2="156" y2="28" />
+                    <line x1="200" y1="28" x2="296" y2="28" />
+                  </g>
+
+                  <!-- Treble staff (5 lines) -->
+                  <g stroke="oklch(.78 .005 80)" stroke-width="1" fill="none">
+                    <line x1="40" y1="60" x2="1170" y2="60" />
+                    <line x1="40" y1="74" x2="1170" y2="74" />
+                    <line x1="40" y1="88" x2="1170" y2="88" />
+                    <line x1="40" y1="102" x2="1170" y2="102" />
+                    <line x1="40" y1="116" x2="1170" y2="116" />
+                  </g>
+                  <!-- treble clef (stylised) -->
+                  <text x="48" y="111" font-family="Petaluma, serif" font-size="50" fill="oklch(.97 .005 80)">𝄞</text>
+                  <!-- key signature: 2 flats -->
+                  <text x="100" y="91" font-family="Petaluma, serif" font-size="26" fill="oklch(.78 .005 80)">♭♭</text>
+                  <!-- time sig -->
+                  <text x="128" y="86" font-family="Petaluma, serif" font-size="20" fill="oklch(.97 .005 80)">4</text>
+                  <text x="128" y="106" font-family="Petaluma, serif" font-size="20" fill="oklch(.97 .005 80)">4</text>
+
+                  <!-- bar lines -->
+                  <g stroke="oklch(.58 .005 80)" stroke-width=".8">
+                    <line x1="180" y1="60" x2="180" y2="116" />
+                    <line x1="300" y1="60" x2="300" y2="116" />
+                    <line x1="420" y1="60" x2="420" y2="116" />
+                    <line x1="540" y1="60" x2="540" y2="116" />
+                    <line x1="660" y1="60" x2="660" y2="116" />
+                    <line x1="780" y1="60" x2="780" y2="116" />
+                    <line x1="900" y1="60" x2="900" y2="116" />
+                    <line x1="1020" y1="60" x2="1020" y2="116" />
+                    <line x1="1140" y1="60" x2="1140" y2="116" stroke-width="1.5" />
+                  </g>
+                  <!-- measure numbers -->
+                  <g font-family="JetBrains Mono, monospace" font-size="9" fill="oklch(.42 .005 80)">
+                    <text x="148" y="52">1</text>
+                    <text x="268" y="52">2</text>
+                    <text x="388" y="52">3</text>
+                    <text x="508" y="52">4</text>
+                    <text x="628" y="52">5</text>
+                    <text x="748" y="52">6</text>
+                    <text x="868" y="52">7</text>
+                    <text x="988" y="52">8</text>
+                  </g>
+
+                  <!-- notes — a faithful-feeling melodic line (stylised, not real engraving) -->
+                  <g fill="oklch(.97 .005 80)">
+                    <!-- m.1 pickup melody -->
+                    <ellipse cx="92" cy="95" rx="6" ry="4.5" /><line x1="98" y1="95" x2="98" y2="68" stroke="oklch(.97 .005 80)" stroke-width="1.2"/>
+                    <ellipse cx="128" cy="90" rx="6" ry="4.5" /><line x1="134" y1="90" x2="134" y2="64" stroke="oklch(.97 .005 80)" stroke-width="1.2"/>
+                    <ellipse cx="158" cy="85" rx="6" ry="4.5" /><line x1="164" y1="85" x2="164" y2="60" stroke="oklch(.97 .005 80)" stroke-width="1.2"/>
+                    <!-- m.2 -->
+                    <ellipse cx="212" cy="92" rx="6" ry="4.5" /><line x1="218" y1="92" x2="218" y2="66" stroke="oklch(.97 .005 80)" stroke-width="1.2"/>
+                    <ellipse cx="248" cy="98" rx="6" ry="4.5" /><line x1="254" y1="98" x2="254" y2="72" stroke="oklch(.97 .005 80)" stroke-width="1.2"/>
+                    <ellipse cx="278" cy="92" rx="6" ry="4.5" /><line x1="284" y1="92" x2="284" y2="66" stroke="oklch(.97 .005 80)" stroke-width="1.2"/>
+                    <!-- m.3 -->
+                    <ellipse cx="332" cy="88" rx="6" ry="4.5" /><line x1="338" y1="88" x2="338" y2="60" stroke="oklch(.97 .005 80)" stroke-width="1.2"/>
+                    <ellipse cx="368" cy="82" rx="6" ry="4.5" /><line x1="374" y1="82" x2="374" y2="56" stroke="oklch(.97 .005 80)" stroke-width="1.2"/>
+                    <ellipse cx="398" cy="88" rx="6" ry="4.5" /><line x1="404" y1="88" x2="404" y2="60" stroke="oklch(.97 .005 80)" stroke-width="1.2"/>
+                    <!-- m.4 -->
+                    <ellipse cx="452" cy="92" rx="6" ry="4.5" /><line x1="458" y1="92" x2="458" y2="66" stroke="oklch(.97 .005 80)" stroke-width="1.2"/>
+                    <ellipse cx="488" cy="98" rx="6" ry="4.5" /><line x1="494" y1="98" x2="494" y2="72" stroke="oklch(.97 .005 80)" stroke-width="1.2"/>
+                    <ellipse cx="518" cy="92" rx="6" ry="4.5" /><line x1="524" y1="92" x2="524" y2="66" stroke="oklch(.97 .005 80)" stroke-width="1.2"/>
+                    <!-- m.5 -->
+                    <ellipse cx="572" cy="86" rx="6" ry="4.5" /><line x1="578" y1="86" x2="578" y2="60" stroke="oklch(.97 .005 80)" stroke-width="1.2"/>
+                    <ellipse cx="608" cy="80" rx="6" ry="4.5" /><line x1="614" y1="80" x2="614" y2="54" stroke="oklch(.97 .005 80)" stroke-width="1.2"/>
+                    <!-- m.6 -->
+                    <ellipse cx="692" cy="82" rx="6" ry="4.5" /><line x1="698" y1="82" x2="698" y2="56" stroke="oklch(.97 .005 80)" stroke-width="1.2"/>
+                    <ellipse cx="728" cy="88" rx="6" ry="4.5" /><line x1="734" y1="88" x2="734" y2="62" stroke="oklch(.97 .005 80)" stroke-width="1.2"/>
+                    <!-- m.7 — highlighted (currently being edited) -->
+                    <rect x="784" y="56" width="116" height="64" rx="3" fill="oklch(.79 .13 75 / .10)" stroke="oklch(.79 .13 75)" stroke-width=".8" stroke-dasharray="3 2" />
+                    <ellipse cx="812" cy="86" rx="6" ry="4.5" /><line x1="818" y1="86" x2="818" y2="60" stroke="oklch(.97 .005 80)" stroke-width="1.2"/>
+                    <ellipse cx="848" cy="80" rx="6" ry="4.5" /><line x1="854" y1="80" x2="854" y2="54" stroke="oklch(.97 .005 80)" stroke-width="1.2"/>
+                    <!-- m.8 — resolution -->
+                    <ellipse cx="932" cy="74" rx="6" ry="4.5" /><line x1="938" y1="74" x2="938" y2="50" stroke="oklch(.97 .005 80)" stroke-width="1.2"/>
+                    <ellipse cx="968" cy="68" rx="6" ry="4.5" /><line x1="974" y1="68" x2="974" y2="44" stroke="oklch(.97 .005 80)" stroke-width="1.2"/>
+                    <!-- m.9-10 short -->
+                    <ellipse cx="1052" cy="74" rx="6" ry="4.5" /><line x1="1058" y1="74" x2="1058" y2="48" stroke="oklch(.97 .005 80)" stroke-width="1.2"/>
+                    <ellipse cx="1088" cy="80" rx="6" ry="4.5" /><line x1="1094" y1="80" x2="1094" y2="54" stroke="oklch(.97 .005 80)" stroke-width="1.2"/>
+                  </g>
+
+                  <!-- Bass staff -->
+                  <g stroke="oklch(.78 .005 80)" stroke-width="1" fill="none">
+                    <line x1="40" y1="160" x2="1170" y2="160" />
+                    <line x1="40" y1="174" x2="1170" y2="174" />
+                    <line x1="40" y1="188" x2="1170" y2="188" />
+                    <line x1="40" y1="202" x2="1170" y2="202" />
+                    <line x1="40" y1="216" x2="1170" y2="216" />
+                  </g>
+                  <text x="48" y="193" font-family="Petaluma, serif" font-size="38" fill="oklch(.97 .005 80)">𝄢</text>
+                  <text x="100" y="190" font-family="Petaluma, serif" font-size="26" fill="oklch(.78 .005 80)">♭♭</text>
+                  <g stroke="oklch(.58 .005 80)" stroke-width=".8">
+                    <line x1="180" y1="160" x2="180" y2="216" />
+                    <line x1="300" y1="160" x2="300" y2="216" />
+                    <line x1="420" y1="160" x2="420" y2="216" />
+                    <line x1="540" y1="160" x2="540" y2="216" />
+                    <line x1="660" y1="160" x2="660" y2="216" />
+                    <line x1="780" y1="160" x2="780" y2="216" />
+                    <line x1="900" y1="160" x2="900" y2="216" />
+                    <line x1="1020" y1="160" x2="1020" y2="216" />
+                    <line x1="1140" y1="160" x2="1140" y2="216" stroke-width="1.5"/>
+                  </g>
+                  <!-- bass notes -->
+                  <g fill="oklch(.97 .005 80)">
+                    <ellipse cx="138" cy="195" rx="6.5" ry="4.5" />
+                    <ellipse cx="258" cy="200" rx="6.5" ry="4.5" />
+                    <ellipse cx="370" cy="190" rx="6.5" ry="4.5" />
+                    <ellipse cx="490" cy="205" rx="6.5" ry="4.5" />
+                    <ellipse cx="610" cy="198" rx="6.5" ry="4.5" />
+                    <ellipse cx="730" cy="186" rx="6.5" ry="4.5" />
+                    <ellipse cx="850" cy="195" rx="6.5" ry="4.5" />
+                    <ellipse cx="970" cy="180" rx="6.5" ry="4.5" />
+                    <ellipse cx="1090" cy="190" rx="6.5" ry="4.5" />
+                  </g>
+                </svg>
+              </div>
+            </div>
+
+            <!-- CHORD GRID — section A1, m.1-8 of 32 -->
+            <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px">
+              <div class="section-banner" style="border:0;background:transparent;padding:0">
+                <span class="label">A1</span>
+                <span style="font-family:var(--t-display);font-style:italic">Tonic statement</span>
+                <span style="font-family:var(--t-mono);font-size:11px;color:var(--ink-3);margin-left:8px">m.1 — m.8</span>
+              </div>
+              <div class="tiny" style="color:var(--ink-3)">key: B♭ maj · 6 of 8 cells composer-written · 2 inferred</div>
+            </div>
+
+            <div style="position:relative">
+            <div class="chord-grid chord-grid--8 tinted">
+              <!-- m.1 — INFERRED -->
+              <div class="chord-cell k-Bb is-inferred">
+                <div class="key-strip"></div>
+                <div class="meas">m.1 · pickup</div>
+                <div class="sym">Gm7</div>
+                <div class="roman minor">vi<sup>7</sup></div>
+                <div class="func">inferred · pre-V</div>
+              </div>
+              <!-- m.2 — INFERRED -->
+              <div class="chord-cell k-Bb is-inferred">
+                <div class="key-strip"></div>
+                <div class="meas">m.2 · pickup</div>
+                <div class="sym">F♯m7♭5</div>
+                <div class="roman minor">♯v<sup>ø7</sup></div>
+                <div class="func">inferred · chromatic</div>
+              </div>
+              <!-- m.3 — composer -->
+              <div class="chord-cell k-Bb">
+                <div class="key-strip"></div>
+                <div class="meas">m.3</div>
+                <div class="sym">Am7</div>
+                <div class="roman minor">vii<sup>7</sup>/iii</div>
+                <div class="func">secondary ii</div>
+              </div>
+              <!-- m.4 — composer -->
+              <div class="chord-cell k-Bb">
+                <div class="key-strip"></div>
+                <div class="meas">m.4</div>
+                <div class="sym">D7♭9</div>
+                <div class="roman major">V<sup>7♭9</sup>/iii</div>
+                <div class="func">secondary V</div>
+              </div>
+              <!-- m.5 — composer, edited -->
+              <div class="chord-cell k-Bb is-edited has-comment">
+                <div class="key-strip"></div>
+                <div class="meas">m.5</div>
+                <div class="sym">Gm7</div>
+                <div class="roman minor">vi<sup>7</sup></div>
+                <div class="voicing">rootless A · 3-7-9</div>
+                <div class="func">tonic substitute</div>
+              </div>
+              <!-- m.6 — composer, tritone sub annotated -->
+              <div class="chord-cell k-Bb has-comment">
+                <div class="key-strip"></div>
+                <div class="meas">m.6</div>
+                <div class="sym">G♭7</div>
+                <div class="roman major">♭V<sup>7</sup>/ii</div>
+                <div class="func">tritone sub of C7</div>
+              </div>
+              <!-- m.7 — currently EDITING — popover anchored here -->
+              <div class="chord-cell k-Bb is-editing" style="position:relative;z-index:5">
+                <div class="key-strip"></div>
+                <div class="meas">m.7 · editing</div>
+                <div class="sym" style="border-bottom:1.5px solid var(--amber)"><span style="background:oklch(.79 .13 75 / .15)">F7♭9</span><span style="opacity:.6;border-left:1px solid var(--amber);margin-left:1px;animation:none">&nbsp;</span></div>
+                <div class="roman major" style="color:var(--ink-3)">V<sup>7♭9</sup></div>
+                <div class="func" style="color:var(--ink-blue)">dominant</div>
+              </div>
+              <!-- m.8 — composer, tonic landing -->
+              <div class="chord-cell k-Bb">
+                <div class="key-strip"></div>
+                <div class="meas">m.8</div>
+                <div class="sym">B♭△7</div>
+                <div class="roman major">I<sup>Δ7</sup></div>
+                <div class="func">tonic</div>
+              </div>
+
+              <!-- ============ POPOVER anchored under m.7 ============ -->
+              <div class="popover" style="left: calc(75% - 200px); top: 100px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+                  <div style="font-family:var(--t-display);font-style:italic;font-size:16px">Edit chord · m.7</div>
+                  <span class="tiny" style="color:var(--ink-3)">id 482 · 0-idx 6</span>
+                </div>
+                <div class="row">
+                  <label>symbol</label>
+                  <input class="input" value="F7♭9" style="font-family:var(--t-chord);font-size:16px" />
+                </div>
+                <div class="quickpicks">
+                  <button>F7</button><button>F7♭9</button><button>F7♯9</button><button>F7alt</button><button>F7♭13</button><button>Cm7/F</button>
+                </div>
+                <div class="row" style="margin-top:8px">
+                  <label>roman</label>
+                  <input class="input" value="V⁷♭⁹" />
+                </div>
+                <div class="row">
+                  <label>function</label>
+                  <select class="input select"><option>dominant</option><option>secondary dominant</option><option>tritone sub</option><option>pre-dominant</option><option>tonic</option></select>
+                </div>
+                <div class="row">
+                  <label>voicing</label>
+                  <input class="input" placeholder="e.g. rootless A · drop-2" />
+                </div>
+                <div class="row" style="align-items:flex-start">
+                  <label style="padding-top:5px">comment</label>
+                  <textarea class="input" rows="2" style="height:auto;padding:6px 10px;resize:vertical">Bill Evans uses this exact ♭9 on Riverside take 2.</textarea>
+                </div>
+                <div class="actions">
+                  <span class="tiny" style="margin-right:auto;color:var(--ink-3)">
+                    PUT /chords/482 · &amp; /analysis/.../chord/6
+                  </span>
+                  <button class="btn btn--ghost btn--sm">Cancel <span class="kbd">Esc</span></button>
+                  <button class="btn btn--primary btn--sm">Save <span class="kbd">⏎</span></button>
+                </div>
+              </div>
+            </div>
+            </div>
+
+            <!-- second row of chords — section A2 -->
+            <div style="display:flex;align-items:baseline;justify-content:space-between;margin:24px 0 8px">
+              <div class="section-banner" style="border:0;background:transparent;padding:0">
+                <span class="label">A2</span>
+                <span style="font-family:var(--t-display);font-style:italic">Repeat with turnaround</span>
+                <span style="font-family:var(--t-mono);font-size:11px;color:var(--ink-3);margin-left:8px">m.9 — m.16</span>
+              </div>
+              <div class="tiny" style="color:var(--ink-3)">key: B♭ maj</div>
+            </div>
+            <div class="chord-grid chord-grid--8 tinted">
+              <div class="chord-cell k-Bb"><div class="key-strip"></div><div class="meas">m.9</div><div class="sym">Am7</div><div class="roman minor">vii<sup>7</sup>/iii</div><div class="func">sec ii</div></div>
+              <div class="chord-cell k-Bb"><div class="key-strip"></div><div class="meas">m.10</div><div class="sym">D7♭9</div><div class="roman major">V<sup>7♭9</sup>/iii</div><div class="func">sec V</div></div>
+              <div class="chord-cell k-Bb"><div class="key-strip"></div><div class="meas">m.11</div><div class="sym">Gm7</div><div class="roman minor">vi<sup>7</sup></div><div class="func">tonic sub</div></div>
+              <div class="chord-cell k-Bb"><div class="key-strip"></div><div class="meas">m.12</div><div class="sym">G♭7</div><div class="roman major">♭V<sup>7</sup>/ii</div><div class="func">tritone sub</div></div>
+              <div class="chord-cell k-Bb"><div class="key-strip"></div><div class="meas">m.13</div><div class="sym">Fm7</div><div class="roman minor">v<sup>7</sup></div><div class="func">predominant</div></div>
+              <div class="chord-cell k-Bb"><div class="key-strip"></div><div class="meas">m.14</div><div class="sym">B♭7♭9</div><div class="roman major">I<sup>7♭9</sup></div><div class="func">→ pivot to E♭</div></div>
+              <div class="chord-cell k-Eb"><div class="key-strip"></div><div class="meas">m.15 · key→E♭</div><div class="sym">E♭△7</div><div class="roman major">I<sup>Δ7</sup></div><div class="func">tonic E♭</div></div>
+              <div class="chord-cell k-Eb"><div class="key-strip"></div><div class="meas">m.16</div><div class="sym">A♭7</div><div class="roman major">IV<sup>7</sup></div><div class="func">backdoor</div></div>
+            </div>
+
+            <!-- footer toolbar -->
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:18px;font-size:12px;color:var(--ink-3);font-family:var(--t-mono)">
+              <span>showing m.1—16 · 16 more in A3 + B sections</span>
+              <span>· GET /api/v1/analysis/songs/12 · 200 · 142ms · cached 2m ago ·</span>
+              <span><button class="btn btn--sm">↳ Open all sections</button></span>
+            </div>
+          </div>
+
+          <!-- save toast -->
+          <div style="position:relative">
+            <div class="float-toast" style="position:absolute;left:50%;transform:translateX(-50%);bottom:24px">
+              <span class="dot"></span> Saved · m.6 → tritone sub annotation
+              <span class="tiny" style="margin-left:8px;color:var(--ink-3)">PUT /chords/481 · 200 · 84ms · ⌘Z to undo</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p style="margin-top:16px;font-size:13px;color:var(--ink-2);max-width:80ch">
+        <strong style="color:var(--ink-0)">Read this image like a score:</strong> top row = notation
+        (the document); middle row = chord cells (the analytical layer, editable); m.7 is
+        currently being edited via the popover. Notice the inferred chords m.1–m.2 (italic ·
+        dotted underline · 60% opacity · leading <code>·</code>) and the m.6 chord's
+        orange-dot annotation indicating a free-text comment. The yellow-dashed rectangle in
+        the notation pane links visually to the edited cell.
+      </p>
+    </section>
+
+    <hr class="rule" />
+
+    <!-- ====================================================== -->
+    <!-- 6. Mockup · Corcovado pickup — inferred chord focus    -->
+    <!-- ====================================================== -->
+    <section id="m-inferred">
+      <div class="sec-kicker">Mockup 03 · the requested side-by-side</div>
+      <h2>Corcovado · m.1–4.</h2>
+      <p class="sec-lede">
+        Per brief §3 REQ-018: composer-written chords on m.3–4 alongside inferred chords on
+        m.1–2 (algorithm-proposed during pickup melody). Three visual cues stack so the
+        treatment can never be misread as "fact."
+      </p>
+
+      <div class="mockup-caption">
+        <span class="num">M-03</span>
+        <span class="ttl">Inferred vs composer-written — focus view</span>
+        <span class="note">2× scale · annotated</span>
+      </div>
+      <div class="mockup" style="padding:48px 32px;background:var(--bg-1)">
+
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:24px;max-width:920px;margin:0 auto">
+          <!-- inferred -->
+          <div>
+            <div class="tiny upper" style="color:var(--ink-blue);margin-bottom:8px">Inferred · m.1</div>
+            <div class="chord-cell k-Bb is-inferred" style="min-height:180px;font-size:1.4em;padding:20px">
+              <div class="key-strip"></div>
+              <div class="meas" style="font-size:11px">m.1 · pickup</div>
+              <div class="sym" style="font-size:56px;line-height:1">Gm7</div>
+              <div class="roman minor" style="font-size:22px;margin-top:6px">vi<sup>7</sup></div>
+              <div class="func" style="font-size:11px;margin-top:auto">inferred · pre-V</div>
+            </div>
+            <ul class="tiny" style="color:var(--ink-2);font-family:var(--t-mono);font-size:10px;line-height:1.8;padding-left:14px;margin-top:10px">
+              <li>· prefix glyph</li>
+              <li>italic chord symbol</li>
+              <li>dotted underline</li>
+              <li>opacity 60%</li>
+              <li>"inferred" in func slot</li>
+            </ul>
+          </div>
+          <div>
+            <div class="tiny upper" style="color:var(--ink-blue);margin-bottom:8px">Inferred · m.2</div>
+            <div class="chord-cell k-Bb is-inferred" style="min-height:180px;padding:20px">
+              <div class="key-strip"></div>
+              <div class="meas" style="font-size:11px">m.2 · pickup</div>
+              <div class="sym" style="font-size:56px;line-height:1">F♯m7♭5</div>
+              <div class="roman minor" style="font-size:22px;margin-top:6px">♯v<sup>ø7</sup></div>
+              <div class="func" style="font-size:11px;margin-top:auto">inferred · chromatic</div>
+            </div>
+          </div>
+          <!-- composer -->
+          <div>
+            <div class="tiny upper" style="color:var(--amber);margin-bottom:8px">Composer · m.3</div>
+            <div class="chord-cell k-Bb" style="min-height:180px;padding:20px">
+              <div class="key-strip"></div>
+              <div class="meas" style="font-size:11px">m.3</div>
+              <div class="sym" style="font-size:56px;line-height:1">Am7</div>
+              <div class="roman minor" style="font-size:22px;margin-top:6px">vii<sup>7</sup>/iii</div>
+              <div class="func" style="font-size:11px;margin-top:auto">secondary ii</div>
+            </div>
+            <ul class="tiny" style="color:var(--ink-2);font-family:var(--t-mono);font-size:10px;line-height:1.8;padding-left:14px;margin-top:10px">
+              <li>no prefix glyph</li>
+              <li>upright chord symbol</li>
+              <li>full opacity</li>
+              <li>function label real</li>
+              <li>looks like printed lead sheet</li>
+            </ul>
+          </div>
+          <div>
+            <div class="tiny upper" style="color:var(--amber);margin-bottom:8px">Composer · m.4</div>
+            <div class="chord-cell k-Bb" style="min-height:180px;padding:20px">
+              <div class="key-strip"></div>
+              <div class="meas" style="font-size:11px">m.4</div>
+              <div class="sym" style="font-size:56px;line-height:1">D7♭9</div>
+              <div class="roman major" style="font-size:22px;margin-top:6px">V<sup>7♭9</sup>/iii</div>
+              <div class="func" style="font-size:11px;margin-top:auto">secondary V</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="max-width:920px;margin:32px auto 0;display:flex;gap:24px;flex-wrap:wrap">
+          <div style="flex:1;min-width:300px;border-left:2px solid var(--ink-blue);padding-left:14px">
+            <div class="tiny upper" style="color:var(--ink-blue)">Promoting an inferred chord</div>
+            <p style="font-size:13px;margin:6px 0 0;color:var(--ink-1)">
+              Single click → edit popover opens. The "Accept as written" button writes the
+              inferred symbol to <code>Chords.chord_symbol</code> and clears the
+              <code>is_inferred</code> flag → next render shows it as composer-written.
+            </p>
+            <div class="tiny" style="color:var(--ink-3);font-family:var(--t-mono);margin-top:8px">PUT /chords/{id} · sets chord_symbol + is_manual_edit=true · is_inferred=false</div>
+          </div>
+          <div style="flex:1;min-width:300px;border-left:2px solid var(--amber);padding-left:14px">
+            <div class="tiny upper" style="color:var(--amber)">Why three cues, not one?</div>
+            <p style="font-size:13px;margin:6px 0 0;color:var(--ink-1)">
+              A jazz pianist working from a printed score must never mistake a machine guess for
+              what the composer wrote. Italics alone reads as a stylistic flourish; opacity
+              alone reads as muted. Stacked cues survive printing, screenshots, and quick glances.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <hr class="rule" />
+
+    <!-- ====================================================== -->
+    <!-- 7. Mockup · Analysis tab                               -->
+    <!-- ====================================================== -->
+    <section id="m-analysis">
+      <div class="sec-kicker">Mockup 04 · analysis lens</div>
+      <h2>Analysis tab.</h2>
+      <p class="sec-lede">Same chord grid, swapped lens: Roman numerals get the chord-symbol's typographic prominence; chord symbols recede to meta. Function labels become full pills. Key-center pivots are explicit. Designed for theory-thinking, not playing.</p>
+
+      <div class="mockup-caption">
+        <span class="num">M-04</span>
+        <span class="ttl">/songs/12 · Analysis</span>
+        <span class="note">Roman primary · chord secondary</span>
+      </div>
+      <div class="mockup">
+        <div class="app">
+          <div class="app-topbar">
+            <div class="app-brand">HarmonyLab</div>
+            <nav class="app-nav"><a>Library</a><a class="is-active">Corcovado</a><a>Settings</a></nav>
+            <div class="app-spacer"></div>
+            <button class="btn btn--sm">⤓ Export ▾</button>
+            <div class="user-chip"><span class="av"></span>pl</div>
+          </div>
+          <div class="meta-strip">
+            <div class="item"><span class="lbl">song</span><span class="val" style="font-family:var(--t-display);font-style:italic;font-size:20px">Corcovado</span></div>
+            <div class="item"><span class="lbl">key</span><span class="val"><span class="pill pill--key" style="border-color:var(--k-Bb);color:var(--k-Bb)"><span class="swatch" style="background:var(--k-Bb)"></span>B♭ maj</span></span></div>
+            <div class="item"><span class="lbl">pivots</span><span class="val">B♭ → E♭ @ m.15 · E♭ → B♭ @ m.23</span></div>
+            <div class="item" style="margin-left:auto"><span class="lbl">conf</span><span class="val">0.94</span></div>
+          </div>
+          <div class="tabs">
+            <div class="tab">Chords <span class="count">64</span></div>
+            <div class="tab is-on">Analysis</div>
+            <div class="tab">Notes</div>
+            <div class="tab">Notation</div>
+          </div>
+
+          <div style="padding:24px 32px">
+            <!-- Analysis-mode grid: roman big, chord small, function pill -->
+            <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px">
+              <div class="section-banner" style="border:0;background:transparent;padding:0">
+                <span class="label">A1</span>
+                <span style="font-family:var(--t-display);font-style:italic">Tonic statement</span>
+              </div>
+            </div>
+            <div class="chord-grid chord-grid--8">
+              <!-- analysis lens: roman dominant, symbol becomes meta -->
+              <div class="chord-cell k-Bb is-inferred" style="padding:14px 14px 16px">
+                <div class="key-strip"></div>
+                <div class="meas">m.1 inf</div>
+                <div style="font-family:var(--t-roman);font-style:italic;font-size:26px;color:var(--ink-1);text-transform:lowercase">vi<sup>7</sup></div>
+                <div style="font-family:var(--t-chord);font-size:14px;color:var(--ink-2);margin-top:2px">Gm7</div>
+                <div style="margin-top:auto"><span class="pill" style="font-size:10px;padding:2px 6px;color:var(--ink-3)">pre-V · inferred</span></div>
+              </div>
+              <div class="chord-cell k-Bb is-inferred" style="padding:14px 14px 16px">
+                <div class="key-strip"></div>
+                <div class="meas">m.2 inf</div>
+                <div style="font-family:var(--t-roman);font-style:italic;font-size:26px;color:var(--ink-1);text-transform:lowercase">♯v<sup>ø7</sup></div>
+                <div style="font-family:var(--t-chord);font-size:14px;color:var(--ink-2);margin-top:2px">F♯m7♭5</div>
+                <div style="margin-top:auto"><span class="pill" style="font-size:10px;padding:2px 6px;color:var(--ink-3)">chromatic · inferred</span></div>
+              </div>
+              <div class="chord-cell k-Bb" style="padding:14px 14px 16px">
+                <div class="key-strip"></div>
+                <div class="meas">m.3</div>
+                <div style="font-family:var(--t-roman);font-style:italic;font-size:26px;color:var(--ink-0)">vii<sup>7</sup>/iii</div>
+                <div style="font-family:var(--t-chord);font-size:14px;color:var(--ink-2);margin-top:2px">Am7</div>
+                <div style="margin-top:auto"><span class="pill" style="font-size:10px;padding:2px 6px;color:var(--ink-blue);border-color:var(--ink-blue)">secondary ii</span></div>
+              </div>
+              <div class="chord-cell k-Bb" style="padding:14px 14px 16px">
+                <div class="key-strip"></div>
+                <div class="meas">m.4</div>
+                <div style="font-family:var(--t-roman);font-style:italic;font-size:26px;color:var(--ink-0);text-transform:uppercase">V<sup>7♭9</sup>/iii</div>
+                <div style="font-family:var(--t-chord);font-size:14px;color:var(--ink-2);margin-top:2px">D7♭9</div>
+                <div style="margin-top:auto"><span class="pill" style="font-size:10px;padding:2px 6px;color:var(--ink-blue);border-color:var(--ink-blue)">secondary V</span></div>
+              </div>
+              <div class="chord-cell k-Bb is-edited" style="padding:14px 14px 16px">
+                <div class="key-strip"></div>
+                <div class="meas">m.5</div>
+                <div style="font-family:var(--t-roman);font-style:italic;font-size:26px;color:var(--ink-0);text-transform:lowercase">vi<sup>7</sup></div>
+                <div style="font-family:var(--t-chord);font-size:14px;color:var(--ink-2);margin-top:2px">Gm7</div>
+                <div style="margin-top:auto"><span class="pill" style="font-size:10px;padding:2px 6px;color:var(--amber);border-color:var(--amber)">tonic substitute</span></div>
+              </div>
+              <div class="chord-cell k-Bb" style="padding:14px 14px 16px">
+                <div class="key-strip"></div>
+                <div class="meas">m.6</div>
+                <div style="font-family:var(--t-roman);font-style:italic;font-size:26px;color:var(--ink-0);text-transform:uppercase">♭V<sup>7</sup>/ii</div>
+                <div style="font-family:var(--t-chord);font-size:14px;color:var(--ink-2);margin-top:2px">G♭7</div>
+                <div style="margin-top:auto"><span class="pill" style="font-size:10px;padding:2px 6px;color:var(--rose);border-color:var(--rose)">tritone sub</span></div>
+              </div>
+              <div class="chord-cell k-Bb" style="padding:14px 14px 16px">
+                <div class="key-strip"></div>
+                <div class="meas">m.7</div>
+                <div style="font-family:var(--t-roman);font-style:italic;font-size:26px;color:var(--ink-0);text-transform:uppercase">V<sup>7♭9</sup></div>
+                <div style="font-family:var(--t-chord);font-size:14px;color:var(--ink-2);margin-top:2px">F7♭9</div>
+                <div style="margin-top:auto"><span class="pill" style="font-size:10px;padding:2px 6px;color:var(--ink-blue);border-color:var(--ink-blue)">dominant</span></div>
+              </div>
+              <div class="chord-cell k-Bb" style="padding:14px 14px 16px">
+                <div class="key-strip"></div>
+                <div class="meas">m.8</div>
+                <div style="font-family:var(--t-roman);font-style:italic;font-size:26px;color:var(--ink-0);text-transform:uppercase">I<sup>Δ7</sup></div>
+                <div style="font-family:var(--t-chord);font-size:14px;color:var(--ink-2);margin-top:2px">B♭△7</div>
+                <div style="margin-top:auto"><span class="pill" style="font-size:10px;padding:2px 6px;color:var(--green);border-color:var(--green)">tonic</span></div>
+              </div>
+            </div>
+
+            <!-- Key-region timeline -->
+            <div style="margin-top:24px">
+              <div class="tiny upper" style="color:var(--ink-3);margin-bottom:6px">Key-center timeline · 32 bars</div>
+              <div style="display:flex;height:34px;border:1px solid var(--line);border-radius:var(--r-2);overflow:hidden;font-family:var(--t-mono);font-size:11px">
+                <div style="flex:14;display:flex;align-items:center;justify-content:center;background:color-mix(in oklch, var(--k-Bb) 22%, var(--bg-1));color:var(--k-Bb)">B♭ maj · m.1–14</div>
+                <div style="flex:8;display:flex;align-items:center;justify-content:center;background:color-mix(in oklch, var(--k-Eb) 22%, var(--bg-1));color:var(--k-Eb)">E♭ maj · m.15–22</div>
+                <div style="flex:10;display:flex;align-items:center;justify-content:center;background:color-mix(in oklch, var(--k-Bb) 22%, var(--bg-1));color:var(--k-Bb)">B♭ maj · m.23–32</div>
+              </div>
+              <div class="tiny" style="margin-top:6px;color:var(--ink-3)">2 modulations · 0 user-defined regions. <a style="color:var(--ink-blue)">Drag boundaries to override →</a></div>
+            </div>
+
+            <!-- Pattern + phrase panels in 2-col -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:24px">
+              <div style="border:1px solid var(--line);border-radius:6px;padding:16px;background:var(--bg-1)">
+                <div class="tiny upper" style="color:var(--amber)">Detected patterns · 4</div>
+                <table style="width:100%;margin-top:8px;font-size:13px">
+                  <tr><td style="padding:6px 0;font-family:var(--t-display);font-style:italic">ii–V–I in B♭</td><td style="font-family:var(--t-mono);font-size:11px;color:var(--ink-2);text-align:right">m.7–8 · conf 0.96</td></tr>
+                  <tr><td style="padding:6px 0;font-family:var(--t-display);font-style:italic">Tritone sub</td><td style="font-family:var(--t-mono);font-size:11px;color:var(--ink-2);text-align:right">m.6 · ♭V/ii</td></tr>
+                  <tr><td style="padding:6px 0;font-family:var(--t-display);font-style:italic">Backdoor cadence</td><td style="font-family:var(--t-mono);font-size:11px;color:var(--ink-2);text-align:right">m.16 → m.17</td></tr>
+                  <tr><td style="padding:6px 0;font-family:var(--t-display);font-style:italic">Pivot modulation</td><td style="font-family:var(--t-mono);font-size:11px;color:var(--ink-2);text-align:right">B♭7♭9 = V/E♭ · m.14</td></tr>
+                </table>
+              </div>
+              <div style="border:1px solid var(--line);border-radius:6px;padding:16px;background:var(--bg-1)">
+                <div class="tiny upper" style="color:var(--amber)">Phrases · 4</div>
+                <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;font-size:13px">
+                  <div>m.1–8 · <em style="font-family:var(--t-display)">tonic statement</em> <span class="tiny" style="color:var(--ink-3);margin-left:4px">8 bars · 8 chords</span></div>
+                  <div>m.9–16 · <em style="font-family:var(--t-display)">repeat → pivot</em> <span class="tiny" style="color:var(--ink-3);margin-left:4px">8 bars · 8 chords</span></div>
+                  <div>m.17–24 · <em style="font-family:var(--t-display)">B section in E♭</em> <span class="tiny" style="color:var(--ink-3);margin-left:4px">8 bars · 8 chords</span></div>
+                  <div>m.25–32 · <em style="font-family:var(--t-display)">return + tag</em> <span class="tiny" style="color:var(--ink-3);margin-left:4px">8 bars · 8 chords</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <hr class="rule" />
+
+    <!-- ====================================================== -->
+    <!-- 8. Mockup · Notation focused                           -->
+    <!-- ====================================================== -->
+    <section id="m-notation">
+      <div class="sec-kicker">Mockup 05 · notation focus</div>
+      <h2>Notation pane · full bleed.</h2>
+      <p class="sec-lede">For songs with raw_xml, the notation tab gives the music the entire viewport. Chord-cell editing still works — click a chord symbol above the staff. Songs without raw_xml get the graceful placeholder shown second.</p>
+
+      <div class="mockup-caption">
+        <span class="num">M-05a</span>
+        <span class="ttl">Notation · OSMD full</span>
+        <span class="note">raw_xml present (10 of 42 songs)</span>
+      </div>
+      <div class="mockup">
+        <div class="app">
+          <div class="app-topbar">
+            <div class="app-brand">HarmonyLab</div>
+            <nav class="app-nav"><a>Library</a><a class="is-active">Corcovado</a></nav>
+            <div class="app-spacer"></div>
+            <button class="btn btn--sm">⤓ Export ▾</button>
+          </div>
+          <div class="meta-strip">
+            <div class="item"><span class="lbl">tab</span><span class="val">Notation</span></div>
+            <div class="item"><span class="lbl">page</span><span class="val">1 / 2</span></div>
+            <div class="item"><span class="lbl">zoom</span><span class="val">110%</span></div>
+            <div class="item" style="margin-left:auto;gap:4px">
+              <button class="btn btn--sm">‹ prev</button><button class="btn btn--sm">next ›</button>
+              <button class="btn btn--sm">Hide chords</button>
+              <button class="btn btn--sm">Hide lyrics</button>
+            </div>
+          </div>
+          <div style="padding:32px 64px;background:linear-gradient(180deg, oklch(.17 .005 70) 0, oklch(.14 .006 70) 100%);min-height:520px">
+            <svg viewBox="0 0 1100 520" xmlns="http://www.w3.org/2000/svg" style="font-family:var(--t-chord);width:100%">
+              <!-- system 1 -->
+              <g fill="oklch(.97 .005 80)" font-family="Petaluma, serif" font-size="22">
+                <text x="60" y="30" font-style="italic" opacity=".55">· Gm7</text>
+                <text x="200" y="30" font-style="italic" opacity=".55">· F♯m7♭5</text>
+                <text x="340" y="30">Am7</text>
+                <text x="480" y="30">D7♭9</text>
+                <text x="620" y="30">Gm7</text>
+                <text x="760" y="30">G♭7</text>
+                <text x="900" y="30">Fm7</text>
+                <text x="1020" y="30">B♭7♭9</text>
+              </g>
+              <g stroke="oklch(.42 .005 80)" stroke-dasharray="1.5 3" fill="none" stroke-width="1">
+                <line x1="60" y1="36" x2="138" y2="36" /><line x1="200" y1="36" x2="296" y2="36" />
+              </g>
+              <g stroke="oklch(.78 .005 80)" stroke-width="1" fill="none">
+                <line x1="40" y1="70" x2="1080" y2="70" /><line x1="40" y1="86" x2="1080" y2="86" />
+                <line x1="40" y1="102" x2="1080" y2="102" /><line x1="40" y1="118" x2="1080" y2="118" /><line x1="40" y1="134" x2="1080" y2="134" />
+              </g>
+              <text x="48" y="128" font-family="Petaluma, serif" font-size="55" fill="oklch(.97 .005 80)">𝄞</text>
+              <text x="105" y="108" font-family="Petaluma, serif" font-size="28" fill="oklch(.78 .005 80)">♭♭</text>
+              <g stroke="oklch(.58 .005 80)" stroke-width=".8">
+                <line x1="180" y1="70" x2="180" y2="134" /><line x1="320" y1="70" x2="320" y2="134" />
+                <line x1="460" y1="70" x2="460" y2="134" /><line x1="600" y1="70" x2="600" y2="134" />
+                <line x1="740" y1="70" x2="740" y2="134" /><line x1="880" y1="70" x2="880" y2="134" />
+                <line x1="1000" y1="70" x2="1000" y2="134" /><line x1="1080" y1="70" x2="1080" y2="134" stroke-width="1.5" />
+              </g>
+              <g fill="oklch(.97 .005 80)">
+                <ellipse cx="92" cy="104" rx="6" ry="4.5" /><line x1="98" y1="104" x2="98" y2="76" stroke="oklch(.97 .005 80)"/>
+                <ellipse cx="130" cy="98" rx="6" ry="4.5" /><line x1="136" y1="98" x2="136" y2="70" stroke="oklch(.97 .005 80)"/>
+                <ellipse cx="216" cy="100" rx="6" ry="4.5" /><line x1="222" y1="100" x2="222" y2="74" stroke="oklch(.97 .005 80)"/>
+                <ellipse cx="260" cy="106" rx="6" ry="4.5" /><line x1="266" y1="106" x2="266" y2="80" stroke="oklch(.97 .005 80)"/>
+                <ellipse cx="354" cy="94" rx="6" ry="4.5" /><line x1="360" y1="94" x2="360" y2="68" stroke="oklch(.97 .005 80)"/>
+                <ellipse cx="396" cy="90" rx="6" ry="4.5" /><line x1="402" y1="90" x2="402" y2="64" stroke="oklch(.97 .005 80)"/>
+                <ellipse cx="498" cy="100" rx="6" ry="4.5" /><line x1="504" y1="100" x2="504" y2="74" stroke="oklch(.97 .005 80)"/>
+                <ellipse cx="540" cy="106" rx="6" ry="4.5" /><line x1="546" y1="106" x2="546" y2="80" stroke="oklch(.97 .005 80)"/>
+                <ellipse cx="638" cy="94" rx="6" ry="4.5" /><line x1="644" y1="94" x2="644" y2="68" stroke="oklch(.97 .005 80)"/>
+                <ellipse cx="780" cy="86" rx="6" ry="4.5" /><line x1="786" y1="86" x2="786" y2="60" stroke="oklch(.97 .005 80)"/>
+                <ellipse cx="916" cy="92" rx="6" ry="4.5" /><line x1="922" y1="92" x2="922" y2="66" stroke="oklch(.97 .005 80)"/>
+                <ellipse cx="1036" cy="100" rx="6" ry="4.5" /><line x1="1042" y1="100" x2="1042" y2="74" stroke="oklch(.97 .005 80)"/>
+              </g>
+              <!-- lyrics row 1 -->
+              <g fill="oklch(.78 .005 80)" font-family="Cormorant Garamond, serif" font-style="italic" font-size="14">
+                <text x="350" y="160">Quiet</text><text x="490" y="160">nights</text><text x="615" y="160">of</text><text x="750" y="160">quiet</text><text x="895" y="160">stars</text>
+              </g>
+
+              <!-- system 2 -->
+              <g fill="oklch(.97 .005 80)" font-family="Petaluma, serif" font-size="22">
+                <text x="60" y="220" fill="oklch(.79 .13 75)">E♭△7</text>
+                <text x="200" y="220">A♭7</text>
+                <text x="340" y="220">B♭△7</text>
+                <text x="480" y="220">Gm7</text>
+                <text x="620" y="220">Cm7</text>
+                <text x="760" y="220">F7</text>
+                <text x="900" y="220">B♭△7</text>
+                <text x="1020" y="220" opacity=".7">%</text>
+              </g>
+              <g stroke="oklch(.78 .005 80)" stroke-width="1" fill="none">
+                <line x1="40" y1="250" x2="1080" y2="250" /><line x1="40" y1="266" x2="1080" y2="266" />
+                <line x1="40" y1="282" x2="1080" y2="282" /><line x1="40" y1="298" x2="1080" y2="298" /><line x1="40" y1="314" x2="1080" y2="314" />
+              </g>
+              <text x="48" y="308" font-family="Petaluma, serif" font-size="55" fill="oklch(.97 .005 80)">𝄞</text>
+              <text x="105" y="288" font-family="Petaluma, serif" font-size="28" fill="oklch(.78 .005 80)">♭♭♭</text>
+              <g stroke="oklch(.58 .005 80)" stroke-width=".8">
+                <line x1="180" y1="250" x2="180" y2="314" /><line x1="320" y1="250" x2="320" y2="314" />
+                <line x1="460" y1="250" x2="460" y2="314" /><line x1="600" y1="250" x2="600" y2="314" />
+                <line x1="740" y1="250" x2="740" y2="314" /><line x1="880" y1="250" x2="880" y2="314" />
+                <line x1="1000" y1="250" x2="1000" y2="314" /><line x1="1080" y1="250" x2="1080" y2="314" stroke-width="1.5" />
+              </g>
+              <g fill="oklch(.97 .005 80)">
+                <ellipse cx="90" cy="282" rx="6" ry="4.5" /><line x1="96" y1="282" x2="96" y2="256" stroke="oklch(.97 .005 80)"/>
+                <ellipse cx="220" cy="290" rx="6" ry="4.5" /><line x1="226" y1="290" x2="226" y2="264" stroke="oklch(.97 .005 80)"/>
+                <ellipse cx="360" cy="278" rx="6" ry="4.5" /><line x1="366" y1="278" x2="366" y2="252" stroke="oklch(.97 .005 80)"/>
+                <ellipse cx="500" cy="286" rx="6" ry="4.5" /><line x1="506" y1="286" x2="506" y2="260" stroke="oklch(.97 .005 80)"/>
+                <ellipse cx="640" cy="280" rx="6" ry="4.5" /><line x1="646" y1="280" x2="646" y2="254" stroke="oklch(.97 .005 80)"/>
+                <ellipse cx="780" cy="276" rx="6" ry="4.5" /><line x1="786" y1="276" x2="786" y2="250" stroke="oklch(.97 .005 80)"/>
+                <ellipse cx="920" cy="270" rx="6" ry="4.5" /><line x1="926" y1="270" x2="926" y2="244" stroke="oklch(.97 .005 80)"/>
+              </g>
+              <g fill="oklch(.78 .005 80)" font-family="Cormorant Garamond, serif" font-style="italic" font-size="14">
+                <text x="60" y="340">and</text><text x="200" y="340">vast</text><text x="345" y="340">si-</text><text x="490" y="340">lent</text><text x="615" y="340">moon-</text><text x="755" y="340">lit</text><text x="895" y="340">trees</text>
+              </g>
+
+              <!-- system 3 (third row) -->
+              <g fill="oklch(.97 .005 80)" font-family="Petaluma, serif" font-size="22">
+                <text x="60" y="400">A7♭9</text>
+                <text x="200" y="400">Dm7</text>
+                <text x="340" y="400">G7</text>
+                <text x="480" y="400">Cm7</text>
+                <text x="620" y="400">F7♭13</text>
+                <text x="760" y="400">B♭6</text>
+                <text x="900" y="400">Gm7</text>
+                <text x="1020" y="400">Cm7</text>
+              </g>
+              <g stroke="oklch(.78 .005 80)" stroke-width="1" fill="none">
+                <line x1="40" y1="430" x2="1080" y2="430" /><line x1="40" y1="446" x2="1080" y2="446" />
+                <line x1="40" y1="462" x2="1080" y2="462" /><line x1="40" y1="478" x2="1080" y2="478" /><line x1="40" y1="494" x2="1080" y2="494" />
+              </g>
+              <text x="48" y="488" font-family="Petaluma, serif" font-size="55" fill="oklch(.97 .005 80)">𝄞</text>
+              <text x="105" y="468" font-family="Petaluma, serif" font-size="28" fill="oklch(.78 .005 80)">♭♭</text>
+              <g stroke="oklch(.58 .005 80)" stroke-width=".8">
+                <line x1="180" y1="430" x2="180" y2="494" /><line x1="320" y1="430" x2="320" y2="494" />
+                <line x1="460" y1="430" x2="460" y2="494" /><line x1="600" y1="430" x2="600" y2="494" />
+                <line x1="740" y1="430" x2="740" y2="494" /><line x1="880" y1="430" x2="880" y2="494" />
+                <line x1="1000" y1="430" x2="1000" y2="494" /><line x1="1080" y1="430" x2="1080" y2="494" stroke-width="1.5" />
+              </g>
+              <g fill="oklch(.97 .005 80)">
+                <ellipse cx="90" cy="462" rx="6" ry="4.5" /><line x1="96" y1="462" x2="96" y2="436" stroke="oklch(.97 .005 80)"/>
+                <ellipse cx="220" cy="470" rx="6" ry="4.5" /><line x1="226" y1="470" x2="226" y2="444" stroke="oklch(.97 .005 80)"/>
+                <ellipse cx="360" cy="458" rx="6" ry="4.5" /><line x1="366" y1="458" x2="366" y2="432" stroke="oklch(.97 .005 80)"/>
+                <ellipse cx="500" cy="466" rx="6" ry="4.5" /><line x1="506" y1="466" x2="506" y2="440" stroke="oklch(.97 .005 80)"/>
+                <ellipse cx="640" cy="460" rx="6" ry="4.5" /><line x1="646" y1="460" x2="646" y2="434" stroke="oklch(.97 .005 80)"/>
+                <ellipse cx="780" cy="454" rx="6" ry="4.5" /><line x1="786" y1="454" x2="786" y2="428" stroke="oklch(.97 .005 80)"/>
+                <ellipse cx="920" cy="466" rx="6" ry="4.5" /><line x1="926" y1="466" x2="926" y2="440" stroke="oklch(.97 .005 80)"/>
+              </g>
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <div class="mockup-caption" style="margin-top:32px">
+        <span class="num">M-05b</span>
+        <span class="ttl">Notation unavailable · graceful state</span>
+        <span class="note">raw_xml missing (32 of 42 songs)</span>
+      </div>
+      <div class="mockup" style="padding:80px 32px;text-align:center">
+        <div style="display:inline-block;text-align:left;max-width:520px">
+          <div class="tiny upper" style="color:var(--ink-3)">Notation unavailable</div>
+          <h3 style="font-family:var(--t-display);font-style:italic;font-size:32px;margin:8px 0 12px;font-weight:500">No MusicXML on file.</h3>
+          <p style="color:var(--ink-1);font-size:14px;margin:0 0 18px">
+            This song was imported before the pipeline started storing the raw score. The
+            chord grid and analysis still work; the notation pane needs a re-import to
+            render the staff.
+          </p>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn btn--primary">Re-import to enable</button>
+            <button class="btn">Open audit ↗</button>
+            <span class="tiny" style="color:var(--ink-3);margin-left:8px;font-family:var(--t-mono)">10/42 songs have raw_xml today</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <hr class="rule" />
+
+    <!-- ====================================================== -->
+    <!-- 9. Mockup · Settings                                   -->
+    <!-- ====================================================== -->
+    <section id="m-settings">
+      <div class="sec-kicker">Mockup 06 · settings</div>
+      <h2>Settings.</h2>
+      <p class="sec-lede">Only three things to set — chord notation, key-center colors (the user's prized palette), and debug. The page should feel like a tuning panel, not a SaaS preferences screen.</p>
+
+      <div class="mockup-caption">
+        <span class="num">M-06</span>
+        <span class="ttl">/settings</span>
+        <span class="note">JWT-gated · the only user-scoped page</span>
+      </div>
+      <div class="mockup">
+        <div class="app">
+          <div class="app-topbar">
+            <div class="app-brand">HarmonyLab</div>
+            <nav class="app-nav"><a>Library</a><a class="is-active">Settings</a><a>Lab</a></nav>
+            <div class="app-spacer"></div>
+            <div class="user-chip"><span class="av"></span>pl</div>
+          </div>
+          <div style="display:grid;grid-template-columns:240px 1fr;min-height:540px">
+            <aside style="border-right:1px solid var(--line);padding:24px 16px">
+              <div class="tiny upper" style="color:var(--ink-3);margin-bottom:12px">Sections</div>
+              <div style="display:flex;flex-direction:column;gap:2px;font-size:13px">
+                <a style="padding:6px 10px;background:var(--bg-2);border-radius:4px">Display</a>
+                <a style="padding:6px 10px;color:var(--ink-2)">Key colors</a>
+                <a style="padding:6px 10px;color:var(--ink-2)">Notation</a>
+                <a style="padding:6px 10px;color:var(--ink-2)">Voicing defaults <span class="badge b-new" style="margin-left:4px">new</span></a>
+                <a style="padding:6px 10px;color:var(--ink-2)">Debug</a>
+                <a style="padding:6px 10px;color:var(--ink-2)">Account</a>
+              </div>
+            </aside>
+            <div style="padding:32px 40px">
+              <div class="tiny upper" style="color:var(--amber)">Display</div>
+              <h3 style="font-family:var(--t-display);font-style:italic;font-size:32px;margin:6px 0 24px;font-weight:500">How chords appear.</h3>
+
+              <div style="display:grid;grid-template-columns:200px 1fr;gap:24px;align-items:start;border-bottom:1px solid var(--line);padding-bottom:24px">
+                <div>
+                  <div style="font-size:14px;font-weight:500">Chord symbol style</div>
+                  <div class="tiny" style="color:var(--ink-3);margin-top:4px">Affects display and export. Internal symbols always canonical.</div>
+                </div>
+                <div>
+                  <div class="seg" style="margin-bottom:16px">
+                    <button class="is-on">Jazz · Δ ø °</button>
+                    <button>Plain · maj7 m7♭5 dim</button>
+                  </div>
+                  <div style="display:flex;gap:24px;align-items:center">
+                    <div>
+                      <div class="tiny upper" style="color:var(--ink-3)">jazz</div>
+                      <div style="font-family:var(--t-chord);font-size:32px;margin-top:4px">C△7 · F♯ø7 · B°7 · D−7</div>
+                    </div>
+                    <div style="color:var(--ink-3)">vs</div>
+                    <div>
+                      <div class="tiny upper" style="color:var(--ink-3)">plain</div>
+                      <div style="font-family:var(--t-chord);font-size:32px;margin-top:4px;opacity:.6">Cmaj7 · F♯m7♭5 · Bdim7 · Dm7</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div style="margin-top:32px">
+                <div class="tiny upper" style="color:var(--amber)">Key-center colors · your data</div>
+                <h3 style="font-family:var(--t-display);font-style:italic;font-size:24px;margin:6px 0 16px;font-weight:500">Pick a color for every key.</h3>
+                <p style="font-size:13px;color:var(--ink-2);margin:0 0 16px;max-width:60ch">These persist to your <code>UserPreferences.key_center_colors</code> dict and surface on every chord cell, key pill, and the analysis timeline. The brand will never override them.</p>
+                <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px">
+                  <!-- 12 key pickers -->
+                  <div style="border:1px solid var(--line);border-radius:6px;padding:10px;background:var(--bg-1)">
+                    <div style="display:flex;align-items:center;gap:8px"><span style="width:14px;height:14px;border-radius:3px;background:var(--k-C)"></span><span style="font-size:13px">C maj</span><span class="tiny" style="margin-left:auto;color:var(--ink-3);font-family:var(--t-mono)">cream</span></div>
+                    <input type="text" class="input" value="oklch(.86 .06 85)" style="width:100%;margin-top:6px;font-family:var(--t-mono);font-size:10px;height:24px" />
+                  </div>
+                  <div style="border:1px solid var(--line);border-radius:6px;padding:10px;background:var(--bg-1)">
+                    <div style="display:flex;align-items:center;gap:8px"><span style="width:14px;height:14px;border-radius:3px;background:var(--k-G)"></span><span style="font-size:13px">G maj</span><span class="tiny" style="margin-left:auto;color:var(--ink-3);font-family:var(--t-mono)">spring</span></div>
+                    <input type="text" class="input" value="oklch(.72 .10 145)" style="width:100%;margin-top:6px;font-family:var(--t-mono);font-size:10px;height:24px" />
+                  </div>
+                  <div style="border:1px solid var(--line);border-radius:6px;padding:10px;background:var(--bg-1)">
+                    <div style="display:flex;align-items:center;gap:8px"><span style="width:14px;height:14px;border-radius:3px;background:var(--k-D)"></span><span style="font-size:13px">D maj</span><span class="tiny" style="margin-left:auto;color:var(--ink-3);font-family:var(--t-mono)">sea</span></div>
+                    <input type="text" class="input" value="oklch(.70 .12 165)" style="width:100%;margin-top:6px;font-family:var(--t-mono);font-size:10px;height:24px" />
+                  </div>
+                  <div style="border:1px solid var(--line);border-radius:6px;padding:10px;background:var(--bg-1)">
+                    <div style="display:flex;align-items:center;gap:8px"><span style="width:14px;height:14px;border-radius:3px;background:var(--k-A)"></span><span style="font-size:13px">A maj</span><span class="tiny" style="margin-left:auto;color:var(--ink-3);font-family:var(--t-mono)">sky</span></div>
+                    <input type="text" class="input" value="oklch(.70 .11 200)" style="width:100%;margin-top:6px;font-family:var(--t-mono);font-size:10px;height:24px" />
+                  </div>
+                  <div style="border:1px solid var(--line);border-radius:6px;padding:10px;background:var(--bg-1)">
+                    <div style="display:flex;align-items:center;gap:8px"><span style="width:14px;height:14px;border-radius:3px;background:var(--k-E)"></span><span style="font-size:13px">E maj</span><span class="tiny" style="margin-left:auto;color:var(--ink-3);font-family:var(--t-mono)">periwinkle</span></div>
+                    <input type="text" class="input" value="oklch(.68 .12 245)" style="width:100%;margin-top:6px;font-family:var(--t-mono);font-size:10px;height:24px" />
+                  </div>
+                  <div style="border:1px solid var(--line);border-radius:6px;padding:10px;background:var(--bg-1)">
+                    <div style="display:flex;align-items:center;gap:8px"><span style="width:14px;height:14px;border-radius:3px;background:var(--k-F)"></span><span style="font-size:13px">F maj</span><span class="tiny" style="margin-left:auto;color:var(--ink-3);font-family:var(--t-mono)">brass</span></div>
+                    <input type="text" class="input" value="oklch(.78 .13 60)" style="width:100%;margin-top:6px;font-family:var(--t-mono);font-size:10px;height:24px" />
+                  </div>
+                  <div style="border:1px solid var(--line);border-radius:6px;padding:10px;background:var(--bg-1)">
+                    <div style="display:flex;align-items:center;gap:8px"><span style="width:14px;height:14px;border-radius:3px;background:var(--k-Bb)"></span><span style="font-size:13px">B♭ maj</span><span class="tiny" style="margin-left:auto;color:var(--ink-3);font-family:var(--t-mono)">gold</span></div>
+                    <input type="text" class="input" value="oklch(.80 .14 80)" style="width:100%;margin-top:6px;font-family:var(--t-mono);font-size:10px;height:24px" />
+                  </div>
+                  <div style="border:1px solid var(--line);border-radius:6px;padding:10px;background:var(--bg-1)">
+                    <div style="display:flex;align-items:center;gap:8px"><span style="width:14px;height:14px;border-radius:3px;background:var(--k-Eb)"></span><span style="font-size:13px">E♭ maj</span><span class="tiny" style="margin-left:auto;color:var(--ink-3);font-family:var(--t-mono)">copper</span></div>
+                    <input type="text" class="input" value="oklch(.74 .13 45)" style="width:100%;margin-top:6px;font-family:var(--t-mono);font-size:10px;height:24px" />
+                  </div>
+                  <div style="border:1px solid var(--line);border-radius:6px;padding:10px;background:var(--bg-1)">
+                    <div style="display:flex;align-items:center;gap:8px"><span style="width:14px;height:14px;border-radius:3px;background:var(--k-Ab)"></span><span style="font-size:13px">A♭ maj</span><span class="tiny" style="margin-left:auto;color:var(--ink-3);font-family:var(--t-mono)">rust</span></div>
+                    <input type="text" class="input" value="oklch(.66 .13 25)" style="width:100%;margin-top:6px;font-family:var(--t-mono);font-size:10px;height:24px" />
+                  </div>
+                  <div style="border:1px solid var(--line);border-radius:6px;padding:10px;background:var(--bg-1)">
+                    <div style="display:flex;align-items:center;gap:8px"><span style="width:14px;height:14px;border-radius:3px;background:var(--k-Db)"></span><span style="font-size:13px">D♭ maj</span><span class="tiny" style="margin-left:auto;color:var(--ink-3);font-family:var(--t-mono)">claret</span></div>
+                    <input type="text" class="input" value="oklch(.62 .15 5)" style="width:100%;margin-top:6px;font-family:var(--t-mono);font-size:10px;height:24px" />
+                  </div>
+                  <div style="border:1px solid var(--line);border-radius:6px;padding:10px;background:var(--bg-1)">
+                    <div style="display:flex;align-items:center;gap:8px"><span style="width:14px;height:14px;border-radius:3px;background:var(--k-B)"></span><span style="font-size:13px">B maj</span><span class="tiny" style="margin-left:auto;color:var(--ink-3);font-family:var(--t-mono)">violet</span></div>
+                    <input type="text" class="input" value="oklch(.66 .13 285)" style="width:100%;margin-top:6px;font-family:var(--t-mono);font-size:10px;height:24px" />
+                  </div>
+                  <div style="border:1px solid var(--line);border-radius:6px;padding:10px;background:var(--bg-1)">
+                    <div style="display:flex;align-items:center;gap:8px"><span style="width:14px;height:14px;border-radius:3px;background:var(--k-Fs)"></span><span style="font-size:13px">F♯ maj</span><span class="tiny" style="margin-left:auto;color:var(--ink-3);font-family:var(--t-mono)">magenta</span></div>
+                    <input type="text" class="input" value="oklch(.66 .16 315)" style="width:100%;margin-top:6px;font-family:var(--t-mono);font-size:10px;height:24px" />
+                  </div>
+                </div>
+                <div class="tiny" style="color:var(--ink-3);margin-top:10px">
+                  Minor keys inherit major-key hue at slightly lower lightness · 24 entries persisted as JSON dict.
+                </div>
+              </div>
+
+              <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:32px">
+                <button class="btn btn--ghost">Reset to defaults</button>
+                <button class="btn">Cancel</button>
+                <button class="btn btn--primary">Save preferences</button>
+              </div>
+              <div class="tiny" style="text-align:right;margin-top:8px;color:var(--ink-3);font-family:var(--t-mono)">PUT /api/v1/preferences · Authorization: Bearer ...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <hr class="rule" />
+
+    <!-- ====================================================== -->
+    <!-- 10. Mockup · Import modal                              -->
+    <!-- ====================================================== -->
+    <section id="m-import">
+      <div class="sec-kicker">Mockup 07 · import</div>
+      <h2>Import modal.</h2>
+      <p class="sec-lede">Three pipelines in one drawer: Score File (mscz, mid, mxl), OMR (pdf/jpg/png via Claude Vision), and Batch ZIP. Tabs share a single preview surface — the user sees what they'll get before committing.</p>
+
+      <div class="mockup-caption">
+        <span class="num">M-07</span>
+        <span class="ttl">Import drawer · OMR tab · preview state</span>
+        <span class="note">BUG-024 (504 timeout) addressed in HM43; UI assumes that fix</span>
+      </div>
+      <div class="mockup" style="position:relative;min-height:660px;background:oklch(.09 .005 70)">
+        <!-- backdrop / library underneath -->
+        <div style="position:absolute;inset:0;opacity:.25;pointer-events:none">
+          <div class="app">
+            <div class="app-topbar"><div class="app-brand">HarmonyLab</div></div>
+            <div style="padding:24px 32px">
+              <h1 style="font-family:var(--t-display);font-style:italic;font-size:34px">Forty-two songs.</h1>
+              <table class="tbl" style="margin-top:24px"><tr><td colspan="6" style="border:0;color:var(--ink-3)">[library table, dimmed]</td></tr></table>
+            </div>
+          </div>
+        </div>
+        <!-- modal -->
+        <div style="position:relative;display:flex;justify-content:center;padding:48px 0">
+          <div style="width:880px;background:var(--bg-1);border:1px solid var(--line-2);border-radius:8px;box-shadow:var(--sh-3);overflow:hidden">
+            <div style="display:flex;align-items:center;padding:14px 20px;border-bottom:1px solid var(--line)">
+              <div style="font-family:var(--t-display);font-style:italic;font-size:20px">Import a lead sheet</div>
+              <div style="margin-left:auto;display:flex;gap:6px">
+                <div class="seg">
+                  <button>Score file</button>
+                  <button class="is-on">OMR · image / PDF</button>
+                  <button>Batch ZIP</button>
+                </div>
+                <button class="btn btn--ghost btn--sm">✕</button>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;min-height:420px">
+              <!-- LEFT — drop zone + preview thumbnail -->
+              <div style="padding:24px;border-right:1px solid var(--line)">
+                <div class="tiny upper" style="color:var(--ink-3)">Drop a PDF or image</div>
+                <div style="margin-top:8px;border:1.5px dashed var(--line-2);border-radius:6px;padding:24px;text-align:center;background:var(--bg-0)">
+                  <div style="font-size:14px;color:var(--ink-1)">corcovado-fakebook.pdf</div>
+                  <div class="tiny" style="color:var(--ink-3);margin-top:4px;font-family:var(--t-mono)">1.4 MB · 2 pages · fs-modified 2024-11-04</div>
+                  <!-- a tiny thumbnail SVG -->
+                  <svg viewBox="0 0 240 140" style="width:80%;margin:14px auto 8px;display:block;background:oklch(.92 .01 80);border-radius:3px">
+                    <g fill="oklch(.20 .01 80)" font-family="serif" font-style="italic" font-size="11">
+                      <text x="12" y="18">Corcovado</text>
+                      <text x="180" y="18" font-size="8">Jobim · '60</text>
+                    </g>
+                    <g stroke="oklch(.30 .01 80)" stroke-width=".7" fill="none">
+                      <line x1="12" y1="40" x2="228" y2="40" /><line x1="12" y1="48" x2="228" y2="48" />
+                      <line x1="12" y1="56" x2="228" y2="56" /><line x1="12" y1="64" x2="228" y2="64" /><line x1="12" y1="72" x2="228" y2="72" />
+                      <line x1="12" y1="100" x2="228" y2="100" /><line x1="12" y1="108" x2="228" y2="108" />
+                      <line x1="12" y1="116" x2="228" y2="116" /><line x1="12" y1="124" x2="228" y2="124" /><line x1="12" y1="132" x2="228" y2="132" />
+                    </g>
+                    <g fill="oklch(.20 .01 80)" font-family="serif" font-size="9">
+                      <text x="60" y="32">Am7</text><text x="120" y="32">D7♭9</text><text x="180" y="32">Gm7</text>
+                      <text x="60" y="92">Cm7</text><text x="120" y="92">F7</text><text x="180" y="92">B♭△7</text>
+                    </g>
+                  </svg>
+                  <button class="btn btn--sm">Replace file</button>
+                </div>
+                <div class="tiny" style="color:var(--ink-3);margin-top:18px;font-family:var(--t-mono);text-transform:uppercase;letter-spacing:.1em">Vision pipeline</div>
+                <ol style="margin:6px 0 0;padding-left:18px;font-size:13px;color:var(--ink-1);line-height:1.7">
+                  <li style="color:var(--green)">✓ Upload (1.4 MB)</li>
+                  <li style="color:var(--green)">✓ Page → image extraction (2 pages)</li>
+                  <li style="color:var(--amber)">▸ Claude Vision pass 1 · chord detection <span class="tiny" style="color:var(--ink-3)">~18s</span></li>
+                  <li style="color:var(--ink-3)">  Claude Vision pass 2 · structure + key</li>
+                  <li style="color:var(--ink-3)">  Database commit</li>
+                </ol>
+              </div>
+              <!-- RIGHT — preview result -->
+              <div style="padding:24px">
+                <div style="display:flex;align-items:baseline;justify-content:space-between">
+                  <div>
+                    <div class="tiny upper" style="color:var(--amber)">Preview · before commit</div>
+                    <h4 style="margin:6px 0 0;font-family:var(--t-display);font-style:italic;font-size:22px;font-weight:500">Corcovado <span style="color:var(--ink-2);font-size:14px;margin-left:8px">A. C. Jobim · B♭ maj · 32 bars · 64 chords</span></h4>
+                  </div>
+                  <span class="pill pill--confidence">parser · v3.2 · 88%</span>
+                </div>
+                <div class="chord-grid chord-grid--4" style="margin-top:14px">
+                  <div class="chord-cell k-Bb"><div class="key-strip"></div><div class="meas">m.3</div><div class="sym">Am7</div><div class="roman minor">vii<sup>7</sup>/iii</div></div>
+                  <div class="chord-cell k-Bb"><div class="key-strip"></div><div class="meas">m.4</div><div class="sym">D7♭9</div><div class="roman major">V<sup>7♭9</sup>/iii</div></div>
+                  <div class="chord-cell k-Bb"><div class="key-strip"></div><div class="meas">m.5</div><div class="sym">Gm7</div><div class="roman minor">vi<sup>7</sup></div></div>
+                  <div class="chord-cell k-Bb"><div class="key-strip"></div><div class="meas">m.6</div><div class="sym">G♭7</div><div class="roman major">♭V<sup>7</sup></div></div>
+                </div>
+                <div style="margin-top:14px;padding:10px 12px;border:1px solid var(--amber);border-radius:6px;background:oklch(.79 .13 75 / .08);color:var(--ink-1);font-size:13px">
+                  <strong style="color:var(--amber)">2 warnings</strong>
+                  <ul style="margin:4px 0 0;padding-left:18px">
+                    <li>m.7 — ambiguous symbol "F7♭9?" · accepted with conf 0.62</li>
+                    <li>m.15 — possible modulation to E♭ not yet detected · re-run analysis after import</li>
+                  </ul>
+                </div>
+                <div style="margin-top:18px;display:flex;align-items:center;gap:8px">
+                  <input class="input" value="Corcovado" style="flex:1" />
+                  <select class="input select" style="width:120px"><option>Bossa Nova</option></select>
+                </div>
+                <div class="tiny" style="color:var(--ink-3);margin-top:6px">Slug auto-detected from page 1 title. Edit if needed.</div>
+              </div>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-top:1px solid var(--line);background:var(--bg-0)">
+              <div class="tiny" style="color:var(--ink-3);font-family:var(--t-mono)">POST /api/v1/imports/omr/preview · ok · then /omr/import on commit</div>
+              <div style="display:flex;gap:8px">
+                <button class="btn btn--ghost">Cancel</button>
+                <button class="btn">Re-run preview</button>
+                <button class="btn btn--primary">Import to library</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <hr class="rule" />
+
+    <!-- ====================================================== -->
+    <!-- 11. Mockup · Audit                                     -->
+    <!-- ====================================================== -->
+    <section id="m-audit">
+      <div class="sec-kicker">Mockup 08 · audit</div>
+      <h2>Audit page.</h2>
+      <p class="sec-lede">Deep diagnostics for one song: parsed notes, lyrics, tempo / time / key marks, import history. The page is dense by design; the user reads it like a logfile.</p>
+
+      <div class="mockup-caption">
+        <span class="num">M-08</span>
+        <span class="ttl">/songs/12/audit · Corcovado</span>
+        <span class="note">cookie auth · diagnostic</span>
+      </div>
+      <div class="mockup">
+        <div class="app">
+          <div class="app-topbar">
+            <div class="app-brand">HarmonyLab</div>
+            <nav class="app-nav"><a>Library</a><a>Corcovado</a><a class="is-active">Audit</a></nav>
+            <div class="app-spacer"></div>
+            <span class="tiny" style="font-family:var(--t-mono);color:var(--ink-3)">credentials: include</span>
+          </div>
+          <div class="meta-strip">
+            <div class="item"><span class="lbl">song</span><span class="val" style="font-family:var(--t-display);font-style:italic;font-size:18px">Corcovado</span></div>
+            <div class="item"><span class="lbl">id</span><span class="val" style="font-family:var(--t-mono)">12</span></div>
+            <div class="item"><span class="lbl">imports</span><span class="val">2</span></div>
+            <div class="item"><span class="lbl">notes</span><span class="val">412</span></div>
+            <div class="item"><span class="lbl">lyrics</span><span class="val">68</span></div>
+            <div class="item"><span class="lbl">tempo marks</span><span class="val">2</span></div>
+            <div class="item" style="margin-left:auto"><button class="btn btn--sm">Reparse notes</button></div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;border-top:1px solid var(--line)">
+            <!-- Import history -->
+            <div style="padding:24px;border-right:1px solid var(--line)">
+              <div class="tiny upper" style="color:var(--amber)">Import history</div>
+              <table class="tbl" style="margin-top:8px">
+                <thead><tr><th>v</th><th>When</th><th>Source</th><th>Format</th><th style="text-align:right">Chords</th><th style="text-align:right">Notes</th><th>Status</th></tr></thead>
+                <tbody>
+                  <tr>
+                    <td class="t-mono">2</td>
+                    <td class="t-mono">2025-08-12 14:02:18</td>
+                    <td class="t-mono" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="G:\My Drive\Code\Python\HarmonyLab\imports\corcovado-v2.mscz">…\corcovado-v2.mscz</td>
+                    <td>mscz</td>
+                    <td class="t-mono" style="text-align:right">64</td>
+                    <td class="t-mono" style="text-align:right">412</td>
+                    <td><span class="tiny" style="color:var(--green)">ok · 1842 ms</span></td>
+                  </tr>
+                  <tr>
+                    <td class="t-mono">1</td>
+                    <td class="t-mono">2025-07-04 11:18:55</td>
+                    <td class="t-mono">…\corcovado-fakebook.pdf</td>
+                    <td>omr</td>
+                    <td class="t-mono" style="text-align:right">58</td>
+                    <td class="t-mono" style="text-align:right">0</td>
+                    <td><span class="tiny" style="color:var(--amber)">ok · 2 warnings</span></td>
+                  </tr>
+                </tbody>
+              </table>
+              <pre style="margin-top:16px;font-size:11px;line-height:1.6">[2025-08-12 14:02:18] parser=score_v3.2 file=corcovado-v2.mscz
+  parsed 32 measures, 64 chords, 412 notes, 68 lyric syllables
+  warning m.7  → chord_symbol "F7♭9?" lo-conf 0.62, kept as F7♭9
+  warning m.15 → key signature change ♭♭→♭♭♭ detected, KeyRegions row pending
+  warning m.23 → fill-forward applied to empty measure (BUG-007)
+  raw_xml stored ✓ (87.4 KB)
+  has_note_data=1  has_lyrics=1
+</pre>
+            </div>
+            <!-- Decorations -->
+            <div style="padding:24px">
+              <div class="tiny upper" style="color:var(--amber)">Decorations · per measure</div>
+              <table class="tbl" style="margin-top:8px;font-size:12px">
+                <thead><tr><th>m.</th><th>type</th><th>value</th><th>beat</th></tr></thead>
+                <tbody>
+                  <tr><td class="t-mono">1</td><td>tempo</td><td>♩=84 "Bossa Nova"</td><td class="t-mono">1.0</td></tr>
+                  <tr><td class="t-mono">1</td><td>key sig</td><td>B♭ maj · ♭♭</td><td class="t-mono">1.0</td></tr>
+                  <tr><td class="t-mono">1</td><td>time sig</td><td>4/4</td><td class="t-mono">1.0</td></tr>
+                  <tr><td class="t-mono">15</td><td>key sig</td><td>E♭ maj · ♭♭♭</td><td class="t-mono">1.0</td></tr>
+                  <tr><td class="t-mono">23</td><td>key sig</td><td>B♭ maj · ♭♭</td><td class="t-mono">1.0</td></tr>
+                  <tr><td class="t-mono">25</td><td>text</td><td>"D.C. al Coda"</td><td class="t-mono">4.0</td></tr>
+                  <tr><td class="t-mono">32</td><td>text</td><td>"Fine"</td><td class="t-mono">4.0</td></tr>
+                </tbody>
+              </table>
+              <div class="tiny upper" style="color:var(--amber);margin-top:18px">Dynamics</div>
+              <div style="padding:10px;background:var(--bg-1);border:1px solid var(--line);border-radius:4px;margin-top:6px;color:var(--ink-3);font-family:var(--t-mono);font-size:11px">song_dynamics · 0 rows · schema only</div>
+            </div>
+          </div>
+
+          <div style="border-top:1px solid var(--line);padding:16px 24px;display:flex;justify-content:space-between;font-family:var(--t-mono);font-size:11px;color:var(--ink-3)">
+            <span>GET /api/v1/songs/12/audit · 200 · 64ms</span>
+            <span>GET /api/v1/songs/12/imports · 200 · 18ms</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <hr class="rule" />
+
+    <!-- ====================================================== -->
+    <!-- 12. Mockup · AI Theory Chat                            -->
+    <!-- ====================================================== -->
+    <section id="m-chat">
+      <div class="sec-kicker">Mockup 09 · ai theory chat</div>
+      <h2>AI Theory Chat.</h2>
+      <p class="sec-lede">Surfaced as a drawer over the chord grid (preserves spatial context) and also as a full-page view from the topbar. Chord selection in the grid populates the chat context. Outcome (accept/reject) is recorded for RLHF later.</p>
+
+      <div class="mockup-caption">
+        <span class="num">M-09</span>
+        <span class="ttl">Theory chat drawer · over Corcovado</span>
+        <span class="note">chords m.5–8 selected as context</span>
+      </div>
+      <div class="mockup">
+        <div class="app">
+          <div class="app-topbar">
+            <div class="app-brand">HarmonyLab</div>
+            <nav class="app-nav"><a>Library</a><a class="is-active">Corcovado</a></nav>
+            <div class="app-spacer"></div>
+            <button class="btn btn--sm" style="border-color:var(--teal);color:var(--teal)">Theory chat · open</button>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 380px;min-height:540px">
+            <!-- Left: chord grid (slim) -->
+            <div style="padding:20px 24px">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px">
+                <div class="section-banner" style="border:0;background:transparent;padding:0">
+                  <span class="label">A1</span>
+                  <span style="font-family:var(--t-display);font-style:italic">Tonic statement</span>
+                </div>
+                <div class="tiny" style="color:var(--teal)">4 chords selected for context</div>
+              </div>
+              <div class="chord-grid chord-grid--4">
+                <div class="chord-cell k-Bb is-selected"><div class="key-strip"></div><div class="meas">m.5</div><div class="sym">Gm7</div><div class="roman minor">vi<sup>7</sup></div></div>
+                <div class="chord-cell k-Bb is-selected"><div class="key-strip"></div><div class="meas">m.6</div><div class="sym">G♭7</div><div class="roman major">♭V<sup>7</sup>/ii</div></div>
+                <div class="chord-cell k-Bb is-selected"><div class="key-strip"></div><div class="meas">m.7</div><div class="sym">F7♭9</div><div class="roman major">V<sup>7♭9</sup></div></div>
+                <div class="chord-cell k-Bb is-selected"><div class="key-strip"></div><div class="meas">m.8</div><div class="sym">B♭△7</div><div class="roman major">I<sup>Δ7</sup></div></div>
+              </div>
+              <p style="margin-top:24px;font-size:13px;color:var(--ink-2);max-width:60ch">
+                Selection populates <code>selected_measures</code> on the POST. The drawer
+                also reads the active <code>analysis_rules</code> as system context.
+              </p>
+
+              <div style="margin-top:16px;border:1px solid var(--line);border-radius:6px;padding:14px;background:var(--bg-1)">
+                <div class="tiny upper" style="color:var(--ink-3)">Prior exchanges · 7 for this song</div>
+                <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;font-size:13px">
+                  <div style="display:flex;gap:10px">
+                    <span class="tiny" style="color:var(--ink-3);font-family:var(--t-mono);min-width:90px">2025-08-10</span>
+                    <span style="color:var(--ink-1);flex:1;font-family:var(--t-display);font-style:italic">"Why ♭V/ii instead of bII7?"</span>
+                    <span class="tiny" style="color:var(--green)">accepted</span>
+                  </div>
+                  <div style="display:flex;gap:10px">
+                    <span class="tiny" style="color:var(--ink-3);font-family:var(--t-mono);min-width:90px">2025-08-09</span>
+                    <span style="color:var(--ink-1);flex:1;font-family:var(--t-display);font-style:italic">"Is m.5–8 a turnaround variant?"</span>
+                    <span class="tiny" style="color:var(--rose)">rejected</span>
+                  </div>
+                  <div style="display:flex;gap:10px">
+                    <span class="tiny" style="color:var(--ink-3);font-family:var(--t-mono);min-width:90px">2025-08-03</span>
+                    <span style="color:var(--ink-1);flex:1;font-family:var(--t-display);font-style:italic">"Explain the modulation at m.15."</span>
+                    <span class="tiny" style="color:var(--green)">accepted</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right: chat drawer -->
+            <aside style="border-left:1px solid var(--line);display:flex;flex-direction:column;background:var(--bg-1)">
+              <div style="display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--line)">
+                <span style="width:8px;height:8px;border-radius:50%;background:var(--teal)"></span>
+                <div style="font-family:var(--t-display);font-style:italic;font-size:17px">Theory chat</div>
+                <span class="tiny" style="margin-left:auto;color:var(--ink-3);font-family:var(--t-mono)">claude · v3 · 12 docs in RAG</span>
+              </div>
+              <div style="flex:1;padding:16px;overflow:auto;display:flex;flex-direction:column;gap:14px">
+                <!-- user -->
+                <div>
+                  <div class="tiny upper" style="color:var(--ink-3)">you · m.5–8 selected</div>
+                  <div style="background:var(--bg-2);border-radius:6px;padding:10px 12px;margin-top:4px;font-size:13px">Why does Jobim use G♭7 here instead of a more conventional ii–V?</div>
+                </div>
+                <!-- ai -->
+                <div>
+                  <div class="tiny upper" style="color:var(--teal)">claude</div>
+                  <div style="border:1px solid var(--line);border-radius:6px;padding:10px 12px;margin-top:4px;font-size:13px;line-height:1.55;color:var(--ink-1)">
+                    G♭7 in m.6 is the tritone substitute of C7, which would normally function as V/ii (resolving to Fm or F7). Jobim collapses the conventional <em style="font-family:var(--t-display)">Gm7 — C7 — F7</em> into <em style="font-family:var(--t-display)">Gm7 — G♭7 — F7♭9</em> so the bass walks chromatically down a half-step at every measure (G → G♭ → F).
+                    <div class="tiny" style="margin-top:8px;color:var(--ink-3)">Pattern · tritone-sub-of-V-of-V · also seen in <em style="font-family:var(--t-display)">A Felicidade</em> m.11–12</div>
+                  </div>
+                  <div style="display:flex;gap:6px;margin-top:6px">
+                    <button class="btn btn--sm" style="color:var(--green);border-color:var(--green)">✓ Accept · log as override</button>
+                    <button class="btn btn--sm btn--ghost">✕ Reject</button>
+                    <button class="btn btn--sm btn--ghost">Why? · reasoning</button>
+                    <span class="tiny" style="margin-left:auto;color:var(--ink-3);align-self:center">conf 0.91</span>
+                  </div>
+                </div>
+                <div>
+                  <div class="tiny upper" style="color:var(--ink-3)">you</div>
+                  <div style="background:var(--bg-2);border-radius:6px;padding:10px 12px;margin-top:4px;font-size:13px">Does Bill Evans use the same sub on his Riverside take?</div>
+                </div>
+              </div>
+              <div style="padding:12px 14px;border-top:1px solid var(--line);display:flex;gap:8px">
+                <input class="input" placeholder="Ask about the selection…" style="flex:1" />
+                <button class="btn btn--primary btn--sm">Ask ⏎</button>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <hr class="rule" />
+
+    <!-- ====================================================== -->
+    <!-- 13. Interaction spec · inline chord edit               -->
+    <!-- ====================================================== -->
+    <section id="i-edit">
+      <div class="sec-kicker">Spec 01 · highest-stakes interaction</div>
+      <h2>Editing a chord symbol inline.</h2>
+      <p class="sec-lede">Single click into the cell. Type. ⏎ commits, Esc cancels. Adjacent fields (Roman, function, voicing, comment) live in a small popover anchored below the cell — open by default when the cell goes into edit, but the user can dismiss with Esc and still keep typing the chord symbol.</p>
+
+      <div class="steps" style="grid-template-columns:repeat(5,1fr)">
+        <div class="step">
+          <div class="n">step 1</div>
+          <h5>Idle</h5>
+          <p>Chord cell shows symbol + roman + function. Cursor hovering on cell raises bg one step.</p>
+          <div class="endpoint">no requests</div>
+        </div>
+        <div class="step">
+          <div class="n">step 2 · click</div>
+          <h5>Enter edit</h5>
+          <p>Cell gains amber outline. Symbol becomes editable in place; cursor placed after last char. Popover with related fields slides up below cell.</p>
+          <div class="endpoint">no requests · local state</div>
+        </div>
+        <div class="step">
+          <div class="n">step 3 · type</div>
+          <h5>Live preview</h5>
+          <p>Each keystroke is validated against <code>/vocabulary/chord-symbols</code> (debounced 240ms). Invalid symbols render in <span style="color:var(--rose)">rose</span>; valid keep ink-0. Quickpicks show jazz aliases.</p>
+          <div class="endpoint">GET /api/v1/vocabulary/chord-symbols (cached 1h)</div>
+        </div>
+        <div class="step">
+          <div class="n">step 4 · ⏎</div>
+          <h5>Commit</h5>
+          <p>Two writes fire in parallel: <code>PUT /chords/{id}</code> updates the chord row; <code>PUT /analysis/songs/{id}/chord/{idx}</code> records the override. Optimistic UI — cell goes "edited" state immediately.</p>
+          <div class="endpoint">PUT /chords/482 + PUT /analysis/songs/12/chord/6</div>
+        </div>
+        <div class="step">
+          <div class="n">step 5 · toast</div>
+          <h5>Confirm</h5>
+          <p>Bottom toast appears: "Saved · m.7 → F7♭9". 200ms underline flash on the cell. ⌘Z within 8s reverts via DELETE override. After 8s, undo only via explicit edit.</p>
+          <div class="endpoint">DELETE /analysis/songs/12/chord/6 (undo path)</div>
+        </div>
+      </div>
+
+      <h3>Failure modes</h3>
+      <ul style="font-size:13px;color:var(--ink-1);line-height:1.7">
+        <li><strong style="color:var(--ink-0)">Invalid symbol</strong> — commit refused, cell stays in edit, rose error tooltip below input. No request issued.</li>
+        <li><strong style="color:var(--ink-0)">Network error</strong> — toast becomes rose: "Couldn't save · retrying in 3s". Cell shows <em>pending</em> badge until retry succeeds or fails terminally.</li>
+        <li><strong style="color:var(--ink-0)">Conflict (override exists)</strong> — PUT merges fields. No conflict modal; the override row is the source of truth.</li>
+        <li><strong style="color:var(--ink-0)">Chord_index drift</strong> — <strong style="color:var(--rose)">depends on the FK migration noted in Part 4 of the brief</strong>. Until migrated, edits use chord_id and the index is recomputed server-side.</li>
+      </ul>
+    </section>
+
+    <hr class="rule" />
+
+    <!-- ====================================================== -->
+    <!-- 14. Interaction · re-analyze with manual key           -->
+    <!-- ====================================================== -->
+    <section id="i-reanalyze">
+      <div class="sec-kicker">Spec 02</div>
+      <h2>Re-analyzing with a manual key override.</h2>
+      <p class="sec-lede">When automatic key detection is wrong (low confidence, or the user is studying the song in a different key), they tap the pencil next to the key pill, pick a new key, and the entire analysis recomputes against it.</p>
+
+      <div class="steps">
+        <div class="step">
+          <div class="n">step 1</div>
+          <h5>Pencil ✎ on key pill</h5>
+          <p>Inline popover appears with all 24 keys arranged in circle of fifths. Current detected key shown faintly. A "use detected" option resets to algorithm value.</p>
+          <div class="endpoint">no request</div>
+        </div>
+        <div class="step">
+          <div class="n">step 2 · pick</div>
+          <h5>Set manual override</h5>
+          <p>POST <code>/analysis/songs/{id}/manual-key</code> with <code>{key: "F minor"}</code>. SongAnalysis.manual_key_override is written. UI shows "key · F min (manual)" pill in amber.</p>
+          <div class="endpoint">POST /analysis/songs/12/manual-key</div>
+        </div>
+        <div class="step">
+          <div class="n">step 3 · reanalyze</div>
+          <h5>Re-analyze runs</h5>
+          <p>POST <code>/analysis/songs/{id}</code> recomputes Roman numerals, function labels, and KeyRegions against the new tonic. Skeleton shimmer ONLY here (genuinely slow, ~600ms-2s).</p>
+          <div class="endpoint">POST /analysis/songs/12</div>
+        </div>
+        <div class="step">
+          <div class="n">step 4 · result</div>
+          <h5>Grid + timeline refresh</h5>
+          <p>All chord cells re-render with new RNs. Key-center timeline rebuilds. Old overrides are preserved (they're per-index user data, not algo output).</p>
+          <div class="endpoint">GET /analysis/songs/12 (refetch)</div>
+        </div>
+      </div>
+
+      <p style="margin-top:18px;font-size:13px;color:var(--ink-2)">
+        <strong style="color:var(--amber)">Note:</strong> Manual key override is per-song, persists in <code>SongAnalysis.manual_key_override</code>. There is no "session" concept — the user's pick stays until they clear it via <em>use detected</em>.
+      </p>
+    </section>
+
+    <hr class="rule" />
+
+    <!-- ====================================================== -->
+    <!-- 15. Interaction · PDF import + error resolve           -->
+    <!-- ====================================================== -->
+    <section id="i-import">
+      <div class="sec-kicker">Spec 03</div>
+      <h2>Importing a PDF + resolving parser errors.</h2>
+      <p class="sec-lede">OMR is the lossy pipeline. The interaction must let the user fix bad reads BEFORE the song hits the library — preview-then-commit, not import-then-pray.</p>
+
+      <div class="steps" style="grid-template-columns:repeat(5,1fr)">
+        <div class="step">
+          <div class="n">step 1</div>
+          <h5>Drop PDF</h5>
+          <p>Drag onto Import Drawer → OMR tab. File is hashed (sha256), checked against existing <code>song_imports</code> rows for duplicates.</p>
+          <div class="endpoint">local — hash + dup check</div>
+        </div>
+        <div class="step">
+          <div class="n">step 2</div>
+          <h5>Vision pass 1</h5>
+          <p>Server splits PDF → page images → POST to Claude Vision for chord detection. Progress checklist updates in the left pane. <strong style="color:var(--amber)">Nginx 60s edge timeout (BUG-024) assumed fixed in HM43.</strong></p>
+          <div class="endpoint">POST /api/v1/imports/omr/preview</div>
+        </div>
+        <div class="step">
+          <div class="n">step 3</div>
+          <h5>Preview · review warnings</h5>
+          <p>Right pane shows parsed chord grid + warnings panel. User scans for low-confidence chords (rose tint), edits inline before commit.</p>
+          <div class="endpoint">no request (local edit)</div>
+        </div>
+        <div class="step">
+          <div class="n">step 4</div>
+          <h5>Commit</h5>
+          <p>Click "Import to library" → POST <code>/omr/import</code> with the corrected payload. Server runs vision pass 2 (structure/key) and commits to DB in a single transaction.</p>
+          <div class="endpoint">POST /api/v1/imports/omr/import</div>
+        </div>
+        <div class="step">
+          <div class="n">step 5</div>
+          <h5>Land on song page</h5>
+          <p>Redirect to <code>/songs/{newId}</code> on success. Re-analyze fires automatically once. If <code>raw_xml</code> wasn't captured (OMR can't generate MusicXML), notation pane shows the graceful unavailable state.</p>
+          <div class="endpoint">GET /analysis/songs/{newId}</div>
+        </div>
+      </div>
+
+      <h3>What's different from today</h3>
+      <ul style="font-size:13px;color:var(--ink-1);line-height:1.7;max-width:80ch">
+        <li>Preview is <strong style="color:var(--ink-0)">interactive</strong> — user edits chords before commit, not after.</li>
+        <li>The import button hides after success (fixes <strong>BUG-025</strong> by design — no separate state to manage; the modal closes on commit and the library reloads).</li>
+        <li>OMR's "no raw_xml" state is acknowledged in the UI, not hidden. The user knows the notation pane won't work until they re-import as score file.</li>
+      </ul>
+    </section>
+
+    <hr class="rule" />
+
+    <!-- ====================================================== -->
+    <!-- 16. Rationale doc                                      -->
+    <!-- ====================================================== -->
+    <section id="rationale">
+      <div class="sec-kicker">Rationale · one page</div>
+      <h2>Why this, not that.</h2>
+      <p class="sec-lede">Five design decisions, justified against the brief and inventory.</p>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:24px">
+
+        <div style="border-left:2px solid var(--amber);padding-left:18px">
+          <h3 style="margin-top:0">1 · Notation pane goes on top</h3>
+          <p style="font-size:13px;color:var(--ink-1)">
+            The brief says "the notation pane should never feel like a sidebar widget — it should feel like the document you're studying." That rules out the obvious fourth-tab implementation. <strong style="color:var(--ink-0)">Notation lives in a fixed top pane on the Chords tab</strong> (collapsible but expanded by default), and gets the entire viewport on the Notation tab. Chord cells become the editable analytical layer beneath the score, not a competing visual surface.
+          </p>
+          <p style="font-size:13px;color:var(--ink-2)">
+            Trade-off: above-the-fold real estate cost. Mitigated by aggressive collapse-to-strip (40px tall) for users in pure-edit mode.
+          </p>
+        </div>
+
+        <div style="border-left:2px solid var(--amber);padding-left:18px">
+          <h3 style="margin-top:0">2 · Edit pattern: click-cell + popover, drawer for depth</h3>
+          <p style="font-size:13px;color:var(--ink-1)">
+            Modal is wrong (interrupts flow). Right-click context menu is wrong (no chord context preserved). Permanent sidebar is wrong (too many fields, low density on a dense grid). <strong style="color:var(--ink-0)">Inline cell edit + popover for related fields</strong> is the only pattern where the user keeps their eye on the chord they're editing. Drawer slides in only when they invoke deeper work (AI debate, override history, voicing presets).
+          </p>
+          <p style="font-size:13px;color:var(--ink-2)">
+            Keyboard: ⏎ commit, Esc cancel, ⇥ to next field in popover, ⌘↩ commit + advance to next cell.
+          </p>
+        </div>
+
+        <div style="border-left:2px solid var(--amber);padding-left:18px">
+          <h3 style="margin-top:0">3 · Inferred chords get three cues</h3>
+          <p style="font-size:13px;color:var(--ink-1)">
+            Italics alone reads as a stylistic flourish. Opacity alone reads as muted. A dotted underline alone reads as a link. Stacked — italic + dotted underline + 60% opacity + leading <code>·</code> + "inferred" in the function slot — survives black-and-white printing, low-contrast displays, and accidental color-blindness in any one channel.
+          </p>
+          <p style="font-size:13px;color:var(--ink-2)">
+            Acceptance: single click → "Accept as written" promotes inferred to composer-written; one PUT sets <code>is_manual_edit = true</code>, clears the inferred flag.
+          </p>
+        </div>
+
+        <div style="border-left:2px solid var(--amber);padding-left:18px">
+          <h3 style="margin-top:0">4 · Stub features go to /lab</h3>
+          <p style="font-size:13px;color:var(--ink-1)">
+            Improvisation, Quiz, Progress, and RLHF all have 0 rows of real data after months of availability. They cost top-level cognitive real estate the user can't afford. <strong style="color:var(--ink-0)">All four move to /lab</strong> — a single tertiary nav item — preserving the code paths until PL decides to revive, redesign, or deprecate.
+          </p>
+          <p style="font-size:13px;color:var(--ink-2)">
+            Recommendation: keep all four available in /lab — none should be deprecated. Low usage to date reflects AI context limitations (a work-in-progress in HarmonyLab and across the field) rather than wrong-fit features. See §<a href="#stub" style="color:var(--ink-blue)">stub features verdict</a>.
+          </p>
+        </div>
+
+        <div style="border-left:2px solid var(--amber);padding-left:18px">
+          <h3 style="margin-top:0">5 · The user's colors are data, not theme</h3>
+          <p style="font-size:13px;color:var(--ink-1)">
+            <code>UserPreferences.key_center_colors</code> is the only user-scoped surface in the app that matters daily. The redesign treats it as <strong style="color:var(--ink-0)">core data</strong>: chord cells get a 3px left-strip in the user's color for that key; key pills inherit it; the analysis timeline is colored by it. The brand accent (amber) is reserved for selection, primary actions, and section labels — never key identity.
+          </p>
+        </div>
+
+        <div style="border-left:2px solid var(--amber);padding-left:18px">
+          <h3 style="margin-top:0">6 · No multi-user UI, anywhere</h3>
+          <p style="font-size:13px;color:var(--ink-1)">
+            Per brief Part 4. The user-chip in the topbar is decorative (logout hook) — no avatar grid, no "shared with," no "@mention" anywhere. The single auth surface is <code>/settings</code> (which already requires JWT). Every other route stays open by design.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <hr class="rule" />
+
+    <!-- ====================================================== -->
+    <!-- 17. Reconciliation matrix                              -->
+    <!-- ====================================================== -->
+    <section id="matrix">
+      <div class="sec-kicker">Reconciliation matrix · part 7 mandate</div>
+      <h2>Every mockup element, mapped.</h2>
+      <p class="sec-lede">One row per design element. Status: <span class="status s-existing" style="font-family:var(--t-mono);font-size:10px">EXISTING</span> the BE is already there · <span class="status s-schema" style="font-family:var(--t-mono);font-size:10px">SCHEMA-READY</span> column exists, no read path yet · <span class="status s-new" style="font-family:var(--t-mono);font-size:10px">NEW-BE</span> needs CAI to fold into HM44.</p>
+
+      <div style="overflow:auto;border:1px solid var(--line);border-radius:6px;margin-top:16px">
+      <table class="matrix">
+        <thead>
+          <tr>
+            <th style="width:18%">Mockup element</th>
+            <th style="width:22%">What it does</th>
+            <th style="width:22%">Endpoints</th>
+            <th style="width:18%">Schema</th>
+            <th style="width:10%">Status</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- LIST PAGE -->
+          <tr>
+            <td class="element">Song list table</td>
+            <td>Renders 42 songs with title/composer/key/form/measures/chords/imported/source-modified</td>
+            <td><code>GET /songs/</code> · <code>GET /songs/{id}/imports</code></td>
+            <td><code>Songs</code> · <code>song_imports</code></td>
+            <td><span class="status s-new">NEW-BE</span></td>
+            <td><strong>REQ-017</strong>: song_imports.fs_modified_at exists in DB but list endpoint does NOT join. CAI: add JOIN or expand /songs/ response.</td>
+          </tr>
+          <tr>
+            <td class="element">Data column (XML · NOTES · LYRICS)</td>
+            <td>Tiny capability badges per song</td>
+            <td><code>GET /songs/</code></td>
+            <td><code>Songs.raw_xml</code> · <code>has_note_data</code> · <code>has_lyrics</code></td>
+            <td><span class="status s-new">NEW-BE</span></td>
+            <td>has_note_data / has_lyrics already in DB; raw_xml presence needs to be exposed (currently internal). Add boolean <code>has_raw_xml</code> to /songs/ response (no schema change, just response shaping).</td>
+          </tr>
+          <tr>
+            <td class="element">Bulk delete</td>
+            <td>Cascade delete 1+ songs</td>
+            <td><code>DELETE /songs/bulk/delete</code></td>
+            <td><code>Songs</code> + 14 child</td>
+            <td><span class="status s-existing">EXISTING</span></td>
+            <td>Working today.</td>
+          </tr>
+
+          <!-- IMPORT -->
+          <tr>
+            <td class="element">Import drawer · Score tab</td>
+            <td>Drop .mscz/.mid/.mxl, preview chords, commit</td>
+            <td><code>POST /imports/score/preview</code> · <code>/score/import</code></td>
+            <td><code>Songs</code> · <code>Sections</code> · <code>Measures</code> · <code>Chords</code> · <code>raw_xml</code></td>
+            <td><span class="status s-existing">EXISTING</span></td>
+            <td>Pipeline ensures raw_xml is stored. Verify in HM43.</td>
+          </tr>
+          <tr>
+            <td class="element">Import drawer · OMR tab</td>
+            <td>PDF/image → Claude Vision → preview → commit</td>
+            <td><code>POST /imports/omr/preview</code> · <code>/omr/import</code></td>
+            <td>same</td>
+            <td><span class="status s-existing">EXISTING</span></td>
+            <td>BUG-024 (504 timeout) fix lands in HM43. Design assumes that fix.</td>
+          </tr>
+          <tr>
+            <td class="element">Inline edit on preview chord grid</td>
+            <td>User edits inferred/low-confidence symbols before commit</td>
+            <td>local state · committed with <code>/omr/import</code> body</td>
+            <td>n/a (in-flight)</td>
+            <td><span class="status s-new">NEW-BE</span></td>
+            <td>Today /omr/import takes server-parsed payload. Extend body to accept client-edited <code>chords[]</code>.</td>
+          </tr>
+
+          <!-- SONG DETAIL -->
+          <tr>
+            <td class="element">Notation pane (OSMD)</td>
+            <td>Renders MusicXML staff above the chord grid</td>
+            <td><code>GET /songs/{id}</code> with raw_xml in response</td>
+            <td><code>Songs.raw_xml</code></td>
+            <td><span class="status s-new">NEW-BE</span></td>
+            <td>raw_xml is stored but never returned to FE. CAI: add to /songs/{id} response (or new <code>GET /songs/{id}/xml</code>).</td>
+          </tr>
+          <tr>
+            <td class="element">Chord cell · symbol</td>
+            <td>Renders parsed or override chord symbol</td>
+            <td><code>GET /analysis/songs/{id}</code></td>
+            <td><code>Chords.chord_symbol</code> · <code>chord_symbol_override</code></td>
+            <td><span class="status s-existing">EXISTING</span></td>
+            <td>Override column exists but is unused (0 rows). Inline edit will populate it.</td>
+          </tr>
+          <tr>
+            <td class="element">Chord cell · Roman numeral</td>
+            <td>Per-chord roman</td>
+            <td><code>GET /analysis/songs/{id}</code></td>
+            <td><code>Chords.roman_numeral</code> · <code>ChordAnalysisOverrides.roman_override</code></td>
+            <td><span class="status s-existing">EXISTING</span></td>
+            <td>Override path exists via <code>PUT /analysis/songs/{id}/chord/{idx}</code>. <strong>chord_index FK fragility (Part 4) must be addressed first.</strong></td>
+          </tr>
+          <tr>
+            <td class="element">Chord cell · function label</td>
+            <td>Renders tonic / dominant / secondary-V etc.</td>
+            <td><code>GET /analysis/songs/{id}</code></td>
+            <td><code>Chords.function_label</code> · <code>function_override</code></td>
+            <td><span class="status s-existing">EXISTING</span></td>
+            <td>Override path identical to RN.</td>
+          </tr>
+          <tr>
+            <td class="element">Chord cell · voicing (e.g. "rootless A")</td>
+            <td>New: per-chord voicing notation</td>
+            <td><code>PUT /chords/{id}</code></td>
+            <td><code>Chords</code> · <strong>new column</strong> <code>voicing_notation</code></td>
+            <td><span class="status s-new">NEW-BE</span></td>
+            <td>Add <code>voicing_notation NVARCHAR(50)</code> to <code>Chords</code>. Brief §3 REQ-2.</td>
+          </tr>
+          <tr>
+            <td class="element">Chord cell · comment (orange dot)</td>
+            <td>Free-text per-chord comment</td>
+            <td><code>PUT /chords/{id}</code></td>
+            <td><code>Chords.comments</code></td>
+            <td><span class="status s-schema">SCHEMA-READY</span></td>
+            <td>0 rows used today. Column exists. PUT body already supports it.</td>
+          </tr>
+          <tr>
+            <td class="element">Chord cell · "inferred" state</td>
+            <td>Visually distinguishes algorithm-proposed chords</td>
+            <td><code>GET /analysis/songs/{id}</code> response · new boolean</td>
+            <td><code>Chords</code> · <strong>new column</strong> <code>is_inferred</code></td>
+            <td><span class="status s-new">NEW-BE</span></td>
+            <td>Add <code>is_inferred BIT DEFAULT 0</code>. The chord-inference algorithm (TBD) sets this when filling empty measures. <strong>Distinct from BUG-007 fill-forward</strong> (which must still be disabled).</td>
+          </tr>
+          <tr>
+            <td class="element">"Accept as written" on inferred</td>
+            <td>Promotes inferred to composer-written</td>
+            <td><code>PUT /chords/{id}</code></td>
+            <td>sets <code>is_inferred=0</code>, <code>is_manual_edit=1</code></td>
+            <td><span class="status s-schema">SCHEMA-READY</span></td>
+            <td>Uses existing flags once is_inferred column lands.</td>
+          </tr>
+          <tr>
+            <td class="element">Key pill + manual override pencil</td>
+            <td>Show/set the song-level key</td>
+            <td><code>POST /analysis/songs/{id}/manual-key</code></td>
+            <td><code>SongAnalysis.manual_key_override</code></td>
+            <td><span class="status s-existing">EXISTING</span></td>
+            <td>Working.</td>
+          </tr>
+          <tr>
+            <td class="element">Re-analyze button</td>
+            <td>Force recompute</td>
+            <td><code>POST /analysis/songs/{id}</code></td>
+            <td><code>SongAnalysis</code> (writes cache)</td>
+            <td><span class="status s-existing">EXISTING</span></td>
+            <td>Working.</td>
+          </tr>
+          <tr>
+            <td class="element">Section A1 / A2 banner with renamable label</td>
+            <td>User renames auto-detected sections</td>
+            <td><code>PATCH /songs/{id}/form</code> (today) · or new <code>PATCH /sections/{id}</code></td>
+            <td><code>Songs.section_markers_json</code> OR <code>Sections.name</code></td>
+            <td><span class="status s-schema">SCHEMA-READY</span></td>
+            <td>Two paths exist; both work. Recommend writing to <code>Sections.name</code> (existing FE pattern) and using section_markers_json only for form-level overrides.</td>
+          </tr>
+          <tr>
+            <td class="element">Key-center timeline (analysis tab)</td>
+            <td>Visual ribbon of key regions</td>
+            <td><code>GET /analysis/songs/{id}/key-centers</code></td>
+            <td><code>KeyRegions</code></td>
+            <td><span class="status s-existing">EXISTING</span></td>
+            <td>1 row in KeyRegions today. Endpoint merges algorithm output with user-defined regions.</td>
+          </tr>
+          <tr>
+            <td class="element">Drag-to-override key region boundaries</td>
+            <td>User creates/edits KeyRegions visually</td>
+            <td>NEW <code>POST/PUT/DELETE /analysis/songs/{id}/key-regions/{id}</code></td>
+            <td><code>KeyRegions</code> (<code>is_user_defined</code>)</td>
+            <td><span class="status s-new">NEW-BE</span></td>
+            <td>Column exists. Endpoints don't. ~4 routes to add.</td>
+          </tr>
+          <tr>
+            <td class="element">Export menu (.mscz · MusicXML)</td>
+            <td>Round-trip edited score</td>
+            <td><code>GET /exports/musescore/{id}</code> + new <code>/exports/musicxml/{id}</code></td>
+            <td><code>Songs</code> · <code>Chords</code> · <code>Measures</code></td>
+            <td><span class="status s-new">NEW-BE</span></td>
+            <td>MuseScore endpoint exists; MusicXML endpoint is new. Brief §3 REQ-4.</td>
+          </tr>
+
+          <!-- AI -->
+          <tr>
+            <td class="element">Theory chat drawer</td>
+            <td>Conversational Q&A scoped to selected chords</td>
+            <td><code>POST /analysis/theory-chat</code> · <code>POST /analysis/songs/{id}/ai-analysis</code></td>
+            <td><code>HarmonicAnalysisExchanges</code></td>
+            <td><span class="status s-existing">EXISTING</span></td>
+            <td>50 rows of real usage. Working.</td>
+          </tr>
+          <tr>
+            <td class="element">Accept / reject AI suggestion</td>
+            <td>RLHF-style outcome capture</td>
+            <td><code>POST /analysis/songs/{id}/exchanges/{eid}/outcome</code></td>
+            <td><code>HarmonicAnalysisExchanges.outcome</code></td>
+            <td><span class="status s-existing">EXISTING</span></td>
+            <td>Working.</td>
+          </tr>
+          <tr>
+            <td class="element">"Log as override" on AI accept</td>
+            <td>One-click commit of AI-suggested RN/function to override</td>
+            <td><code>PUT /analysis/songs/{id}/chord/{idx}</code></td>
+            <td><code>ChordAnalysisOverrides</code></td>
+            <td><span class="status s-existing">EXISTING</span></td>
+            <td>FE wires AI suggestion to override write. No new BE.</td>
+          </tr>
+
+          <!-- SETTINGS -->
+          <tr>
+            <td class="element">Chord notation seg control</td>
+            <td>Δ ø ° vs maj/m/dim</td>
+            <td><code>GET/PUT /preferences</code></td>
+            <td><code>UserPreferences.chord_symbol_mode</code></td>
+            <td><span class="status s-existing">EXISTING</span></td>
+            <td>Working.</td>
+          </tr>
+          <tr>
+            <td class="element">Key-center color pickers (×24)</td>
+            <td>User picks per-key colors</td>
+            <td><code>GET/PUT /preferences</code></td>
+            <td><code>UserPreferences.key_center_colors</code></td>
+            <td><span class="status s-existing">EXISTING</span></td>
+            <td>Working.</td>
+          </tr>
+          <tr>
+            <td class="element">Voicing-notation defaults</td>
+            <td>User-set default voicing labels</td>
+            <td><code>PUT /preferences</code></td>
+            <td><code>UserPreferences</code> · <strong>new column</strong> <code>default_voicing_notation</code></td>
+            <td><span class="status s-new">NEW-BE</span></td>
+            <td>Optional. Only useful once voicing_notation lands on Chords.</td>
+          </tr>
+
+          <!-- AUDIT -->
+          <tr>
+            <td class="element">Audit page</td>
+            <td>Notes, lyrics, dynamics, tempo/time/key marks, import history</td>
+            <td><code>GET /songs/{id}/audit</code> · <code>GET /songs/{id}/imports</code></td>
+            <td><code>song_notes</code> · <code>song_lyrics</code> · <code>song_imports</code></td>
+            <td><span class="status s-existing">EXISTING</span></td>
+            <td>Working. Audit cookie-auth mismatch noted in §E.4 — not in scope.</td>
+          </tr>
+          <tr>
+            <td class="element">Reparse notes button</td>
+            <td>Re-extract from stored raw_xml</td>
+            <td><code>POST /imports/score/reparse-notes</code></td>
+            <td><code>song_notes</code> · reads <code>Songs.raw_xml</code></td>
+            <td><span class="status s-existing">EXISTING</span></td>
+            <td>Working.</td>
+          </tr>
+
+          <!-- LAB / STUBS -->
+          <tr>
+            <td class="element">/lab landing</td>
+            <td>Index of all stubbed features</td>
+            <td>n/a</td>
+            <td>n/a</td>
+            <td><span class="status s-new">NEW-BE</span></td>
+            <td>FE-only. No new BE — just a router page.</td>
+          </tr>
+          <tr>
+            <td class="element">Riffs (in /lab)</td>
+            <td>10 hardcoded patterns</td>
+            <td><code>GET /riffs/</code></td>
+            <td>none (static)</td>
+            <td><span class="status s-existing">EXISTING</span></td>
+            <td>Moves from top-level nav to /lab.</td>
+          </tr>
+        </tbody>
+      </table>
+      </div>
+    </section>
+
+    <hr class="rule" />
+
+    <!-- ====================================================== -->
+    <!-- 18. New BE required summary                            -->
+    <!-- ====================================================== -->
+    <section id="new-be">
+      <div class="sec-kicker">New BE required · summary</div>
+      <h2>What CAI needs to add for HM44.</h2>
+      <p class="sec-lede">Aggregated from the matrix above. Six discrete changes — none are large. Ordered by dependency.</p>
+
+      <ol style="font-size:14px;line-height:1.7;max-width:90ch;color:var(--ink-1)">
+        <li>
+          <strong style="color:var(--ink-0)">FK migration · ChordAnalysisOverrides.chord_id (REPLACES chord_index)</strong>
+          <span class="tiny" style="color:var(--ink-3);display:block;font-family:var(--t-mono);margin-top:2px">Schema · highest priority · per brief Part 4. Blocks inline editing.</span>
+        </li>
+        <li>
+          <strong style="color:var(--ink-0)">Disable BUG-007 fill-forward in analysis service</strong>
+          <span class="tiny" style="color:var(--ink-3);display:block;font-family:var(--t-mono);margin-top:2px">Logic · blocks notation pane from rendering wrong chords. Must precede OSMD integration.</span>
+        </li>
+        <li>
+          <strong style="color:var(--ink-0)">Add <code>Chords.is_inferred BIT</code> column + populate from inference algo (TBD)</strong>
+          <span class="tiny" style="color:var(--ink-3);display:block;font-family:var(--t-mono);margin-top:2px">Schema + logic · enables inferred-chord visual treatment.</span>
+        </li>
+        <li>
+          <strong style="color:var(--ink-0)">Add <code>Chords.voicing_notation NVARCHAR(50)</code></strong>
+          <span class="tiny" style="color:var(--ink-3);display:block;font-family:var(--t-mono);margin-top:2px">Schema · brief §3 REQ-2. PUT /chords/{id} body extended.</span>
+        </li>
+        <li>
+          <strong style="color:var(--ink-0)">Surface <code>Songs.raw_xml</code> in <code>GET /songs/{id}</code> (or new <code>/xml</code> sub-route)</strong>
+          <span class="tiny" style="color:var(--ink-3);display:block;font-family:var(--t-mono);margin-top:2px">API shape change · OSMD must receive MusicXML. Verify raw_xml is captured by all import paths.</span>
+        </li>
+        <li>
+          <strong style="color:var(--ink-0)">Add MusicXML export endpoint: <code>GET /exports/musicxml/{song_id}</code></strong>
+          <span class="tiny" style="color:var(--ink-3);display:block;font-family:var(--t-mono);margin-top:2px">Brief §3 REQ-4. Mirror existing MuseScore export pattern.</span>
+        </li>
+        <li>
+          <strong style="color:var(--ink-0)">Expand <code>GET /songs/</code> response with <code>fs_modified_at</code> (REQ-017) + capability flags</strong>
+          <span class="tiny" style="color:var(--ink-3);display:block;font-family:var(--t-mono);margin-top:2px">Join to song_imports for fs_modified_at; expose has_raw_xml boolean.</span>
+        </li>
+        <li>
+          <strong style="color:var(--ink-0)">KeyRegions CRUD endpoints</strong> (optional, P2)
+          <span class="tiny" style="color:var(--ink-3);display:block;font-family:var(--t-mono);margin-top:2px">~4 routes for drag-to-override key boundaries. Defer if HM44 is tight.</span>
+        </li>
+      </ol>
+
+      <h3>Free wins (no new BE, just new FE callers)</h3>
+      <ul style="font-size:14px;color:var(--ink-1);max-width:90ch;line-height:1.7">
+        <li><strong>Export menu</strong> — wires existing <code>GET /exports/musescore/{id}</code> into the topbar of song detail.</li>
+        <li><strong>Chord-symbol autocomplete</strong> in the edit popover — wires <code>GET /vocabulary/chord-symbols</code> (cached) into the live preview validator.</li>
+        <li><strong>Per-chord CRUD on edit popover</strong> — uses <code>PUT/DELETE /chords/{id}</code> (already there).</li>
+        <li><strong>Chord comments</strong> — uses <code>Chords.comments</code> (column exists, no FE before today).</li>
+        <li><strong>WebMIDI status pill</strong> in topbar — uses <code>GET /midi/webmidi-check</code>.</li>
+      </ul>
+    </section>
+
+    <hr class="rule" />
+
+    <!-- ====================================================== -->
+    <!-- 19. Stub feature verdicts                              -->
+    <!-- ====================================================== -->
+    <section id="stub">
+      <div class="sec-kicker">Stub features · verdict</div>
+      <h2>What I'd do with each.</h2>
+
+      <table class="matrix" style="margin-top:18px">
+        <thead>
+          <tr>
+            <th style="width:160px">Feature</th>
+            <th style="width:90px">Data today</th>
+            <th style="width:120px">Verdict</th>
+            <th>Rationale</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="element">AI Improvisation</td>
+            <td class="t-mono" style="color:var(--ink-3)">0 sessions ever</td>
+            <td><span class="status s-schema" style="color:var(--ink-blue);border-color:var(--ink-blue)">REVIVE in /lab</span></td>
+            <td>Zero usage to date reflects the AI context gap — the model needs richer harmonic/voicing context to produce useful improvisation. Keep wired in /lab; revisit once context engineering matures (in HarmonyLab specifically and in the field generally). Do not deprecate.</td>
+          </tr>
+          <tr>
+            <td class="element">RLHF activate/revert</td>
+            <td class="t-mono" style="color:var(--ink-3)">0 sessions ever</td>
+            <td><span class="status s-schema" style="color:var(--ink-blue);border-color:var(--ink-blue)">REVIVE in /lab</span></td>
+            <td>Session-level apply/revert is held here pending trustworthy AI suggestions. Once context engineering raises suggestion quality, batch-apply/revert becomes useful again. Per-chord edits + theory-chat outcomes still capture single-shot RLHF independently.</td>
+          </tr>
+          <tr>
+            <td class="element">Quiz</td>
+            <td class="t-mono" style="color:var(--ink-3)">0 attempts ever</td>
+            <td><span class="status s-schema" style="color:var(--amber);border-color:var(--amber)">RETRY in /lab</span></td>
+            <td>Self-quizzing on chord identification is a legitimate study activity. Zero usage today probably reflects discovery + entry friction, not lack of value. Move to /lab, add a "Quiz me on this song" button on song detail, see if usage emerges with notation context.</td>
+          </tr>
+          <tr>
+            <td class="element">Progress tracking</td>
+            <td class="t-mono" style="color:var(--ink-3)">0 rows ever</td>
+            <td><span class="status s-schema" style="color:var(--amber);border-color:var(--amber)">RETRY in /lab</span></td>
+            <td>Self-tracking for a solo learner has value (last-practiced date is the killer field), but the current dashboard is a faceless stats page. Reduce to: per-song "last opened" timestamp + optional 5-point mastery rating on song detail. Surface in /lab as a sortable list.</td>
+          </tr>
+          <tr>
+            <td class="element">Riffs library</td>
+            <td class="t-mono" style="color:var(--green)">10 (hardcoded)</td>
+            <td><span class="status s-existing">KEEP</span></td>
+            <td>Useful, complete, low-maintenance. Just moves from top-level nav to /lab.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>What I'd surface from the SCHEMA-ONLY columns</h3>
+      <ul style="font-size:13px;color:var(--ink-1);line-height:1.7;max-width:90ch">
+        <li><code>Chords.comments</code> — wired by the chord edit popover (mockup M-02 m.5).</li>
+        <li><code>Songs.section_markers_json</code> — wired by the section banner rename interaction (M-02 A1 / A2 labels).</li>
+        <li><code>song_dynamics</code>, <code>song_note_articulations</code> — leave as schema-only. Out of scope for HM44.</li>
+        <li><code>Chords.confidence</code> — display as a tooltip on chord cells with confidence &lt; 0.7 (visual indicator: rose underline on the symbol). Free win.</li>
+        <li><code>Chords.is_manual_edit</code> — display as the "edited" badge on cells. Already in CSS.</li>
+        <li><code>Chords.playback_octave</code>, <code>Chords.inversion</code> — leave alone until WebMIDI playback is in scope.</li>
+      </ul>
+    </section>
+
+    <hr class="rule" />
+
+    <!-- ====================================================== -->
+    <!-- closing                                                -->
+    <!-- ====================================================== -->
+    <section>
+      <div class="sec-kicker">End of spec</div>
+      <h2>For PL → CAI.</h2>
+      <p class="sec-lede">
+        This document is the design surface for HM44. Every visible element is mapped
+        to an endpoint or flagged as a new BE need. The money-shot frame is mockup
+        <a href="#m-song" style="color:var(--ink-blue)">M-02</a> — song detail with notation pane,
+        chord grid, edit popover, and inferred-chord example all visible in one frame.
+      </p>
+      <p style="color:var(--ink-2);font-size:13px">
+        Files: <code>index.html</code> (this doc) · <code>redesign.css</code> (tokens + components).
+        Read top-to-bottom or jump by TOC. Zoom out (⌘−) on M-02 to see the full workbench.
+      </p>
+      <div style="margin-top:32px;font-family:var(--t-display);font-style:italic;font-size:32px;color:var(--ink-1);text-align:right">
+        — Claude Design · 2026-05-15
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- Continued in next include -->
+<script>
+  // smooth scroll for TOC
+  document.querySelectorAll('.toc a[href^="#"]').forEach(a=>{
+    a.addEventListener('click',e=>{
+      const id=a.getAttribute('href').slice(1);
+      const el=document.getElementById(id);
+      if(el){e.preventDefault();el.scrollIntoView({behavior:'smooth',block:'start'});}
+    });
+  });
+</script>
+</body>
+</html>
