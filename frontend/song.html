@@ -3487,34 +3487,50 @@
             if (e.target === e.currentTarget) closeChordModal();
         });
     </script>
-    <!-- HM41 BUG-021: Debug layer initializes BEFORE auth -->
-    <script>
-    (function() {
-        var ENABLED = new URLSearchParams(window.location.search).get('debug') === '1' ||
-                      localStorage.getItem('hl-debug') === '1';
-        window.HLDebug = {
-            enabled: ENABLED,
-            log: function(component, event, data) {
-                if (!this.enabled) return;
-                console.log('[HLDebug] ' + component + ' | ' + event, data || '');
-            }
-        };
-        if (ENABLED) {
-            document.body.style.display = '';
-            console.log('[HLDebug] active — debug layer initialized before auth');
-        }
-    })();
-    </script>
-    <div id="debug-panel" style="display:none;position:fixed;bottom:0;left:0;right:0;background:#1a1a2e;color:#0f0;font-family:monospace;font-size:12px;padding:6px 12px;z-index:9999;border-top:2px solid #0f0;">
-        HLDebug active | <span id="debug-panel-info">?debug=1</span>
+    <!-- BUG-028: HLDebug IIFE moved to auth.js (loads on every authenticated page).
+         window.HLDebug is now initialized before auth gate on all pages. -->
+    <script src="js/auth.js"></script>
+    <!-- BUG-028: HLDebug overlay — renders last 20 emit events in reverse chronological order.
+         Click any row to expand. Visible when debug=1 or hl-debug=1 in localStorage. -->
+    <div id="debug-panel" style="display:none;position:fixed;bottom:0;left:0;right:0;background:#0d1117;color:#0f0;font-family:monospace;font-size:11px;z-index:9999;border-top:2px solid #0f0;max-height:220px;overflow-y:auto;">
+        <div style="padding:4px 10px;background:#161b22;border-bottom:1px solid #30363d;display:flex;align-items:center;gap:12px;">
+            <strong style="color:#58a6ff;">HLDebug</strong>
+            <span id="debug-panel-info" style="color:#8b949e;">?debug=1 | last 20 events</span>
+        </div>
+        <div id="debug-event-list" style="padding:2px 0;"></div>
     </div>
     <script>
     if (window.HLDebug && window.HLDebug.enabled) {
         document.getElementById('debug-panel').style.display = 'block';
-        window.HLDebug.log('Init', 'Debug layer active', { url: window.location.href });
+        var _dbgList = document.getElementById('debug-event-list');
+
+        function _renderDebugEvents() {
+            var evts = window.HLDebug._events.slice().reverse();
+            _dbgList.innerHTML = evts.map(function(e, i) {
+                var ts = e.t ? e.t.replace('T', ' ').slice(0, 23) : '';
+                var dataStr = '';
+                try { dataStr = e.data !== undefined ? JSON.stringify(e.data) : ''; } catch(x) { dataStr = String(e.data); }
+                return '<div id="dbg-row-' + i + '" style="padding:2px 10px;border-bottom:1px solid #21262d;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" onclick="window._dbgToggle(' + i + ')">' +
+                    '<span style="color:#6e7681;">' + ts + '</span>  ' +
+                    '<span style="color:#79c0ff;">' + (e.tag || '') + '</span>  ' +
+                    '<span id="dbg-data-' + i + '" style="color:#d2a679;display:none;">' + dataStr + '</span>' +
+                    '<span id="dbg-hint-' + i + '" style="color:#6e7681;">' + (dataStr ? '[click to expand]' : '') + '</span>' +
+                '</div>';
+            }).join('');
+        }
+
+        window._dbgToggle = function(i) {
+            var data = document.getElementById('dbg-data-' + i);
+            var hint = document.getElementById('dbg-hint-' + i);
+            if (data) { data.style.display = data.style.display === 'none' ? 'inline' : 'none'; }
+            if (hint) { hint.style.display = hint.style.display === 'none' ? 'inline' : 'none'; }
+        };
+
+        _renderDebugEvents();
+        document.addEventListener('hldebugevent', function() { _renderDebugEvents(); });
+        window.HLDebug.emit('song:overlay-init', { url: window.location.href });
     }
     </script>
-    <script src="js/auth.js"></script>
     <script src="js/audio.js"></script>
     <script>
         // Auth gate - check before showing page
