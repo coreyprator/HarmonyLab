@@ -27,11 +27,17 @@ async def list_songs(
     - **genre**: Filter by genre (optional)
     """
     # REQ-017: LEFT JOIN song_imports to surface latest fs_modified_at per song.
+    # Uses subquery to avoid enumerating all Songs columns in GROUP BY.
     # Default sort by Songs.created_at DESC (most recently imported first).
-    query = """
-        SELECT s.*, MAX(si.fs_modified_at) AS fs_modified_at
+    subq = """
+        (SELECT song_id, MAX(fs_modified_at) AS fs_modified_at
+         FROM song_imports
+         GROUP BY song_id) AS si
+    """
+    query = f"""
+        SELECT s.*, si.fs_modified_at
         FROM Songs s
-        LEFT JOIN song_imports si ON si.song_id = s.id
+        LEFT JOIN {subq} ON si.song_id = s.id
     """
     params = []
 
@@ -39,16 +45,7 @@ async def list_songs(
         query += " WHERE s.genre = ?"
         params.append(genre)
 
-    query += """
-        GROUP BY s.id, s.title, s.composer, s.arranger, s.original_key,
-                 s.tempo_marking, s.genre, s.time_signature, s.year_composed,
-                 s.notes, s.source_file_name, s.source_file_type,
-                 s.created_at, s.updated_at, s.has_note_data, s.has_lyrics,
-                 s.import_format, s.track_count, s.measure_count, s.total_notes,
-                 s.version_number, s.base_title
-        ORDER BY s.created_at DESC
-        OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
-    """
+    query += " ORDER BY s.created_at DESC OFFSET ? ROWS FETCH NEXT ? ROWS ONLY"
     params.extend([skip, limit])
 
     songs = db.execute_query(query, tuple(params))
