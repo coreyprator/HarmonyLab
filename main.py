@@ -4,6 +4,7 @@ Harmony Lab FastAPI Application
 Main entry point for the Harmony Lab API server.
 """
 import logging
+import os
 import traceback
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -82,15 +83,19 @@ async def startup_event():
         logger.warning(f"Migration warning (non-fatal): {e}")
 
 
-@app.get("/")
-async def root():
-    """Health check endpoint."""
-    return {
-        "message": "Harmony Lab API",
-        "version": VERSION,
-        "status": "healthy",
-        "environment": settings.environment,
-    }
+# HM43.1: guard root JSON handler so REDESIGN_MODE=true lets StaticFiles serve index.html instead
+REDESIGN_MODE = os.getenv("REDESIGN_MODE", "false").lower() == "true"
+
+if not REDESIGN_MODE:
+    @app.get("/")
+    async def root():
+        """API root — only registered when REDESIGN_MODE is unset/false."""
+        return {
+            "message": "Harmony Lab API",
+            "version": VERSION,
+            "status": "healthy",
+            "environment": settings.environment,
+        }
 
 
 @app.get("/health")
