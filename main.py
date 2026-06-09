@@ -15,7 +15,7 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from config.settings import settings
 
 # Import routes
-from app.api.routes import songs, sections, vocabulary, measures, chords, progress, quiz, imports, analysis, auth, exports, midi_input, riffs, improvisation, rules, preferences
+from app.api.routes import songs, sections, vocabulary, measures, chords, progress, quiz, imports, analysis, exports, midi_input, riffs, improvisation, rules, preferences
 
 logger = logging.getLogger(__name__)
 
@@ -119,7 +119,6 @@ async def health_check():
 
 
 # Include routers
-app.include_router(auth.router)  # Auth first for login/logout
 app.include_router(songs.router)
 app.include_router(sections.router)
 app.include_router(vocabulary.router)

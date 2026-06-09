@@ -699,15 +699,8 @@
     </script>
     <script src="js/auth.js"></script>
     <script>
-        // Auth gate - check before showing page
-        document.addEventListener('DOMContentLoaded', async () => {
-            const isAuthenticated = await window.auth.checkAuth();
-            if (!isAuthenticated) {
-                window.location.href = '/login.html';
-                return;
-            }
+        document.addEventListener('DOMContentLoaded', () => {
             document.body.style.display = '';
-            window.auth.updateAuthUI();
             loadSongs();
         });
     </script>

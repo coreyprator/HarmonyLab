@@ -166,7 +166,7 @@ class Auth {
     }
 
     getToken() {
-        return this.accessToken;
+        return null; // HM43.2: OAuth removed
     }
 
     setAuth(token, user) {
@@ -196,7 +196,7 @@ class Auth {
             console.error('Logout error:', error);
         } finally {
             this.clearAuth();
-            window.location.href = '/login.html';
+            // HM43.2: OAuth removed — no redirect to login
         }
     }
 
@@ -205,57 +205,8 @@ class Auth {
      * Use this at page load to gate access.
      */
     async checkAuth() {
-        // First check for stored token
-        const token = localStorage.getItem('harmonylab_token');
-        if (!token) {
-            // No token - try cookie-based refresh
-            const refreshed = await this.refreshToken();
-            return refreshed;
-        }
-
-        // Token exists - validate it
-        try {
-            const response = await fetch('/api/v1/auth/me', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-
-            if (response.ok) {
-                // Token valid
-                this.accessToken = token;
-                const user = await response.json();
-                this.user = user;
-                localStorage.setItem('harmonylab_user', JSON.stringify(user));
-                return true;
-            }
-
-            if (response.status === 401) {
-                // Token expired - try refresh
-                window.HLDebug?.emit('auth:401', { url: '/api/v1/auth/me' });
-                const refreshed = await this.refreshToken();
-                return refreshed;
-            }
-
-            // 5xx or other transient error — don't clear auth if local token is still valid.
-            // This prevents logout when the backend restarts (e.g., after a cold start
-            // triggered by a heavy import operation).
-            if (!this._isExpired(token)) {
-                console.warn('Auth check got', response.status, '— trusting non-expired local token');
-                this.accessToken = token;
-                return true;
-            }
-
-            this.clearAuth();
-            return false;
-        } catch (error) {
-            // Network error — trust local token if not expired rather than forcing logout
-            console.error('Auth check error:', error);
-            if (!this._isExpired(token)) {
-                console.warn('Auth check network error — trusting non-expired local token');
-                this.accessToken = token;
-                return true;
-            }
-            return false;
-        }
+        // HM43.2: OAuth removed — always authenticated
+        return true;
     }
 
     getAuthHeaders() {
@@ -298,19 +249,7 @@ class Auth {
     }
 
     async requireAuth() {
-        if (!this.accessToken) {
-            const refreshed = await this.refreshToken();
-            if (!refreshed) {
-                window.location.href = '/index.html?login=required';
-                return false;
-            }
-        }
-
-        const isValid = await this.verifyToken();
-        if (!isValid) {
-            window.location.href = '/index.html?login=required';
-            return false;
-        }
+        // HM43.2: OAuth removed — always return true
         return true;
     }
 

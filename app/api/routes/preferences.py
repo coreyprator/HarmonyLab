@@ -3,10 +3,9 @@ API routes for user preferences (HM34 REQ-011, HM36 REQ-010).
 """
 import json
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from app.db.connection import DatabaseConnection, get_db
-from app.api.routes.auth import get_current_user
 
 router = APIRouter(prefix="/api/v1/preferences", tags=["preferences"])
 
@@ -19,14 +18,13 @@ class PreferenceUpdate(BaseModel):
 
 @router.get("")
 async def get_preferences(
-    request: Request,
     db: DatabaseConnection = Depends(get_db)
 ):
     """Get current user's preferences."""
-    user = get_current_user(request)
+    user_id = 1
     row = db.execute_query(
         "SELECT chord_symbol_mode, key_center_colors, debug_mode FROM UserPreferences WHERE user_id = ?",
-        (user['id'],)
+        (user_id,)
     )
     if row:
         colors_raw = row[0].get('key_center_colors')
@@ -42,11 +40,10 @@ async def get_preferences(
 @router.put("")
 async def update_preferences(
     body: PreferenceUpdate,
-    request: Request,
     db: DatabaseConnection = Depends(get_db)
 ):
     """Update current user's preferences."""
-    user = get_current_user(request)
+    user_id = 1
 
     if body.chord_symbol_mode is not None and body.chord_symbol_mode not in ('jazz', 'plain'):
         raise HTTPException(status_code=400, detail="chord_symbol_mode must be 'jazz' or 'plain'")
@@ -82,7 +79,7 @@ async def update_preferences(
             UPDATE SET {set_clause}
         WHEN NOT MATCHED THEN
             INSERT (user_id, chord_symbol_mode, key_center_colors, debug_mode) VALUES (?, ?, ?, ?);
-    """, (user['id'], *params, user['id'], mode, colors_json, debug_val))
+    """, (user_id, *params, user_id, mode, colors_json, debug_val))
 
     return {
         "chord_symbol_mode": mode,
