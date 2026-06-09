@@ -25,6 +25,9 @@ const TOKEN_KEY = "hl_proto_jwt";
 const MODE_KEY = "hl_proto_mode";
 const BASE_KEY = "hl_proto_base";
 
+// HM43.2: OAuth removed — stub window.auth so legacy callers get null
+if (!window.auth) window.auth = { getToken: () => null };
+
 /* ------------------------------------------------------------------ */
 /* Live-data API context                                              */
 /* ------------------------------------------------------------------ */
@@ -52,7 +55,7 @@ function ApiProvider({ children }) {
     const headers = {
       "Accept": "application/json",
       "Content-Type": "application/json",
-      "Authorization": "Bearer " + token,
+      // HM43.2: OAuth removed — no Authorization header needed
       ...(opts.headers || {}),
     };
     let res;

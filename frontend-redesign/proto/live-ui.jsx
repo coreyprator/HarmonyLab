@@ -22,7 +22,7 @@ function LiveBanner({ onChangeMode }) {
     }}>
       <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--rose)", boxShadow: "0 0 0 3px oklch(.55 .15 25 / .35)" }}></span>
       <span style={{ textTransform: "uppercase" }}>LIVE DATA · READ-ONLY</span>
-      <span style={{ color: "oklch(.85 .04 25)" }}>mutations stay local · token expires hourly · paste again on 401</span>
+      <span style={{ color: "oklch(.85 .04 25)" }}>mutations stay local · read-only</span>
       <span style={{ marginLeft: "auto", color: "oklch(.85 .04 25)" }}>{api.base}</span>
       <button className="btn btn--ghost btn--sm" style={{ height: 22, padding: "0 8px", color: "var(--ink-0)" }} onClick={onChangeMode}>change mode</button>
     </div>
@@ -129,25 +129,6 @@ function ModeDialog({ open, onClose }) {
                 placeholder={HL_DEFAULT_BASE}
               />
               <div className="tiny" style={{ color: "var(--ink-3)", marginTop: 4 }}>Default: <code>{HL_DEFAULT_BASE}</code>. Override only if testing against another deployment.</div>
-
-              <div className="tiny upper" style={{ color: "var(--ink-3)", marginTop: 20 }}>JWT</div>
-              <textarea
-                className="input"
-                rows={4}
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                style={{ width: "100%", marginTop: 6, fontFamily: "var(--t-mono)", fontSize: 11, padding: "8px 10px", lineHeight: 1.4, height: "auto", resize: "vertical" }}
-                placeholder="eyJ…"
-              />
-              <details style={{ marginTop: 10 }}>
-                <summary className="tiny upper" style={{ color: "var(--ink-blue)", cursor: "pointer", letterSpacing: ".08em" }}>How to get a JWT</summary>
-                <ol style={{ margin: "10px 0 0", paddingLeft: 20, fontSize: 12, color: "var(--ink-1)", lineHeight: 1.7 }}>
-                  <li>Open <code>{HL_DEFAULT_BASE}</code> in another tab and sign in with Google.</li>
-                  <li>Open DevTools → Application → Local Storage → that origin → key <code>harmonylab_token</code>. Copy the value.</li>
-                  <li>Or run <code>localStorage.getItem('harmonylab_token')</code> in the console of that tab.</li>
-                  <li>Paste the long <code>eyJ…</code> string above. The prototype stores it in <em>session</em>Storage and sends it as <code>Authorization: Bearer</code>.</li>
-                </ol>
-              </details>
               {api.lastError && (
                 <div style={{ marginTop: 12, padding: "8px 12px", border: "1px solid var(--rose)", borderRadius: 4, background: "oklch(.55 .15 25 / .12)", color: "var(--ink-0)", fontSize: 12 }}>
                   <strong style={{ color: "var(--rose)" }}>Last error</strong> · {api.lastError.message}
@@ -161,7 +142,7 @@ function ModeDialog({ open, onClose }) {
           <button className="btn btn--ghost btn--sm" onClick={onReset}>Reset to mock</button>
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn btn--ghost" onClick={onClose}>Cancel</button>
-            <button className="btn btn--primary" disabled={mode === "live" && !token.trim()} style={mode === "live" && !token.trim() ? { opacity: .5, cursor: "not-allowed" } : {}} onClick={onSave}>
+            <button className="btn btn--primary" onClick={onSave}>
               {mode === "live" ? "Go live" : "Use mock data"}
             </button>
           </div>
