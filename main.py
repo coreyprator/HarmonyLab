@@ -19,7 +19,7 @@ from app.api.routes import songs, sections, vocabulary, measures, chords, progre
 
 logger = logging.getLogger(__name__)
 
-VERSION = "2.47.0"  # HM43.2: OAuth removal (auth router off, preferences user_id=1 hardcoded)
+VERSION = "2.47.1"  # HM43.3: inline auth-gate redirect removal; delete orphan login.html
 
 app = FastAPI(
     title="Harmony Lab API",

@@ -1113,16 +1113,8 @@
     <script src="js/auth.js"></script>
     <script src="js/audio.js"></script>
     <script>
-        // Auth gate - check before showing page
-        document.addEventListener('DOMContentLoaded', async () => {
-            const isAuthenticated = await window.auth.checkAuth();
-            if (!isAuthenticated) {
-                window.location.href = '/login.html';
-                return;
-            }
-            // Authenticated - show page and load content
+        document.addEventListener('DOMContentLoaded', () => {
             document.body.style.display = '';
-            window.auth.updateAuthUI();
             init();
         });
     </script>
