@@ -3533,20 +3533,14 @@
     </script>
     <script src="js/audio.js"></script>
     <script>
-        // Auth gate - check before showing page
         document.addEventListener('DOMContentLoaded', async () => {
-            const isAuthenticated = await window.auth.checkAuth();
-            if (!isAuthenticated && !window.HLDebug?.enabled) {
-                window.location.href = '/login.html';
-                return;
-            }
-            // Show page and load content
+            // HM43.2: OAuth removed — show page and load content directly
             document.body.style.display = '';
-            if (isAuthenticated) window.auth.updateAuthUI();
             await init();
             setupChordAudio();
             setupPlaybackTransport();
         });
+    </script>
 
         // ==========================================
         // CHORD AUDIO PLAYBACK
