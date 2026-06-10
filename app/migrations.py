@@ -1217,12 +1217,12 @@ def _migration_18_chord_override_fk(db):
             """)
             logger.info("  Migration 18: chord_id backfill complete.")
 
-            # Add FK constraint (nullable; old rows may have no matching chord after deletes)
+            # Add FK constraint (NO ACTION to avoid cascade cycle with Songs→Chords chain)
             db.execute_non_query("""
                 ALTER TABLE ChordAnalysisOverrides
                 ADD CONSTRAINT FK_ChordOverrides_ChordId
                 FOREIGN KEY (chord_id) REFERENCES Chords(id)
-                ON DELETE SET NULL
+                ON DELETE NO ACTION
             """)
             logger.info("  Migration 18: FK constraint FK_ChordOverrides_ChordId added.")
         else:
