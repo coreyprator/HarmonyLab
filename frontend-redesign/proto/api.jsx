@@ -37,8 +37,10 @@ if (!window.auth) window.auth = { getToken: () => null };
 const ApiContext = createContextA(null);
 
 function ApiProvider({ children }) {
-  // HM44 Phase B: default to "live" (single-service, no token needed — no auth)
-  const [mode, setModeS] = useStateA(() => localStorage.getItem(MODE_KEY) || "live");
+// HM44 Phase B: default to "mock" for stable initial render.
+// Switch to live via the mode-toggle pill. All API routes are same-origin
+// (base="" → relative URLs) so live mode works without config.
+const [mode, setModeS] = useStateA(() => localStorage.getItem(MODE_KEY) || "mock");
   const [token, setTokenS] = useStateA(() => sessionStorage.getItem(TOKEN_KEY) || "");
   const [base, setBaseS]  = useStateA(() => localStorage.getItem(BASE_KEY) ?? DEFAULT_BASE);
   const [lastError, setLastError] = useStateA(null);
