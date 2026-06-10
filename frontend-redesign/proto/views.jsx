@@ -197,17 +197,17 @@ function Library({ route, onNavigate, prefs, toast, onOpenMode }) {
   const toggleAll = () => setSelected(allChecked ? new Set() : new Set(rows.map(r => r.id)));
   const activeFilterCount = Object.keys(filters).length;
 
-  // Live-mode loading / error guards — placed AFTER all hooks to avoid Rules-of-Hooks violation
-  if (api.mode === "live" && loading && !liveRows) {
-    return <div className="app" style={{ minHeight: "100vh" }}><HLTopbar route={route} onNavigate={onNavigate} /><HLLoadingState what="library" /></div>;
-  }
-  if (api.mode === "live" && error && !liveRows) {
-    return <div className="app" style={{ minHeight: "100vh" }}><HLTopbar route={route} onNavigate={onNavigate} /><HLErrorState error={error} onChangeMode={onOpenMode} /></div>;
-  }
+  // Loading / error states rendered inline (never early-return, preserves hook count across renders)
+  const isLiveLoading = api.mode === "live" && loading && !liveRows;
+  const isLiveError = api.mode === "live" && error && !liveRows;
 
   return (
     <div className="app" style={{ minHeight: "100vh" }}>
       <HLTopbar route={route} onNavigate={onNavigate} />
+
+      {isLiveLoading && <HLLoadingState what="library" />}
+      {isLiveError && <HLErrorState error={error} onChangeMode={onOpenMode} />}
+      {!isLiveLoading && !isLiveError && (<React.Fragment>
 
       <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", padding: "32px 32px 16px" }}>
         <div>
@@ -334,6 +334,7 @@ function Library({ route, onNavigate, prefs, toast, onOpenMode }) {
           onCancel={() => setConfirmDel(false)}
         />
       )}
+      </React.Fragment>)}
     </div>
   );
 }
