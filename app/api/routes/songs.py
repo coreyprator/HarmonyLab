@@ -5,6 +5,7 @@ CRUD operations for songs.
 """
 from typing import List
 from fastapi import APIRouter, HTTPException, Depends
+from fastapi.responses import Response
 from app.models import Song, SongCreate, SongUpdate
 from app.db.connection import DatabaseConnection, get_db
 
@@ -27,15 +28,16 @@ async def list_songs(
     - **genre**: Filter by genre (optional)
     """
     # REQ-017: LEFT JOIN song_imports to surface latest fs_modified_at per song.
-    # Uses subquery to avoid enumerating all Songs columns in GROUP BY.
-    # Default sort by Songs.created_at DESC (most recently imported first).
+    # HM44 A4: CASE WHEN raw_xml to expose has_raw_xml boolean.
     subq = """
         (SELECT song_id, MAX(fs_modified_at) AS fs_modified_at
          FROM song_imports
          GROUP BY song_id) AS si
     """
     query = f"""
-        SELECT s.*, si.fs_modified_at
+        SELECT s.*,
+               si.fs_modified_at,
+               CASE WHEN s.raw_xml IS NOT NULL AND s.raw_xml <> '' THEN 1 ELSE 0 END AS has_raw_xml
         FROM Songs s
         LEFT JOIN {subq} ON si.song_id = s.id
     """
@@ -52,15 +54,38 @@ async def list_songs(
     return songs
 
 
+@router.get("/{song_id}/xml")
+async def get_song_xml(song_id: int, db: DatabaseConnection = Depends(get_db)):
+    """HM44 A4: Return raw MusicXML for OSMD pane rendering."""
+    row = db.execute_query(
+        "SELECT raw_xml, title FROM Songs WHERE id = ?", (song_id,)
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Song not found")
+    raw_xml = row[0].get("raw_xml")
+    if not raw_xml:
+        raise HTTPException(status_code=404, detail="No MusicXML stored for this song")
+    safe_title = ''.join(c for c in (row[0].get("title") or "song") if c.isalnum() or c in ' -_').strip()
+    return Response(
+        content=raw_xml.encode("utf-8") if isinstance(raw_xml, str) else raw_xml,
+        media_type="application/xml",
+        headers={"Content-Disposition": f'inline; filename="{safe_title}.xml"'},
+    )
+
+
 @router.get("/{song_id}", response_model=Song)
 async def get_song(song_id: int, db: DatabaseConnection = Depends(get_db)):
     """Get a specific song by ID."""
-    query = "SELECT * FROM Songs WHERE id = ?"
+    query = """
+        SELECT *,
+               CASE WHEN raw_xml IS NOT NULL AND raw_xml <> '' THEN 1 ELSE 0 END AS has_raw_xml
+        FROM Songs WHERE id = ?
+    """
     songs = db.execute_query(query, (song_id,))
-    
+
     if not songs:
         raise HTTPException(status_code=404, detail="Song not found")
-    
+
     return songs[0]
 
 

@@ -165,6 +165,18 @@ def run_migrations():
     # Migration 17: debug_mode column on UserPreferences (HM42 REQ-016)
     _migration_17_debug_mode(db)
 
+    # Migration 18: ChordAnalysisOverrides.chord_id FK to Chords.id (HM44 BUG-037 / A1)
+    _migration_18_chord_override_fk(db)
+
+    # Migration 19: Chords.is_inferred BIT DEFAULT 0 (HM44 REQ-019 / A2)
+    _migration_19_chord_is_inferred(db)
+
+    # Migration 20: Chords.voicing_notation NVARCHAR(50) (HM44 REQ-020 / A3)
+    _migration_20_chord_voicing_notation(db)
+
+    # Migration 21: UserPreferences.default_voicing_notation NVARCHAR(50) (HM44 REQ-020 / A3)
+    _migration_21_pref_default_voicing(db)
+
     logger.info("Migrations complete.")
 
 
@@ -1158,3 +1170,119 @@ def _migration_16_key_center_colors(db):
             logger.info("  Migration 16: key_center_colors column already exists.")
     except Exception as e:
         logger.warning(f"  Migration 16 warning: {e}")
+
+
+def _migration_18_chord_override_fk(db):
+    """HM44 A1 (BUG-037): Add chord_id FK to ChordAnalysisOverrides, backfill from chord_index."""
+    try:
+        # Add chord_id column if not present
+        col_exists = db.execute_scalar(
+            "SELECT COUNT(*) FROM sys.columns "
+            "WHERE object_id = OBJECT_ID('ChordAnalysisOverrides') AND name = 'chord_id'"
+        )
+        if col_exists == 0:
+            logger.info("  Migration 18: Adding chord_id column to ChordAnalysisOverrides...")
+            db.execute_non_query(
+                "ALTER TABLE ChordAnalysisOverrides ADD chord_id INT NULL"
+            )
+            logger.info("  Migration 18: chord_id column added.")
+
+        # Add FK constraint if not present
+        fk_exists = db.execute_scalar(
+            "SELECT COUNT(*) FROM sys.foreign_keys "
+            "WHERE name = 'FK_ChordOverrides_ChordId'"
+        )
+        if fk_exists == 0:
+            # Backfill chord_id from positional chord_index before adding FK
+            logger.info("  Migration 18: Backfilling chord_id from chord_index...")
+            db.execute_non_query("""
+                WITH ChordRanked AS (
+                    SELECT c.id AS chord_id,
+                           s.song_id,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY s.song_id
+                               ORDER BY s.section_order, m.measure_number, c.chord_order
+                           ) - 1 AS positional_index
+                    FROM Chords c
+                    JOIN Measures m ON c.measure_id = m.id
+                    JOIN Sections s ON m.section_id = s.id
+                )
+                UPDATE cao
+                SET cao.chord_id = cr.chord_id
+                FROM ChordAnalysisOverrides cao
+                JOIN ChordRanked cr
+                  ON cr.song_id = cao.song_id
+                 AND cr.positional_index = cao.chord_index
+                WHERE cao.chord_id IS NULL
+            """)
+            logger.info("  Migration 18: chord_id backfill complete.")
+
+            # Add FK constraint (nullable; old rows may have no matching chord after deletes)
+            db.execute_non_query("""
+                ALTER TABLE ChordAnalysisOverrides
+                ADD CONSTRAINT FK_ChordOverrides_ChordId
+                FOREIGN KEY (chord_id) REFERENCES Chords(id)
+                ON DELETE SET NULL
+            """)
+            logger.info("  Migration 18: FK constraint FK_ChordOverrides_ChordId added.")
+        else:
+            logger.info("  Migration 18: FK constraint already exists.")
+    except Exception as e:
+        logger.warning(f"  Migration 18 warning: {e}")
+
+
+def _migration_19_chord_is_inferred(db):
+    """HM44 A2 (REQ-019): Add Chords.is_inferred BIT DEFAULT 0."""
+    try:
+        count = db.execute_scalar(
+            "SELECT COUNT(*) FROM sys.columns "
+            "WHERE object_id = OBJECT_ID('Chords') AND name = 'is_inferred'"
+        )
+        if count == 0:
+            logger.info("  Migration 19: Adding is_inferred column to Chords...")
+            db.execute_non_query(
+                "ALTER TABLE Chords ADD is_inferred BIT NOT NULL DEFAULT 0"
+            )
+            logger.info("  Migration 19: is_inferred column added.")
+        else:
+            logger.info("  Migration 19: is_inferred column already exists.")
+    except Exception as e:
+        logger.warning(f"  Migration 19 warning: {e}")
+
+
+def _migration_20_chord_voicing_notation(db):
+    """HM44 A3 (REQ-020): Add Chords.voicing_notation NVARCHAR(50)."""
+    try:
+        count = db.execute_scalar(
+            "SELECT COUNT(*) FROM sys.columns "
+            "WHERE object_id = OBJECT_ID('Chords') AND name = 'voicing_notation'"
+        )
+        if count == 0:
+            logger.info("  Migration 20: Adding voicing_notation column to Chords...")
+            db.execute_non_query(
+                "ALTER TABLE Chords ADD voicing_notation NVARCHAR(50) NULL"
+            )
+            logger.info("  Migration 20: voicing_notation column added.")
+        else:
+            logger.info("  Migration 20: voicing_notation column already exists.")
+    except Exception as e:
+        logger.warning(f"  Migration 20 warning: {e}")
+
+
+def _migration_21_pref_default_voicing(db):
+    """HM44 A3 (REQ-020): Add UserPreferences.default_voicing_notation NVARCHAR(50)."""
+    try:
+        count = db.execute_scalar(
+            "SELECT COUNT(*) FROM sys.columns "
+            "WHERE object_id = OBJECT_ID('UserPreferences') AND name = 'default_voicing_notation'"
+        )
+        if count == 0:
+            logger.info("  Migration 21: Adding default_voicing_notation to UserPreferences...")
+            db.execute_non_query(
+                "ALTER TABLE UserPreferences ADD default_voicing_notation NVARCHAR(50) NULL"
+            )
+            logger.info("  Migration 21: default_voicing_notation column added.")
+        else:
+            logger.info("  Migration 21: default_voicing_notation column already exists.")
+    except Exception as e:
+        logger.warning(f"  Migration 21 warning: {e}")

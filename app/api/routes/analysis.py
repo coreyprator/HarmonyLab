@@ -1730,3 +1730,194 @@ async def get_exchanges(song_id: int, db: DatabaseConnection = Depends(get_db)):
             ex["exchange_at"] = str(ex["exchange_at"])
         exchanges.append(ex)
     return {"song_id": song_id, "exchanges": exchanges}
+
+
+# ---------------------------------------------------------------------------
+# HM44 A1 (BUG-037): Chord override endpoints that resolve by Chords.id (FK)
+# ---------------------------------------------------------------------------
+
+@router.put("/songs/{song_id}/chord/id/{chord_id}")
+async def override_chord_by_id(
+    song_id: int,
+    chord_id: int,
+    override: ChordOverrideRequest,
+    db: DatabaseConnection = Depends(get_db),
+):
+    """Override analysis for a specific chord identified by its Chords.id (FK).
+
+    Supersedes the positional chord_index approach for the redesign UI.
+    Writes chord_id to ChordAnalysisOverrides; chord_index is set to -1 as
+    a sentinel to indicate a chord_id-based record.
+    """
+    # Verify chord belongs to this song
+    belongs = db.execute_scalar(
+        """SELECT COUNT(*) FROM Chords c
+           JOIN Measures m ON c.measure_id = m.id
+           JOIN Sections s ON m.section_id = s.id
+           WHERE c.id = ? AND s.song_id = ?""",
+        (chord_id, song_id),
+    )
+    if not belongs:
+        raise HTTPException(status_code=404, detail="Chord not found in this song")
+
+    exists = db.execute_scalar(
+        "SELECT COUNT(*) FROM ChordAnalysisOverrides WHERE chord_id = ?",
+        (chord_id,),
+    )
+    if exists > 0:
+        db.execute_non_query(
+            """UPDATE ChordAnalysisOverrides
+               SET roman_override = ?, function_override = ?, key_context_override = ?,
+                   is_pivot_chord = ?, pivot_to_key = ?, notes = ?, updated_at = GETDATE()
+               WHERE chord_id = ?""",
+            (
+                override.roman, override.function, override.key_context,
+                override.is_pivot, override.pivot_to_key, override.notes,
+                chord_id,
+            ),
+        )
+    else:
+        db.execute_non_query(
+            """INSERT INTO ChordAnalysisOverrides
+                   (song_id, chord_id, chord_index, roman_override, function_override,
+                    key_context_override, is_pivot_chord, pivot_to_key, notes)
+               VALUES (?, ?, -1, ?, ?, ?, ?, ?, ?)""",
+            (
+                song_id, chord_id,
+                override.roman, override.function, override.key_context,
+                override.is_pivot, override.pivot_to_key, override.notes,
+            ),
+        )
+    return {"status": "updated", "chord_id": chord_id}
+
+
+@router.delete("/songs/{song_id}/chord/id/{chord_id}")
+async def delete_chord_override_by_id(
+    song_id: int,
+    chord_id: int,
+    db: DatabaseConnection = Depends(get_db),
+):
+    """Remove chord override by Chords.id FK, revert to auto-analysis."""
+    db.execute_non_query(
+        "DELETE FROM ChordAnalysisOverrides WHERE chord_id = ? AND song_id = ?",
+        (chord_id, song_id),
+    )
+    return {"status": "deleted", "chord_id": chord_id}
+
+
+# ---------------------------------------------------------------------------
+# HM44 A6 (REQ-022): KeyRegions CRUD for user-defined key regions
+# ---------------------------------------------------------------------------
+
+class KeyRegionCreate(BaseModel):
+    start_chord_index: int
+    end_chord_index: Optional[int] = None
+    key_center: str
+    transition_type: Optional[str] = None
+    pivot_chord_index: Optional[int] = None
+    notes: Optional[str] = None
+
+
+class KeyRegionUpdate(BaseModel):
+    start_chord_index: Optional[int] = None
+    end_chord_index: Optional[int] = None
+    key_center: Optional[str] = None
+    transition_type: Optional[str] = None
+    pivot_chord_index: Optional[int] = None
+    notes: Optional[str] = None
+
+
+@router.post("/songs/{song_id}/key-regions", status_code=201)
+async def create_key_region(
+    song_id: int,
+    body: KeyRegionCreate,
+    db: DatabaseConnection = Depends(get_db),
+):
+    """HM44 A6: Create a user-defined key region for a song."""
+    song_exists = db.execute_scalar("SELECT COUNT(*) FROM Songs WHERE id = ?", (song_id,))
+    if not song_exists:
+        raise HTTPException(status_code=404, detail="Song not found")
+
+    new_id = db.execute_insert(
+        """INSERT INTO KeyRegions
+               (song_id, start_chord_index, end_chord_index, key_center,
+                transition_type, pivot_chord_index, notes, is_user_defined)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 1)""",
+        (
+            song_id, body.start_chord_index, body.end_chord_index,
+            body.key_center, body.transition_type, body.pivot_chord_index, body.notes,
+        ),
+    )
+    if not new_id:
+        raise HTTPException(status_code=500, detail="Failed to create key region")
+
+    rows = db.execute_query(
+        "SELECT id, song_id, start_chord_index, end_chord_index, key_center, "
+        "transition_type, pivot_chord_index, notes, is_user_defined, created_at "
+        "FROM KeyRegions WHERE id = ?",
+        (new_id,),
+    )
+    return rows[0]
+
+
+@router.put("/songs/{song_id}/key-regions/{region_id}")
+async def update_key_region(
+    song_id: int,
+    region_id: int,
+    body: KeyRegionUpdate,
+    db: DatabaseConnection = Depends(get_db),
+):
+    """HM44 A6: Update a user-defined key region."""
+    row = db.execute_query(
+        "SELECT id FROM KeyRegions WHERE id = ? AND song_id = ? AND is_user_defined = 1",
+        (region_id, song_id),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Key region not found")
+
+    updates = []
+    params = []
+    fields = {
+        "start_chord_index": body.start_chord_index,
+        "end_chord_index": body.end_chord_index,
+        "key_center": body.key_center,
+        "transition_type": body.transition_type,
+        "pivot_chord_index": body.pivot_chord_index,
+        "notes": body.notes,
+    }
+    for col, val in fields.items():
+        if val is not None:
+            updates.append(f"{col} = ?")
+            params.append(val)
+
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    params.append(region_id)
+    db.execute_non_query(
+        f"UPDATE KeyRegions SET {', '.join(updates)} WHERE id = ?",
+        tuple(params),
+    )
+    rows = db.execute_query(
+        "SELECT id, song_id, start_chord_index, end_chord_index, key_center, "
+        "transition_type, pivot_chord_index, notes, is_user_defined, created_at "
+        "FROM KeyRegions WHERE id = ?",
+        (region_id,),
+    )
+    return rows[0]
+
+
+@router.delete("/songs/{song_id}/key-regions/{region_id}", status_code=204)
+async def delete_key_region(
+    song_id: int,
+    region_id: int,
+    db: DatabaseConnection = Depends(get_db),
+):
+    """HM44 A6: Delete a user-defined key region."""
+    affected = db.execute_non_query(
+        "DELETE FROM KeyRegions WHERE id = ? AND song_id = ? AND is_user_defined = 1",
+        (region_id, song_id),
+    )
+    if not affected:
+        raise HTTPException(status_code=404, detail="Key region not found")
+

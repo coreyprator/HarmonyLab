@@ -129,6 +129,27 @@ class DatabaseConnection:
         finally:
             conn.close()
 
+    def execute_insert(self, query: str, params: tuple = None) -> int:
+        """Execute an INSERT statement and return the new row's IDENTITY value.
+
+        Uses the same connection for INSERT + SCOPE_IDENTITY() so we get the
+        correct ID even when autocommit=True creates a new implicit transaction
+        per statement. This fixes BUG-039 (chord/measure create unreliability).
+        """
+        conn = self._get_conn()
+        try:
+            cursor = conn.cursor()
+            if params:
+                cursor.execute(query, params)
+            else:
+                cursor.execute(query)
+            cursor.execute("SELECT CAST(SCOPE_IDENTITY() AS INT)")
+            row = cursor.fetchone()
+            conn.commit()
+            return row[0] if row else None
+        finally:
+            conn.close()
+
 
 def get_db():
     """FastAPI dependency for database connection."""

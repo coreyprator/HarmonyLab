@@ -16,10 +16,11 @@ from config.settings import settings
 
 # Import routes
 from app.api.routes import songs, sections, vocabulary, measures, chords, progress, quiz, imports, analysis, exports, midi_input, riffs, improvisation, rules, preferences
+from app.api.routes.sections import sections_router
 
 logger = logging.getLogger(__name__)
 
-VERSION = "2.47.1"  # HM43.3: inline auth-gate redirect removal; delete orphan login.html
+VERSION = "2.48.0"  # HM44 Phase A: data layer — BUG-037 chord_id FK, BUG-038 section route, BUG-039 create fix, REQ-019/020/021/022
 
 app = FastAPI(
     title="Harmony Lab API",
@@ -121,6 +122,7 @@ async def health_check():
 # Include routers
 app.include_router(songs.router)
 app.include_router(sections.router)
+app.include_router(sections_router)   # HM44 A7: DELETE /api/v1/sections/{id}
 app.include_router(vocabulary.router)
 app.include_router(measures.router)
 app.include_router(chords.router)

@@ -61,6 +61,8 @@ class Song(SongBase):
     base_title: Optional[str] = None
     # REQ-017: source file modification timestamp from song_imports
     fs_modified_at: Optional[datetime] = None
+    # HM44 A4 (BUG-032/036): computed boolean — raw_xml present
+    has_raw_xml: Optional[bool] = None
 
     class Config:
         from_attributes = True
@@ -130,6 +132,10 @@ class ChordBase(BaseModel):
     function_label: Optional[str] = Field(None, max_length=50)
     comments: Optional[str] = Field(None, max_length=500)
     chord_order: int
+    # HM44 A2 (REQ-019): inferred chord flag
+    is_inferred: Optional[bool] = False
+    # HM44 A3 (REQ-020): voicing notation
+    voicing_notation: Optional[str] = Field(None, max_length=50)
 
 
 class ChordCreate(ChordBase):
@@ -140,7 +146,7 @@ class ChordCreate(ChordBase):
 class Chord(ChordBase):
     """Complete chord model with database ID."""
     id: int
-    
+
     class Config:
         from_attributes = True
 

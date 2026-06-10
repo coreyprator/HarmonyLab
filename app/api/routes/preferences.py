@@ -14,6 +14,8 @@ class PreferenceUpdate(BaseModel):
     chord_symbol_mode: Optional[str] = None
     key_center_colors: Optional[dict] = None
     debug_mode: Optional[bool] = None
+    # HM44 A3 (REQ-020): default voicing notation preference
+    default_voicing_notation: Optional[str] = None
 
 
 @router.get("")
@@ -23,7 +25,8 @@ async def get_preferences(
     """Get current user's preferences."""
     user_id = 1
     row = db.execute_query(
-        "SELECT chord_symbol_mode, key_center_colors, debug_mode FROM UserPreferences WHERE user_id = ?",
+        "SELECT chord_symbol_mode, key_center_colors, debug_mode, "
+        "default_voicing_notation FROM UserPreferences WHERE user_id = ?",
         (user_id,)
     )
     if row:
@@ -33,8 +36,14 @@ async def get_preferences(
             "chord_symbol_mode": row[0]['chord_symbol_mode'],
             "key_center_colors": colors,
             "debug_mode": bool(row[0].get('debug_mode', 0)),
+            "default_voicing_notation": row[0].get('default_voicing_notation'),
         }
-    return {"chord_symbol_mode": "jazz", "key_center_colors": None, "debug_mode": False}
+    return {
+        "chord_symbol_mode": "jazz",
+        "key_center_colors": None,
+        "debug_mode": False,
+        "default_voicing_notation": None,
+    }
 
 
 @router.put("")
@@ -60,16 +69,20 @@ async def update_preferences(
     if body.debug_mode is not None:
         updates.append("debug_mode = ?")
         params.append(1 if body.debug_mode else 0)
+    if body.default_voicing_notation is not None:
+        updates.append("default_voicing_notation = ?")
+        params.append(body.default_voicing_notation)
 
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")
 
     set_clause = ", ".join(updates) + ", updated_at = GETUTCDATE()"
 
-    # Build INSERT values
+    # Build INSERT defaults
     mode = body.chord_symbol_mode or 'jazz'
     colors_json = json.dumps(body.key_center_colors) if body.key_center_colors else None
     debug_val = (1 if body.debug_mode else 0) if body.debug_mode is not None else 0
+    voicing_val = body.default_voicing_notation
 
     db.execute_non_query(f"""
         MERGE UserPreferences AS target
@@ -78,11 +91,14 @@ async def update_preferences(
         WHEN MATCHED THEN
             UPDATE SET {set_clause}
         WHEN NOT MATCHED THEN
-            INSERT (user_id, chord_symbol_mode, key_center_colors, debug_mode) VALUES (?, ?, ?, ?);
-    """, (user_id, *params, user_id, mode, colors_json, debug_val))
+            INSERT (user_id, chord_symbol_mode, key_center_colors, debug_mode,
+                    default_voicing_notation)
+            VALUES (?, ?, ?, ?, ?);
+    """, (user_id, *params, user_id, mode, colors_json, debug_val, voicing_val))
 
     return {
         "chord_symbol_mode": mode,
         "key_center_colors": body.key_center_colors,
         "debug_mode": bool(body.debug_mode) if body.debug_mode is not None else False,
+        "default_voicing_notation": voicing_val,
     }

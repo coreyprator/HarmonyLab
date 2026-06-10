@@ -11,6 +11,10 @@ from app.db.connection import DatabaseConnection, get_db
 
 router = APIRouter(prefix="/api/v1/songs", tags=["sections"])
 
+# HM44 A7 (BUG-038): Sections DELETE uses a DISTINCT prefix /api/v1/sections so
+# it no longer shadows DELETE /api/v1/songs/{song_id}.
+sections_router = APIRouter(prefix="/api/v1/sections", tags=["sections"])
+
 
 @router.get("/{song_id}/sections", response_model=List[Section])
 async def get_song_sections(song_id: int, db: DatabaseConnection = Depends(get_db)):
@@ -54,9 +58,14 @@ async def create_section(
     return result[0]
 
 
-@router.delete("/{section_id}", status_code=204)
+@sections_router.delete("/{section_id}", status_code=204)
 async def delete_section(section_id: int, db: DatabaseConnection = Depends(get_db)):
-    """Delete a section (cascades to measures and chords)."""
+    """Delete a section (cascades to measures and chords).
+
+    HM44 A7 (BUG-038): Moved from DELETE /api/v1/songs/{section_id} to this
+    distinct path DELETE /api/v1/sections/{section_id} so the songs router
+    can no longer intercept it.
+    """
     result = db.execute_non_query("DELETE FROM Sections WHERE id = ?", (section_id,))
     
     if result == 0:

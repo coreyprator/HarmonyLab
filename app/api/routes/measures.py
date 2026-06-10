@@ -1,52 +1,48 @@
 """
 API routes for measure management.
 """
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
 from typing import List
 from app.models import Measure, MeasureCreate, MeasureWithChords, Chord
-from app.db.connection import DatabaseConnection
-from config.settings import Settings
+from app.db.connection import DatabaseConnection, get_db
 
 router = APIRouter(prefix="/api/v1/measures", tags=["measures"])
-settings = Settings()
 
 
 @router.post("/", response_model=Measure, status_code=status.HTTP_201_CREATED)
-async def create_measure(measure: MeasureCreate):
-    """Create a new measure in a section."""
+async def create_measure(measure: MeasureCreate, db: DatabaseConnection = Depends(get_db)):
+    """Create a new measure in a section.
 
-    db = DatabaseConnection(settings)
-
-    # Check if section exists
-    check_query = "SELECT COUNT(*) FROM Sections WHERE id = ?"
-    count = db.execute_scalar(check_query, (measure.section_id,))
+    BUG-039 fix: uses execute_insert (INSERT + SCOPE_IDENTITY() on same connection)
+    instead of INSERT...OUTPUT INSERTED for reliable ID read-back.
+    """
+    count = db.execute_scalar("SELECT COUNT(*) FROM Sections WHERE id = ?", (measure.section_id,))
     if count == 0:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Section with id {measure.section_id} not found"
+            detail=f"Section with id {measure.section_id} not found",
         )
 
-    # Insert measure
-    query = """
-        INSERT INTO Measures (section_id, measure_number)
-        OUTPUT INSERTED.id, INSERTED.section_id, INSERTED.measure_number, INSERTED.created_at
-        VALUES (?, ?)
-    """
-
-    result = db.execute_query(query, (measure.section_id, measure.measure_number))
-
-    if not result:
+    new_id = db.execute_insert(
+        "INSERT INTO Measures (section_id, measure_number) VALUES (?, ?)",
+        (measure.section_id, measure.measure_number),
+    )
+    if not new_id:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create measure"
+            detail="Failed to create measure",
         )
 
+    result = db.execute_query(
+        "SELECT id, section_id, measure_number, created_at FROM Measures WHERE id = ?",
+        (new_id,),
+    )
     row = result[0]
     return Measure(
         id=row['id'],
         section_id=row['section_id'],
         measure_number=row['measure_number'],
-        created_at=row['created_at']
+        created_at=row['created_at'],
     )
 
 

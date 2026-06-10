@@ -127,3 +127,37 @@ async def export_musescore(
             media_type='application/zip',
             headers={'Content-Disposition': f'attachment; filename="{safe_title}.mscz"'},
         )
+
+
+@router.get("/musicxml/{song_id}")
+async def export_musicxml(
+    song_id: int,
+    db: DatabaseConnection = Depends(get_db),
+):
+    """HM44 A5 (REQ-021): Export raw MusicXML for a song.
+
+    Returns the stored raw_xml as a downloadable .xml file.
+    This is distinct from GET /songs/{id}/xml (which is for inline OSMD rendering)
+    in that it forces a download attachment header.
+    """
+    row = db.execute_query(
+        "SELECT raw_xml, title FROM Songs WHERE id = ?", (song_id,)
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Song not found")
+    raw_xml = row[0].get("raw_xml")
+    if not raw_xml:
+        raise HTTPException(
+            status_code=404,
+            detail="No MusicXML stored for this song. Import a .xml or .mxl file to populate it.",
+        )
+    safe_title = (
+        ''.join(c for c in (row[0].get("title") or "song") if c.isalnum() or c in ' -_').strip()
+        or "export"
+    )
+    return Response(
+        content=raw_xml.encode("utf-8") if isinstance(raw_xml, str) else raw_xml,
+        media_type="application/vnd.recordare.musicxml+xml",
+        headers={"Content-Disposition": f'attachment; filename="{safe_title}.xml"'},
+    )
+
