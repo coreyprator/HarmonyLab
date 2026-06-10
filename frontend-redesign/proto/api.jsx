@@ -20,7 +20,10 @@
 
 const { useState: useStateA, useEffect: useEffectA, useMemo: useMemoA, useCallback: useCallbackA, useRef: useRefA, useContext: useContextA, createContext: createContextA } = React;
 
-const DEFAULT_BASE = "https://harmonylab.rentyourcio.com";
+// HM44 Phase B (B2/B6): In single-service mode the frontend IS the backend.
+// Use same-origin (empty base = window.location.origin) so API calls route to
+// the same Cloud Run service without a proxy hop.
+const DEFAULT_BASE = "";
 const TOKEN_KEY = "hl_proto_jwt";
 const MODE_KEY = "hl_proto_mode";
 const BASE_KEY = "hl_proto_base";
@@ -34,28 +37,30 @@ if (!window.auth) window.auth = { getToken: () => null };
 const ApiContext = createContextA(null);
 
 function ApiProvider({ children }) {
-  const [mode, setModeS] = useStateA(() => localStorage.getItem(MODE_KEY) || "mock");
+  // HM44 Phase B: default to "live" (single-service, no token needed — no auth)
+  const [mode, setModeS] = useStateA(() => localStorage.getItem(MODE_KEY) || "live");
   const [token, setTokenS] = useStateA(() => sessionStorage.getItem(TOKEN_KEY) || "");
-  const [base, setBaseS]  = useStateA(() => localStorage.getItem(BASE_KEY) || DEFAULT_BASE);
+  const [base, setBaseS]  = useStateA(() => localStorage.getItem(BASE_KEY) ?? DEFAULT_BASE);
   const [lastError, setLastError] = useStateA(null);
 
   const setMode = useCallbackA((m) => { localStorage.setItem(MODE_KEY, m); setModeS(m); setLastError(null); }, []);
   const setToken = useCallbackA((t) => { if (t) sessionStorage.setItem(TOKEN_KEY, t); else sessionStorage.removeItem(TOKEN_KEY); setTokenS(t); setLastError(null); }, []);
-  const setBase = useCallbackA((b) => { localStorage.setItem(BASE_KEY, b || DEFAULT_BASE); setBaseS(b || DEFAULT_BASE); }, []);
+  const setBase = useCallbackA((b) => { localStorage.setItem(BASE_KEY, b ?? DEFAULT_BASE); setBaseS(b ?? DEFAULT_BASE); }, []);
   const clearError = useCallbackA(() => setLastError(null), []);
 
-  // mode flips to live but no token → flip back; component shows token modal
-  const isReady = mode === "mock" || (mode === "live" && !!token);
+  // HM44 Phase B: no auth → mode=live is always "ready" (no token check)
+  const isReady = mode === "mock" || mode === "live";
 
   const fetcher = useCallbackA(async (path, opts = {}) => {
     if (mode === "mock") {
       throw new Error("fetcher called in mock mode — components should branch on mode");
     }
-    const url = (base.replace(/\/$/, "")) + path;
+    // HM44 B6: base="" → same-origin relative URL; base with value → cross-origin
+    const url = base ? (base.replace(/\/$/, "") + path) : path;
     const headers = {
       "Accept": "application/json",
       "Content-Type": "application/json",
-      // HM43.2: OAuth removed — no Authorization header needed
+      // HM44 Phase B: no auth in single-service mode
       ...(opts.headers || {}),
     };
     let res;

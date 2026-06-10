@@ -8,7 +8,7 @@ import os
 import traceback
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
@@ -20,7 +20,7 @@ from app.api.routes.sections import sections_router
 
 logger = logging.getLogger(__name__)
 
-VERSION = "2.48.0"  # HM44 Phase A: data layer — BUG-037 chord_id FK, BUG-038 section route, BUG-039 create fix, REQ-019/020/021/022
+VERSION = "2.49.0"  # HM44 Phase B: single-service convergence, redesign UI served from FastAPI
 
 app = FastAPI(
     title="Harmony Lab API",
@@ -84,19 +84,12 @@ async def startup_event():
         logger.warning(f"Migration warning (non-fatal): {e}")
 
 
-# HM43.1: guard root JSON handler so REDESIGN_MODE=true lets StaticFiles serve index.html instead
-REDESIGN_MODE = os.getenv("REDESIGN_MODE", "false").lower() == "true"
-
-if not REDESIGN_MODE:
-    @app.get("/")
-    async def root():
-        """API root — only registered when REDESIGN_MODE is unset/false."""
-        return {
-            "message": "Harmony Lab API",
-            "version": VERSION,
-            "status": "healthy",
-            "environment": settings.environment,
-        }
+# HM44 Phase B (B2): Serve the redesign React app at /
+# API routes registered below take precedence via FastAPI route ordering.
+@app.get("/")
+async def serve_app_root():
+    """Serve redesign prototype (new UI) at root — single-service, no nginx proxy."""
+    return FileResponse("frontend-redesign/prototype.html")
 
 
 @app.get("/health")
@@ -115,7 +108,7 @@ async def health_check():
         "service": "harmonylab",
         "component": "backend",
         "version": VERSION,
-        "canary": "PINEAPPLE-HM41"
+        "canary": "PINEAPPLE-HM44"
     }
 
 

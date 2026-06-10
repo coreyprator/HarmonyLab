@@ -324,11 +324,36 @@ function SongDetail({ song: initialSong, route, onNavigate, toast, prefs, onOpen
   }, [flatChords, selectedChordIds]);
 
   // ---- AI key-center dialog handlers
-  const onAcceptAIKey = (suggestion) => {
+  const onAcceptAIKey = async (suggestion) => {
     setAiKeyDialogOpen(false);
     if (!suggestion || selectedChords.length === 0) return;
     const startM = selectedChords[0].measureNumber;
     const endM = selectedChords[selectedChords.length - 1].measureNumber;
+
+    if (isLive) {
+      // HM44 B6 (A6): POST to key-regions endpoint
+      const startIdx = flatChords.findIndex(c => c.measureNumber >= startM);
+      const endIdx = (() => {
+        let last = 0;
+        for (let i = 0; i < flatChords.length; i++) {
+          if (flatChords[i].measureNumber <= endM) last = i;
+        }
+        return last;
+      })();
+      try {
+        await api.fetcher(`/api/v1/analysis/songs/${song.id}/key-regions`, {
+          method: "POST",
+          body: JSON.stringify({
+            start_chord_index: startIdx,
+            end_chord_index: endIdx,
+            key_center: suggestion.key.replace(/ maj$| min$/, "").trim(),
+          }),
+        });
+      } catch (e) {
+        toast(`Key region save failed: ${e.message}`, { level: "error" });
+        // continue updating local state anyway
+      }
+    }
 
     setSong((s) => {
       const next = JSON.parse(JSON.stringify(s));
@@ -364,10 +389,41 @@ function SongDetail({ song: initialSong, route, onNavigate, toast, prefs, onOpen
   };
 
   // commit chord edit
-  const onCommitEdit = (chord, values) => {
-    if (isLive && hlLiveToastFor(api, toast, `PUT /api/v1/chords/${chord.id}`)) {
-      setEditingChordId(null);
-      return;
+  const onCommitEdit = async (chord, values) => {
+    if (isLive) {
+      // HM44 B6: Write to chord symbol + analysis override via chord_id FK endpoints
+      try {
+        // 1. Update the chord symbol/voicing/comments via PUT /chords/{id}
+        await api.fetcher(`/api/v1/chords/${chord.id}`, {
+          method: "PUT",
+          body: JSON.stringify({
+            measure_id: chord.measureId || chord.measure_id || 1,
+            beat_position: chord.beatPosition || chord.beat_position || 1.0,
+            chord_symbol: values.symbol,
+            roman_numeral: values.roman,
+            key_center: chord.keyCenter || chord.key_center || null,
+            function_label: values.func,
+            comments: values.comment || null,
+            chord_order: chord.chordOrder || chord.chord_order || 1,
+            voicing_notation: values.voicing || null,
+          }),
+        });
+        // 2. Write analysis override via new chord_id FK path (A1)
+        if (values.roman || values.func) {
+          await api.fetcher(`/api/v1/analysis/songs/${song.id}/chord/id/${chord.id}`, {
+            method: "PUT",
+            body: JSON.stringify({
+              roman: values.roman || null,
+              function: values.func || null,
+              notes: values.comment || null,
+            }),
+          });
+        }
+      } catch (e) {
+        toast(`Save failed: ${e.message}`, { level: "error" });
+        setEditingChordId(null);
+        return;
+      }
     }
     setSong((s) => {
       const next = JSON.parse(JSON.stringify(s));
@@ -404,8 +460,29 @@ function SongDetail({ song: initialSong, route, onNavigate, toast, prefs, onOpen
   };
 
   // promote inferred → composer
-  const onPromoteInferred = (chord) => {
-    if (isLive && hlLiveToastFor(api, toast, `PUT /api/v1/chords/${chord.id}`, { is_inferred: false })) return;
+  const onPromoteInferred = async (chord) => {
+    if (isLive) {
+      // HM44 B6: Clear is_inferred flag via chord_id PUT
+      try {
+        await api.fetcher(`/api/v1/chords/${chord.id}`, {
+          method: "PUT",
+          body: JSON.stringify({
+            measure_id: chord.measureId || chord.measure_id || 1,
+            beat_position: chord.beatPosition || chord.beat_position || 1.0,
+            chord_symbol: chord.symbol,
+            roman_numeral: chord.roman,
+            key_center: chord.keyCenter || chord.key_center || null,
+            function_label: chord.function,
+            comments: chord.comment || null,
+            chord_order: chord.chordOrder || chord.chord_order || 1,
+            is_inferred: false,
+          }),
+        });
+      } catch (e) {
+        toast(`Promote failed: ${e.message}`, { level: "error" });
+        return;
+      }
+    }
     setSong((s) => {
       const next = JSON.parse(JSON.stringify(s));
       for (const sec of next.sections) for (const meas of sec.measures) {
@@ -452,6 +529,17 @@ function SongDetail({ song: initialSong, route, onNavigate, toast, prefs, onOpen
 
   const onExport = (kind) => {
     setExportOpen(false);
+    // HM44 B6: trigger real downloads for live mode
+    if (isLive && kind === "musicxml") {
+      const url = (api.base ? api.base.replace(/\/$/, "") : "") + `/api/v1/exports/musicxml/${song.id}`;
+      window.location.href = url;
+      return;
+    }
+    if (isLive && kind === "mscz") {
+      const url = (api.base ? api.base.replace(/\/$/, "") : "") + `/api/v1/exports/musescore/${song.id}`;
+      window.location.href = url;
+      return;
+    }
     if (kind === "mscz") toast("Downloading Corcovado.mscz…", { meta: `GET /exports/musescore/${song.id}` });
     if (kind === "musicxml") toast("Downloading Corcovado.musicxml…", { meta: `GET /exports/musicxml/${song.id} · NEW-BE` });
     if (kind === "pdf") toast("Print dialog → save as PDF");
