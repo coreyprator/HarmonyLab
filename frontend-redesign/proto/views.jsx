@@ -113,14 +113,6 @@ function Library({ route, onNavigate, prefs, toast, onOpenMode }) {
   const { data: liveRows, loading, error } = hlUseLibraryRows();
   const all = liveRows || (api.mode === "mock" ? window.HL_DATA.ALL_LIBRARY_ROWS : []);
 
-  // Live-mode loading / error short circuits
-  if (api.mode === "live" && loading && !liveRows) {
-    return <div className="app" style={{ minHeight: "100vh" }}><HLTopbar route={route} onNavigate={onNavigate} /><HLLoadingState what="library" /></div>;
-  }
-  if (api.mode === "live" && error && !liveRows) {
-    return <div className="app" style={{ minHeight: "100vh" }}><HLTopbar route={route} onNavigate={onNavigate} /><HLErrorState error={error} onChangeMode={onOpenMode} /></div>;
-  }
-
   // build per-column filter options (label + count over UNfiltered rows)
   const filterOptions = useMemoV(() => {
     const opt = (key, labelFn) => {
@@ -204,6 +196,14 @@ function Library({ route, onNavigate, prefs, toast, onOpenMode }) {
   const allChecked = rows.length > 0 && rows.every(r => selected.has(r.id));
   const toggleAll = () => setSelected(allChecked ? new Set() : new Set(rows.map(r => r.id)));
   const activeFilterCount = Object.keys(filters).length;
+
+  // Live-mode loading / error guards — placed AFTER all hooks to avoid Rules-of-Hooks violation
+  if (api.mode === "live" && loading && !liveRows) {
+    return <div className="app" style={{ minHeight: "100vh" }}><HLTopbar route={route} onNavigate={onNavigate} /><HLLoadingState what="library" /></div>;
+  }
+  if (api.mode === "live" && error && !liveRows) {
+    return <div className="app" style={{ minHeight: "100vh" }}><HLTopbar route={route} onNavigate={onNavigate} /><HLErrorState error={error} onChangeMode={onOpenMode} /></div>;
+  }
 
   return (
     <div className="app" style={{ minHeight: "100vh" }}>
