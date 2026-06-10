@@ -45,11 +45,8 @@ function AppShell() {
 
   /* ---- live mode dialog state ---- */
   const [modeDialogOpen, setModeDialogOpen] = useStateApp(false);
-  // On first load, if mode=live but no token, force dialog open
+  // HM44 Phase B: no auth — do not force open mode dialog on first load
   const api = hlUseApi();
-  useEffectApp(() => {
-    if (api.mode === "live" && !api.token) setModeDialogOpen(true);
-  }, [api.mode, api.token]);
 
   /* ---- render route ---- */
   let view = null;
