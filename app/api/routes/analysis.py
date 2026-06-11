@@ -1842,16 +1842,21 @@ async def create_key_region(
     if not song_exists:
         raise HTTPException(status_code=404, detail="Song not found")
 
-    new_id = db.execute_insert(
-        """INSERT INTO KeyRegions
-               (song_id, start_chord_index, end_chord_index, key_center,
-                transition_type, pivot_chord_index, notes, is_user_defined)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 1)""",
-        (
-            song_id, body.start_chord_index, body.end_chord_index,
-            body.key_center, body.transition_type, body.pivot_chord_index, body.notes,
-        ),
-    )
+    try:
+        new_id = db.execute_insert(
+            """INSERT INTO KeyRegions
+                   (song_id, start_chord_index, end_chord_index, key_center,
+                    transition_type, pivot_chord_index, notes, is_user_defined)
+               OUTPUT INSERTED.id
+               VALUES (?, ?, ?, ?, ?, ?, ?, 1)""",
+            (
+                song_id, body.start_chord_index, body.end_chord_index,
+                body.key_center, body.transition_type, body.pivot_chord_index, body.notes,
+            ),
+        )
+    except Exception as kr_exc:
+        logger.error("KeyRegion insert failed song_id=%s: %s", song_id, kr_exc)
+        raise HTTPException(status_code=500, detail=f"Failed to create key region: {kr_exc}")
     if not new_id:
         raise HTTPException(status_code=500, detail="Failed to create key region")
 

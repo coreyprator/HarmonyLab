@@ -132,10 +132,10 @@ class DatabaseConnection:
     def execute_insert(self, query: str, params: tuple = None) -> int:
         """Execute an INSERT statement and return the new row's IDENTITY value.
 
-        Uses the same connection for INSERT + SCOPE_IDENTITY() so we get the
-        correct ID even when autocommit=True creates a new implicit transaction
-        per statement. This fixes BUG-039 (chord/measure create unreliability).
+        If the query contains OUTPUT INSERTED.id, reads the result from the INSERT.
+        Otherwise uses SCOPE_IDENTITY() on the same connection/transaction.
         """
+        use_output = "OUTPUT INSERTED" in query.upper()
         conn = self._get_conn()
         try:
             cursor = conn.cursor()
@@ -143,10 +143,15 @@ class DatabaseConnection:
                 cursor.execute(query, params)
             else:
                 cursor.execute(query)
-            cursor.execute("SELECT CAST(SCOPE_IDENTITY() AS INT)")
-            row = cursor.fetchone()
-            conn.commit()
-            return row[0] if row else None
+            if use_output:
+                row = cursor.fetchone()
+                conn.commit()
+                return row[0] if row else None
+            else:
+                cursor.execute("SELECT CAST(SCOPE_IDENTITY() AS INT)")
+                row = cursor.fetchone()
+                conn.commit()
+                return row[0] if row else None
         finally:
             conn.close()
 
