@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HarmonyLab · Sign in</title>
+<link rel="stylesheet" href="redesign.css" />
+<style>
+html, body { background: var(--bg-0); margin: 0; }
+.login-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.login-card {
+  width: 380px;
+  background: var(--bg-1);
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  padding: 40px 36px;
+  box-shadow: var(--sh-3);
+}
+.login-error {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: oklch(.25 .04 20 / .5);
+  border: 1px solid var(--rose);
+  border-radius: 4px;
+  color: var(--rose);
+  font-size: 13px;
+  display: none;
+}
+</style>
+</head>
+<body>
+<div class="login-wrap">
+  <div class="login-card">
+    <div class="tiny upper" style="color:var(--amber);margin-bottom:6px">HarmonyLab</div>
+    <h1 style="font-family:var(--t-display);font-style:italic;font-weight:500;font-size:32px;margin:0 0 24px">Sign in.</h1>
+
+    <form id="form">
+      <label class="tiny upper" style="color:var(--ink-3);display:block;margin-bottom:6px">Passphrase</label>
+      <input
+        id="pp"
+        type="password"
+        class="input"
+        autocomplete="current-password"
+        autofocus
+        placeholder="Enter passphrase"
+        style="width:100%;box-sizing:border-box"
+      />
+      <div id="err" class="login-error"></div>
+      <button type="submit" class="btn btn--primary" style="width:100%;margin-top:16px;height:42px;font-size:15px">
+        Unlock →
+      </button>
+    </form>
+  </div>
+</div>
+<script>
+document.getElementById("form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const pp = document.getElementById("pp").value;
+  const errEl = document.getElementById("err");
+  errEl.style.display = "none";
+  try {
+    const res = await fetch("/api/auth/passphrase", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ passphrase: pp }),
+    });
+    if (res.ok) {
+      const params = new URLSearchParams(window.location.search);
+      window.location.href = params.get("next") || "/";
+    } else {
+      errEl.style.display = "block";
+      errEl.textContent = "Invalid passphrase. Try again.";
+      document.getElementById("pp").value = "";
+      document.getElementById("pp").focus();
+    }
+  } catch (err) {
+    errEl.style.display = "block";
+    errEl.textContent = "Network error. Please try again.";
+  }
+});
+</script>
+</body>
+</html>

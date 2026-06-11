@@ -42,6 +42,8 @@ steps:
       - '--allow-unauthenticated'
       - '--update-env-vars'
       - 'GIT_SHA=$COMMIT_SHA'
+      - '--update-secrets'
+      - 'APP_PASSPHRASE=app-passphrase:latest,APP_SECRET_KEY=app-secret-key:latest'
     id: 'deploy'
     waitFor: ['push']
 

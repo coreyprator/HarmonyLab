@@ -17,10 +17,12 @@ from config.settings import settings
 # Import routes
 from app.api.routes import songs, sections, vocabulary, measures, chords, progress, quiz, imports, analysis, exports, midi_input, riffs, improvisation, rules, preferences
 from app.api.routes.sections import sections_router
+from app.api.routes.auth import router as auth_router
+from app.middleware.session_auth import SessionAuthMiddleware
 
 logger = logging.getLogger(__name__)
 
-VERSION = "2.49.0"  # HM44 Phase B: single-service convergence, redesign UI served from FastAPI
+VERSION = "2.50.0"  # HM44.1: real React UI, passphrase gate, all writes wired
 
 app = FastAPI(
     title="Harmony Lab API",
@@ -46,6 +48,9 @@ async def general_exception_handler(request: Request, exc: Exception):
 
 # Proxy headers middleware — trust X-Forwarded-Proto from Cloud Run load balancer
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
+
+# HM44.1: Passphrase session gate (must be added AFTER ProxyHeaders, before CORS)
+app.add_middleware(SessionAuthMiddleware)
 
 # CORS middleware
 # Note: allow_origins=["*"] is INVALID with allow_credentials=True (browsers reject it).
@@ -84,12 +89,18 @@ async def startup_event():
         logger.warning(f"Migration warning (non-fatal): {e}")
 
 
-# HM44 Phase B (B2): Serve the redesign React app at /
-# API routes registered below take precedence via FastAPI route ordering.
+# HM44.1: Serve login page (public — passphrase gate redirects here)
+@app.get("/login")
+async def serve_login():
+    """Serve the passphrase login page."""
+    return FileResponse("frontend-redesign/login.html")
+
+
+# HM44.1: Serve the real React app at / (replaces prototype.html)
 @app.get("/")
 async def serve_app_root():
-    """Serve redesign prototype (new UI) at root — single-service, no nginx proxy."""
-    return FileResponse("frontend-redesign/prototype.html")
+    """Serve live React app at root — single-service, passphrase-gated."""
+    return FileResponse("frontend-redesign/app.html")
 
 
 @app.get("/health")
@@ -108,7 +119,7 @@ async def health_check():
         "service": "harmonylab",
         "component": "backend",
         "version": VERSION,
-        "canary": "PINEAPPLE-HM44"
+        "canary": "PINEAPPLE-HM44.1"
     }
 
 
@@ -129,9 +140,11 @@ app.include_router(riffs.router)
 app.include_router(improvisation.router)
 app.include_router(rules.router)
 app.include_router(preferences.router)
+app.include_router(auth_router)
 
-# HM43 Phase 2: Serve redesign prototype at root / (redesign/hm44 branch only)
-app.mount("/", StaticFiles(directory="frontend-redesign", html=True), name="redesign")
+# HM44.1: Serve static assets from frontend-redesign/ (css, proto/, src/ etc.)
+# Named routes above take precedence for / and /login.
+app.mount("/", StaticFiles(directory="frontend-redesign", html=False), name="static")
 
 
 if __name__ == "__main__":
