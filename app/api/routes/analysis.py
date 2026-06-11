@@ -448,7 +448,7 @@ async def get_analysis(
     # Get all chords for this song ordered by section/measure/position
     # Include measure_number and beat_position for granularity context
     chords = db.execute_query("""
-        SELECT c.chord_symbol, m.measure_number, c.beat_position, c.chord_order,
+        SELECT c.id, c.chord_symbol, c.measure_id, m.measure_number, c.beat_position, c.chord_order,
                s.name as section_name
         FROM Chords c
         JOIN Measures m ON c.measure_id = m.id
@@ -558,6 +558,10 @@ async def get_analysis(
             ch['beat'] = chord_positions[i]['beat']
             ch['note_count'] = notes_per_measure.get(chord_positions[i]['measure'], 0)
             ch['chord_source'] = chord_source  # HL-006B
+            # HM44.1: expose DB primary key and measure_id so FE can call PUT /chords/{id}
+            if i < len(chords):
+                ch['id'] = chords[i].get('id')
+                ch['measure_id'] = chords[i].get('measure_id')
 
             # HL-006D: Detect rootless voicing for MIDI algorithm chords
             ch['is_rootless'] = False
