@@ -15,7 +15,6 @@ from starlette.responses import Response, RedirectResponse, JSONResponse
 logger = logging.getLogger(__name__)
 
 PUBLIC_PATHS = {
-    "/",
     "/login",
     "/health",
     "/api/auth/passphrase",
