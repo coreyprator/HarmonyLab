@@ -17,19 +17,7 @@ a { cursor: pointer; }
 <body>
 <div id="root"></div>
 
-<!-- React + Babel — same CDN versions as prototype -->
-<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
-
-<!-- HM44.1 live app — load order: data → api → components → views/score → song → app -->
-<!-- v2.50.0 cache-bust: 20260611a -->
-<script type="text/babel" src="src/data.jsx?v=2500"></script>
-<script type="text/babel" src="src/api.jsx?v=2500"></script>
-<script type="text/babel" src="src/components.jsx?v=2500"></script>
-<script type="text/babel" src="src/views.jsx?v=2500"></script>
-<script type="text/babel" src="src/score.jsx?v=2500"></script>
-<script type="text/babel" src="src/song.jsx?v=2500"></script>
-<script type="text/babel" src="src/app.jsx?v=2500"></script>
+<!-- HM44.2: Real Vite production build — no in-browser Babel -->
+<script type="module" src="/src/main.jsx"></script>
 </body>
 </html>

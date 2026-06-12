@@ -23,6 +23,7 @@ templates/
 scripts/
 *.md
 *.gdoc
+node_modules/
 *.gsheet
 *.gslides
 *.pdf

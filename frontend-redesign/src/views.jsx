@@ -3,12 +3,25 @@
    HM44.1: All writes wired. Mock mode removed.
    ===================================================================== */
 
+import React from 'react';
+import { KEY_COLOR_DEFAULTS } from './data.jsx';
+import { useApi, useLibraryRows, usePreferences, hlKeyCss } from './api.jsx';
+import { Topbar, ConfirmModal } from './components.jsx';
+
+/* Inline utilities needed by views */
+function LoadingState({ what }) {
+  return <div style={{ color: 'var(--ink-2)', fontSize: 14, padding: '24px 0' }}>Loading {what}…</div>;
+}
+function ErrorState({ error }) {
+  return <div style={{ color: 'var(--rose)', fontSize: 14, padding: '24px 0' }}>Error: {error?.message || String(error)}</div>;
+}
+
 const { useState: useStateV, useEffect: useEffectV, useMemo: useMemoV, useRef: useRefV } = React;
 
 /* ---------------------------------------------------------------------
    Column-header sort + multi-select filter primitives
    --------------------------------------------------------------------- */
-function SortArrows({ dir, onToggle }) {
+export function SortArrows({ dir, onToggle }) {
   return (
     <button
       className="btn btn--ghost btn--sm"
@@ -22,7 +35,7 @@ function SortArrows({ dir, onToggle }) {
   );
 }
 
-function ColumnFilter({ values, options, onChange, label }) {
+export function ColumnFilter({ values, options, onChange, label }) {
   const [open, setOpen] = useStateV(false);
   const wrapRef = useRefV(null);
   useEffectV(() => {
@@ -71,7 +84,7 @@ function ColumnFilter({ values, options, onChange, label }) {
   );
 }
 
-function SortableHeader({ label, sortKey, sort, onSort, align, filterOptions, filterValues, onFilterChange }) {
+export function SortableHeader({ label, sortKey, sort, onSort, align, filterOptions, filterValues, onFilterChange }) {
   const dir = sort.key === sortKey ? sort.dir : null;
   const toggle = () => {
     if (sort.key !== sortKey) onSort({ key: sortKey, dir: "asc" });
@@ -90,7 +103,7 @@ function SortableHeader({ label, sortKey, sort, onSort, align, filterOptions, fi
 /* ---------------------------------------------------------------------
    LIBRARY
    --------------------------------------------------------------------- */
-function Library({ route, onNavigate, prefs, toast }) {
+export function Library({ route, onNavigate, prefs, toast }) {
   const [q, setQ] = useStateV("");
   const [selected, setSelected] = useStateV(new Set());
   const [importOpen, setImportOpen] = useStateV(false);
@@ -99,8 +112,8 @@ function Library({ route, onNavigate, prefs, toast }) {
   const [filters, setFilters] = useStateV({});
   const [libraryKey, setLibraryKey] = useStateV(0);  // bump to refresh
 
-  const api = hlUseApi();
-  const { data: liveRows, loading, error } = hlUseLibraryRows();
+  const api = useApi();
+  const { data: liveRows, loading, error } = useLibraryRows();
   const all = liveRows || [];
 
   const filterOptions = useMemoV(() => {
@@ -179,10 +192,10 @@ function Library({ route, onNavigate, prefs, toast }) {
 
   return (
     <div className="app" style={{ minHeight: "100vh" }}>
-      <HLTopbar route={route} onNavigate={onNavigate} />
+      <Topbar route={route} onNavigate={onNavigate} />
 
-      {loading && !all.length && <HLLoadingState what="library" />}
-      {error && !all.length && <HLErrorState error={error} />}
+      {loading && !all.length && <LoadingState what="library" />}
+      {error && !all.length && <ErrorState error={error} />}
       {(!loading || all.length > 0) && (
         <React.Fragment>
           <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", padding: "32px 32px 16px" }}>
@@ -274,7 +287,7 @@ function Library({ route, onNavigate, prefs, toast }) {
 
           {importOpen && <ImportModal onClose={() => setImportOpen(false)} onImport={(name, songId) => { setImportOpen(false); toast(`Imported "${name}" · song #${songId}`, { meta: "POST /imports/…/import · 200" }); window.location.reload(); }} toast={toast} />}
           {confirmDel && (
-            <HLConfirmModal
+            <ConfirmModal
               title={`Delete ${selected.size} song${selected.size > 1 ? "s" : ""}?`}
               body="This cascades through 14 child tables: chords, measures, sections, notes, lyrics, imports. Cannot be undone."
               confirmLabel="Delete"
@@ -293,9 +306,9 @@ function Library({ route, onNavigate, prefs, toast }) {
    SETTINGS
    HM44.1: loads prefs from server, saves via PUT /api/v1/preferences
    --------------------------------------------------------------------- */
-function Settings({ route, onNavigate, prefs, setPrefs, toast }) {
-  const api = hlUseApi();
-  const { data: serverPrefs } = hlUsePreferences();
+export function Settings({ route, onNavigate, prefs, setPrefs, toast }) {
+  const api = useApi();
+  const { data: serverPrefs } = usePreferences();
   const [pendingPrefs, setPendingPrefs] = useStateV(prefs);
   const [dirty, setDirty] = useStateV(false);
   const [saving, setSaving] = useStateV(false);
@@ -305,7 +318,7 @@ function Settings({ route, onNavigate, prefs, setPrefs, toast }) {
     if (serverPrefs) {
       const merged = {
         chordMode: serverPrefs.chord_symbol_mode || "jazz",
-        keyColors: serverPrefs.key_center_colors || { ...window.HL_DATA.KEY_COLOR_DEFAULTS },
+        keyColors: serverPrefs.key_center_colors || { ...KEY_COLOR_DEFAULTS },
         debugMode: !!serverPrefs.debug_mode,
         defaultVoicing: serverPrefs.default_voicing_notation || "",
       };
@@ -342,13 +355,13 @@ function Settings({ route, onNavigate, prefs, setPrefs, toast }) {
   };
 
   const reset = () => {
-    setPendingPrefs({ chordMode: "jazz", keyColors: { ...window.HL_DATA.KEY_COLOR_DEFAULTS }, debugMode: false, defaultVoicing: "" });
+    setPendingPrefs({ chordMode: "jazz", keyColors: { ...KEY_COLOR_DEFAULTS }, debugMode: false, defaultVoicing: "" });
     setDirty(true);
   };
 
   return (
     <div className="app" style={{ minHeight: "100vh" }}>
-      <HLTopbar route={route} onNavigate={onNavigate} />
+      <Topbar route={route} onNavigate={onNavigate} />
       <div style={{ display: "grid", gridTemplateColumns: "240px 1fr", minHeight: "calc(100vh - 50px)" }}>
         <aside style={{ borderRight: "1px solid var(--line)", padding: "24px 16px" }}>
           <div className="tiny upper" style={{ color: "var(--ink-3)", marginBottom: 12 }}>Sections</div>
@@ -386,13 +399,13 @@ function Settings({ route, onNavigate, prefs, setPrefs, toast }) {
             <div className="tiny upper" style={{ color: "var(--amber)" }}>Key-center colors · your data</div>
             <h3 style={{ fontFamily: "var(--t-display)", fontStyle: "italic", fontSize: 24, margin: "6px 0 16px", fontWeight: 500 }}>Pick a color for every key.</h3>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
-              {Object.keys(window.HL_DATA.KEY_COLOR_DEFAULTS).filter(k => k.endsWith("maj")).map(k => (
+              {Object.keys(KEY_COLOR_DEFAULTS).filter(k => k.endsWith("maj")).map(k => (
                 <div key={k} style={{ border: "1px solid var(--line)", borderRadius: 6, padding: 10, background: "var(--bg-1)" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ width: 14, height: 14, borderRadius: 3, background: pendingPrefs.keyColors?.[k] || window.HL_DATA.KEY_COLOR_DEFAULTS[k] }}></span>
+                    <span style={{ width: 14, height: 14, borderRadius: 3, background: pendingPrefs.keyColors?.[k] || KEY_COLOR_DEFAULTS[k] }}></span>
                     <span style={{ fontSize: 13 }}>{k}</span>
                   </div>
-                  <input type="text" className="input" value={pendingPrefs.keyColors?.[k] || window.HL_DATA.KEY_COLOR_DEFAULTS[k]} onChange={e => setColor(k, e.target.value)} style={{ width: "100%", marginTop: 6, fontFamily: "var(--t-mono)", fontSize: 10, height: 24 }} />
+                  <input type="text" className="input" value={pendingPrefs.keyColors?.[k] || KEY_COLOR_DEFAULTS[k]} onChange={e => setColor(k, e.target.value)} style={{ width: "100%", marginTop: 6, fontFamily: "var(--t-mono)", fontSize: 10, height: 24 }} />
                 </div>
               ))}
             </div>
@@ -429,10 +442,10 @@ function Settings({ route, onNavigate, prefs, setPrefs, toast }) {
 /* ---------------------------------------------------------------------
    AUDIT
    --------------------------------------------------------------------- */
-function Audit({ song, route, onNavigate, toast }) {
+export function Audit({ song, route, onNavigate, toast }) {
   return (
     <div className="app" style={{ minHeight: "100vh" }}>
-      <HLTopbar route={route} onNavigate={onNavigate} songTitle={song.title} />
+      <Topbar route={route} onNavigate={onNavigate} songTitle={song.title} />
       <div className="meta-strip">
         <div className="item"><span className="lbl">song</span><span className="val" style={{ fontFamily: "var(--t-display)", fontStyle: "italic", fontSize: 18 }}>{song.title}</span></div>
         <div className="item"><span className="lbl">id</span><span className="val" style={{ fontFamily: "var(--t-mono)" }}>{song.id}</span></div>
@@ -493,10 +506,10 @@ function Audit({ song, route, onNavigate, toast }) {
 /* ---------------------------------------------------------------------
    LAB
    --------------------------------------------------------------------- */
-function Lab({ route, onNavigate, toast }) {
+export function Lab({ route, onNavigate, toast }) {
   return (
     <div className="app" style={{ minHeight: "100vh" }}>
-      <HLTopbar route={route} onNavigate={onNavigate} />
+      <Topbar route={route} onNavigate={onNavigate} />
       <div style={{ padding: "32px 32px 16px" }}>
         <div className="tiny upper" style={{ color: "var(--amber)" }}>Lab</div>
         <h2 style={{ fontFamily: "var(--t-display)", fontStyle: "italic", fontSize: 34, margin: "6px 0 6px", fontWeight: 500 }}>Experimental features.</h2>
@@ -531,8 +544,8 @@ function Lab({ route, onNavigate, toast }) {
 /* =====================================================================
    IMPORT MODAL — real file upload wired to /api/v1/imports/*
    ===================================================================== */
-function ImportModal({ onClose, onImport, toast }) {
-  const api = hlUseApi();
+export function ImportModal({ onClose, onImport, toast }) {
+  const api = useApi();
   const [pipeline, setPipeline] = useStateV("omr");
   const [stage, setStage] = useStateV("drop");  // drop | uploading | parsing | preview | error
   const [file, setFile] = useStateV(null);

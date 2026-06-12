@@ -3,17 +3,32 @@
    Mock mode, PrototypeBanner, ModeDialog removed.
    ===================================================================== */
 
+import React from 'react';
+import { ApiProvider, parseHash, encodeRoute, useSong, hlUseToasts, hlLoadState, hlSaveState } from './api.jsx';
+import { KEY_COLOR_DEFAULTS } from './data.jsx';
+import { Toast, Topbar } from './components.jsx';
+import { Library, Settings, Lab, Audit } from './views.jsx';
+import { SongDetail } from './song.jsx';
+
+/* Inline loading/error states */
+function LoadingState({ what }) {
+  return <div style={{ color: 'var(--ink-2)', fontSize: 14, padding: '24px 0' }}>Loading {what}…</div>;
+}
+function ErrorState({ error }) {
+  return <div style={{ color: 'var(--rose)', fontSize: 14, padding: '24px 0' }}>Error: {error?.message || String(error)}</div>;
+}
+
 const { useState: useStateApp, useEffect: useEffectApp, useCallback: useCallbackApp } = React;
 
-function AppShell() {
-  const [route, setRoute] = useStateApp(() => hlParseHash() || { name: "library" });
+export function AppShell() {
+  const [route, setRoute] = useStateApp(() => parseHash() || { name: "library" });
   useEffectApp(() => {
-    const onHash = () => setRoute(hlParseHash() || { name: "library" });
+    const onHash = () => setRoute(parseHash() || { name: "library" });
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
   const navigate = useCallbackApp((next) => {
-    window.location.hash = hlEncodeRoute(next);
+    window.location.hash = encodeRoute(next);
   }, []);
 
   // Load prefs from localStorage (server sync happens inside Settings)
@@ -21,7 +36,7 @@ function AppShell() {
     const ls = hlLoadState();
     return ls.prefs || {
       chordMode: "jazz",
-      keyColors: { ...window.HL_DATA.KEY_COLOR_DEFAULTS },
+      keyColors: { ...KEY_COLOR_DEFAULTS },
       debugMode: false,
     };
   });
@@ -45,7 +60,7 @@ function AppShell() {
   let view = null;
   switch (route.name) {
     case "library":
-      view = <HLLibrary route={route} onNavigate={navigate} prefs={prefs} toast={push} />;
+      view = <Library route={route} onNavigate={navigate} prefs={prefs} toast={push} />;
       break;
     case "song":
       view = <SongRoute songId={route.id} route={route} navigate={navigate} prefs={prefs} toast={push} />;
@@ -54,10 +69,10 @@ function AppShell() {
       view = <AuditRoute songId={route.id} route={route} navigate={navigate} toast={push} />;
       break;
     case "settings":
-      view = <HLSettings route={route} onNavigate={navigate} prefs={prefs} setPrefs={setPrefs} toast={push} />;
+      view = <Settings route={route} onNavigate={navigate} prefs={prefs} setPrefs={setPrefs} toast={push} />;
       break;
     case "lab":
-      view = <HLLab route={route} onNavigate={navigate} toast={push} />;
+      view = <Lab route={route} onNavigate={navigate} toast={push} />;
       break;
     default:
       view = <NotFound onHome={() => navigate({ name: "library" })} message="Unknown route" />;
@@ -67,33 +82,33 @@ function AppShell() {
     <>
       <div className="staff-edge" aria-hidden="true"></div>
       {view}
-      <HLToast items={items} onDismiss={dismiss} />
+      <Toast items={items} onDismiss={dismiss} />
     </>
   );
 }
 
 /* SongRoute — fetch + render */
 function SongRoute({ songId, route, navigate, prefs, toast }) {
-  const { data: song, loading, error } = hlUseSong(songId);
-  if (loading) return <LoadingShell><HLLoadingState what={`song #${songId}`} /></LoadingShell>;
-  if (error) return <LoadingShell><HLErrorState error={error} /></LoadingShell>;
+  const { data: song, loading, error } = useSong(songId);
+  if (loading) return <LoadingShell><LoadingState what={`song #${songId}`} /></LoadingShell>;
+  if (error) return <LoadingShell><ErrorState error={error} /></LoadingShell>;
   if (!song) return <NotFound onHome={() => navigate({ name: "library" })} message={`Song #${songId} not found.`} />;
-  return <HLSongDetail song={song} route={route} onNavigate={navigate} toast={toast} prefs={prefs} />;
+  return <SongDetail song={song} route={route} onNavigate={navigate} toast={toast} prefs={prefs} />;
 }
 
 /* AuditRoute — fetch + render */
 function AuditRoute({ songId, route, navigate, toast }) {
-  const { data: song, loading, error } = hlUseSong(songId);
-  if (loading) return <LoadingShell><HLLoadingState what={`audit #${songId}`} /></LoadingShell>;
-  if (error) return <LoadingShell><HLErrorState error={error} /></LoadingShell>;
+  const { data: song, loading, error } = useSong(songId);
+  if (loading) return <LoadingShell><LoadingState what={`audit #${songId}`} /></LoadingShell>;
+  if (error) return <LoadingShell><ErrorState error={error} /></LoadingShell>;
   if (!song) return <NotFound onHome={() => navigate({ name: "library" })} message={`Song #${songId} not found.`} />;
-  return <HLAudit song={song} route={route} onNavigate={navigate} toast={toast} />;
+  return <Audit song={song} route={route} onNavigate={navigate} toast={toast} />;
 }
 
 function LoadingShell({ children }) {
   return (
     <div className="app" style={{ minHeight: "100vh" }}>
-      <HLTopbar route={{ name: "" }} onNavigate={() => {}} />
+      <Topbar route={{ name: "" }} onNavigate={() => {}} />
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "60vh" }}>{children}</div>
     </div>
   );
@@ -110,6 +125,3 @@ function NotFound({ onHome, message }) {
   );
 }
 
-/* Mount */
-const _root = ReactDOM.createRoot(document.getElementById("root"));
-_root.render(<ApiProvider><AppShell /></ApiProvider>);

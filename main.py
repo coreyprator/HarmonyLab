@@ -22,7 +22,7 @@ from app.middleware.session_auth import SessionAuthMiddleware
 
 logger = logging.getLogger(__name__)
 
-VERSION = "2.50.0"  # HM44.1: real React UI, passphrase gate, all writes wired
+VERSION = "2.51.0"  # HM44.2: Real Vite production build, Lesson 14 name audit
 
 app = FastAPI(
     title="Harmony Lab API",
@@ -96,11 +96,11 @@ async def serve_login():
     return FileResponse("frontend-redesign/login.html")
 
 
-# HM44.1: Serve the real React app at / (replaces prototype.html)
+# HM44.2: Serve real Vite production build at / (replaces in-browser Babel build)
 @app.get("/")
 async def serve_app_root():
-    """Serve live React app at root — single-service, passphrase-gated."""
-    return FileResponse("frontend-redesign/app.html")
+    """Serve Vite production build — real bundle, no in-browser Babel."""
+    return FileResponse("frontend-redesign/dist/app.html")
 
 
 @app.get("/health")
@@ -119,7 +119,7 @@ async def health_check():
         "service": "harmonylab",
         "component": "backend",
         "version": VERSION,
-        "canary": "PINEAPPLE-HM44.1"
+        "canary": "PINEAPPLE-HM44.2"
     }
 
 
@@ -142,9 +142,9 @@ app.include_router(rules.router)
 app.include_router(preferences.router)
 app.include_router(auth_router)
 
-# HM44.1: Serve static assets from frontend-redesign/ (css, proto/, src/ etc.)
+# HM44.2: Serve Vite dist/ assets (JS bundle, CSS bundle, assets/)
 # Named routes above take precedence for / and /login.
-app.mount("/", StaticFiles(directory="frontend-redesign", html=False), name="static")
+app.mount("/", StaticFiles(directory="frontend-redesign/dist", html=False), name="static")
 
 
 if __name__ == "__main__":

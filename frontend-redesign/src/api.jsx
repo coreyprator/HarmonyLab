@@ -4,13 +4,16 @@
    the hl_session cookie. Redirects to /login on 401.
    ===================================================================== */
 
+import React from 'react';
+import { CHORD_QUALITIES } from './data.jsx';
+
 const { useState: useStateA, useEffect: useEffectA, useMemo: useMemoA,
         useCallback: useCallbackA, useRef: useRefA,
         useContext: useContextA, createContext: createContextA } = React;
 
 const ApiContext = createContextA(null);
 
-function ApiProvider({ children }) {
+export function ApiProvider({ children }) {
   const [lastError, setLastError] = useStateA(null);
   const clearError = useCallbackA(() => setLastError(null), []);
 
@@ -54,7 +57,7 @@ function ApiProvider({ children }) {
   return <ApiContext.Provider value={value}>{children}</ApiContext.Provider>;
 }
 
-function useApi() {
+export function useApi() {
   const ctx = useContextA(ApiContext);
   if (!ctx) throw new Error("useApi must be inside ApiProvider");
   return ctx;
@@ -65,7 +68,7 @@ window.hlUseApi = useApi;
 /* ------------------------------------------------------------------ */
 /* SWR-lite                                                            */
 /* ------------------------------------------------------------------ */
-function useApiQuery(keyFn, fetchFn, deps) {
+export function useApiQuery(keyFn, fetchFn, deps) {
   const [data, setData] = useStateA(null);
   const [loading, setLoading] = useStateA(false);
   const [error, setError] = useStateA(null);
@@ -86,7 +89,7 @@ window.hlUseApiQuery = useApiQuery;
 /* ------------------------------------------------------------------ */
 /* Transforms                                                         */
 /* ------------------------------------------------------------------ */
-function beSongToLibraryRow(row) {
+export function beSongToLibraryRow(row) {
   return {
     id: row.id,
     title: row.title || "(untitled)",
@@ -106,14 +109,14 @@ function beSongToLibraryRow(row) {
 }
 window.hlBeSongToLibraryRow = beSongToLibraryRow;
 
-function splitRoman(s) {
+export function splitRoman(s) {
   if (!s) return { roman: "", superscript: "", romanCase: "major" };
   const m = String(s).match(/^([ivxIVX♭♯#b]+)(.*)/);
   if (!m) return { roman: s, superscript: "", romanCase: /[A-Z]/.test(s) ? "major" : "minor" };
   return { roman: m[1], superscript: m[2], romanCase: /^[ivx♭♯#b]+$/.test(m[1]) ? "minor" : "major" };
 }
 
-function normKeyCenter(k) {
+export function normKeyCenter(k) {
   if (!k) return "C maj";
   const s = String(k).trim();
   if (/maj$|major$/i.test(s)) return s.replace(/\s*(major|maj)$/i, " maj").replace(/\s+/g, " ").trim();
@@ -122,14 +125,14 @@ function normKeyCenter(k) {
 }
 window.hlNormKeyCenter = normKeyCenter;
 
-function keyCenterForMeasure(keyRegions, measureNumber) {
+export function keyCenterForMeasure(keyRegions, measureNumber) {
   for (const r of keyRegions || []) {
     if (measureNumber >= r.startMeasure && measureNumber <= r.endMeasure) return r.key;
   }
   return keyRegions?.[0]?.key || "C maj";
 }
 
-function transformChord(c, measureNumber, keyRegions, overrideMap) {
+export function transformChord(c, measureNumber, keyRegions, overrideMap) {
   const ov = overrideMap.get(c.chord_index) || overrideMap.get(c.id);
   const rawRoman = ov?.roman_override || c.roman_numeral || "";
   const split = splitRoman(rawRoman);
@@ -153,7 +156,7 @@ function transformChord(c, measureNumber, keyRegions, overrideMap) {
   };
 }
 
-function beAnalysisToSong(songRow, analysis, keyCenters, exchanges, overrides) {
+export function beAnalysisToSong(songRow, analysis, keyCenters, exchanges, overrides) {
   const keyRegions = (keyCenters?.regions || keyCenters || analysis?.key_regions || []).map(r => ({
     startMeasure: r.start_measure ?? r.startMeasure,
     endMeasure: r.end_measure ?? r.endMeasure,
@@ -248,7 +251,7 @@ function beAnalysisToSong(songRow, analysis, keyCenters, exchanges, overrides) {
 /* ------------------------------------------------------------------ */
 /* Data hooks                                                         */
 /* ------------------------------------------------------------------ */
-function useLibraryRows() {
+export function useLibraryRows() {
   const api = useApi();
   return useApiQuery("library", async () => {
     const data = await api.fetcher("/api/v1/songs/?limit=200");
@@ -258,7 +261,7 @@ function useLibraryRows() {
 }
 window.hlUseLibraryRows = useLibraryRows;
 
-function useSong(songId) {
+export function useSong(songId) {
   const api = useApi();
   return useApiQuery(`song:${songId}`, async () => {
     const [songRow, analysis, keyCenters, exchanges, overrides] = await Promise.all([
@@ -273,13 +276,13 @@ function useSong(songId) {
 }
 window.hlUseSong = useSong;
 
-function usePreferences() {
+export function usePreferences() {
   const api = useApi();
   return useApiQuery("prefs", () => api.fetcher("/api/v1/preferences"), []);
 }
 window.hlUsePreferences = usePreferences;
 
-function useChordVocabulary() {
+export function useChordVocabulary() {
   const api = useApi();
   return useApiQuery("vocab", async () => {
     const data = await api.fetcher("/api/v1/vocabulary/chord-symbols");
@@ -292,12 +295,12 @@ function useChordVocabulary() {
       intervals: d.intervals || "",
       aliases: d.aliases || [],
     }));
-    return window.HL_DATA?.CHORD_QUALITIES || [];
+    return CHORD_QUALITIES;
   }, []);
 }
 window.hlUseChordVocabulary = useChordVocabulary;
 
-function useAuditData(songId) {
+export function useAuditData(songId) {
   const api = useApi();
   return useApiQuery(`audit:${songId}`, async () => {
     const [song, audit] = await Promise.all([
@@ -312,7 +315,7 @@ window.hlUseAuditData = useAuditData;
 /* ------------------------------------------------------------------ */
 /* Misc helpers                                                        */
 /* ------------------------------------------------------------------ */
-function hlFlattenChords(song) {
+export function hlFlattenChords(song) {
   const out = [];
   for (const sec of (song.sections || [])) {
     for (const meas of (sec.measures || [])) {
@@ -325,7 +328,7 @@ function hlFlattenChords(song) {
 }
 window.hlFlattenChords = hlFlattenChords;
 
-function hlMergeKeyRegion(regions, startM, endM, key) {
+export function hlMergeKeyRegion(regions, startM, endM, key) {
   const next = regions.filter(r => !(r.startMeasure >= startM && r.endMeasure <= endM));
   next.push({ startMeasure: startM, endMeasure: endM, key, weight: endM - startM + 1, isUserDefined: true });
   return next.sort((a, b) => a.startMeasure - b.startMeasure);
@@ -338,7 +341,7 @@ const KEY_CSS_MAP = {
   "E": "k-E", "F": "k-F", "F#": "k-Fs", "Gb": "k-Gb", "G": "k-G", "G#": "k-Gs",
   "Ab": "k-Ab", "A": "k-A", "A#": "k-As", "Bb": "k-Bb", "B": "k-B",
 };
-function hlKeyCss(keyStr) {
+export function hlKeyCss(keyStr) {
   if (!keyStr) return "k-C";
   const root = keyStr.replace(/\s*(maj|min|major|minor)\s*$/i, "").trim();
   return KEY_CSS_MAP[root] || "k-C";
@@ -346,7 +349,7 @@ function hlKeyCss(keyStr) {
 window.hlKeyCss = hlKeyCss;
 
 // Toast hook
-function hlUseToasts() {
+export function hlUseToasts() {
   const [items, setItems] = useStateA([]);
   let _id = 0;
   const push = useCallbackA((msg, opts = {}) => {
@@ -360,11 +363,11 @@ function hlUseToasts() {
 window.hlUseToasts = hlUseToasts;
 
 // State persistence (localStorage)
-function hlLoadState() {
+export function hlLoadState() {
   try { return JSON.parse(localStorage.getItem("hl_app_state") || "{}"); }
   catch { return {}; }
 }
-function hlSaveState(patch) {
+export function hlSaveState(patch) {
   const cur = hlLoadState();
   localStorage.setItem("hl_app_state", JSON.stringify({ ...cur, ...patch }));
 }
@@ -372,7 +375,7 @@ window.hlLoadState = hlLoadState;
 window.hlSaveState = hlSaveState;
 
 // Route helpers
-function parseHash() {
+export function parseHash() {
   const h = window.location.hash.replace("#", "");
   if (!h) return null;
   if (h.startsWith("/song/")) return { name: "song", id: parseInt(h.split("/")[2]) };
@@ -381,7 +384,7 @@ function parseHash() {
   if (h === "/lab") return { name: "lab" };
   return { name: "library" };
 }
-function encodeRoute(r) {
+export function encodeRoute(r) {
   if (r.name === "song") return `#/song/${r.id}`;
   if (r.name === "audit") return `#/audit/${r.id}`;
   if (r.name === "settings") return "#/settings";

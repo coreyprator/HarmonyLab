@@ -4,7 +4,7 @@
    API transforms and data hooks live in api.jsx.
    ===================================================================== */
 
-const KEY_COLOR_DEFAULTS = {
+export const KEY_COLOR_DEFAULTS = {
   "C maj":  "oklch(0.86 0.06 85)",
   "G maj":  "oklch(0.72 0.10 145)",
   "D maj":  "oklch(0.70 0.12 165)",
@@ -31,7 +31,7 @@ const KEY_COLOR_DEFAULTS = {
   "Bb min": "oklch(0.55 0.15 5)",
 };
 
-const CHORD_QUALITIES = [
+export const CHORD_QUALITIES = [
   { suffix: "",      displayJazz: "",        displayPlain: "",        type: "major",       intervals: "1-3-5",              aliases: ["maj"] },
   { suffix: "m",     displayJazz: "m",       displayPlain: "m",       type: "minor",       intervals: "1-♭3-5",             aliases: ["min","-"] },
   { suffix: "7",     displayJazz: "7",       displayPlain: "7",       type: "dominant 7",  intervals: "1-3-5-♭7",           aliases: ["dom7"] },
@@ -64,7 +64,7 @@ const CHORD_QUALITIES = [
   { suffix: "add9",  displayJazz: "add9",    displayPlain: "add9",    type: "add 9",       intervals: "1-3-5-9",            aliases: [] },
 ];
 
-const ROOT_NOTES = ["C","C♯","D♭","D","D♯","E♭","E","F","F♯","G♭","G","G♯","A♭","A","A♯","B♭","B"];
+export const ROOT_NOTES = ["C","C♯","D♭","D","D♯","E♭","E","F","F♯","G♭","G","G♯","A♭","A","A♯","B♭","B"];
 
 window.HL_DATA = {
   KEY_COLOR_DEFAULTS,

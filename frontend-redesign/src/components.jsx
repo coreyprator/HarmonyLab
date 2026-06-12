@@ -3,12 +3,16 @@
    Reuses redesign.css classes; no inline styles object collisions.
    ===================================================================== */
 
+import React from 'react';
+import { CHORD_QUALITIES, ROOT_NOTES } from './data.jsx';
+import { useApi, hlKeyCss, hlMergeKeyRegion, hlUseToasts } from './api.jsx';
+
 const { useState, useEffect, useRef, useMemo, useCallback } = React;
 
 /* ---------------------------------------------------------------------
    Toast — bottom centre, dismisses after 4s
    --------------------------------------------------------------------- */
-function Toast({ items, onDismiss }) {
+export function Toast({ items, onDismiss }) {
   return (
     <div style={{ position: "fixed", left: "50%", transform: "translateX(-50%)", bottom: 28, zIndex: 1000, display: "flex", flexDirection: "column", gap: 8, pointerEvents: "none" }}>
       {items.map((t) =>
@@ -25,7 +29,7 @@ function Toast({ items, onDismiss }) {
 
 /* toast hook */
 let __toastId = 0;
-function useToasts() {
+export function useToasts() {
   const [items, setItems] = useState([]);
   const push = useCallback((text, opts = {}) => {
     const id = ++__toastId;
@@ -39,7 +43,7 @@ function useToasts() {
 /* ---------------------------------------------------------------------
    ChordCell — the central editable primitive
    --------------------------------------------------------------------- */
-function ChordCell({ chord, mode, selected, onClick, onPromoteInferred }) {
+export function ChordCell({ chord, mode, selected, onClick, onPromoteInferred }) {
   // mode: "chords" | "analysis"
   const k = hlKeyCss(chord.keyCenter);
   const classes = [
@@ -95,7 +99,7 @@ function ChordCell({ chord, mode, selected, onClick, onPromoteInferred }) {
    - virtual list (~510 combinations, but visible subset)
    - keyboard nav
    --------------------------------------------------------------------- */
-function ChordPicker({ value, onChange, onCommit, invalid }) {
+export function ChordPicker({ value, onChange, onCommit, invalid }) {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState("");
   const [hi, setHi] = useState(0);
@@ -111,8 +115,8 @@ function ChordPicker({ value, onChange, onCommit, invalid }) {
   // build the candidate list — root × quality combinations
   // filter strategy: if "Cm7" typed, match by root+suffix; if "m7" typed, match by suffix only
   const candidates = useMemo(() => {
-    const qs = window.HL_DATA.CHORD_QUALITIES;
-    const roots = window.HL_DATA.ROOT_NOTES;
+    const qs = CHORD_QUALITIES;
+    const roots = ROOT_NOTES;
     const out = [];
     for (const r of roots) {
       for (const q of qs) {
@@ -237,7 +241,7 @@ function ChordPicker({ value, onChange, onCommit, invalid }) {
             ))}
           </div>
           <div className="tiny" style={{ color: "var(--ink-3)", padding: "6px 8px 2px", borderTop: "1px solid var(--line)", marginTop: 4, fontFamily: "var(--t-mono)" }}>
-            GET /api/v1/vocabulary/chord-symbols · {window.HL_DATA.CHORD_QUALITIES.length} qualities × {window.HL_DATA.ROOT_NOTES.length} roots
+            GET /api/v1/vocabulary/chord-symbols · {CHORD_QUALITIES.length} qualities × {ROOT_NOTES.length} roots
           </div>
         </div>
       )}
@@ -251,7 +255,7 @@ function ChordPicker({ value, onChange, onCommit, invalid }) {
 const COMMON_SYMBOLS = ["△7", "m7", "7", "7♭9", "7♯9", "ø7", "°7", "alt", "m7♭5", "sus4", "6", "9", "13", "♭13"];
 const FUNCTIONS = ["tonic", "predominant", "dominant", "secondary dominant", "secondary ii", "tritone sub", "plagal", "chromatic", "pivot", "modulation"];
 
-function ChordEditPopover({ chord, anchorRect, onCommit, onCancel }) {
+export function ChordEditPopover({ chord, anchorRect, onCommit, onCancel }) {
   const [symbol, setSymbol] = useState(chord.symbol);
   const [roman, setRoman] = useState(chord.roman + (chord.superscript ? chord.superscript : ""));
   const [func, setFunc] = useState(chord.function);
@@ -307,7 +311,7 @@ function ChordEditPopover({ chord, anchorRect, onCommit, onCancel }) {
         </select>
       </div>
       <div className="row">
-        <label>voicing {window.hlUseApi?.().mode === "live" && <span className="tiny" style={{ color: "var(--rose)", textTransform: "none", letterSpacing: 0, marginLeft: 4 }}>· mock</span>}</label>
+        <label>voicing {false && <span className="tiny" style={{ color: "var(--rose)", textTransform: "none", letterSpacing: 0, marginLeft: 4 }}>· mock</span>}</label>
         <input className="input" value={voicing} onChange={(e) => setVoicing(e.target.value)} placeholder="e.g. rootless A · drop-2" title="HM44 adds Chords.voicing_notation column" />
       </div>
       <div className="row" style={{ alignItems: "flex-start" }}>
@@ -352,7 +356,7 @@ const RELATIVE_MINORS = {
   "F# maj": "D# min", "Db maj": "Bb min", "Ab maj": "F min", "Eb maj": "C min", "Bb maj": "G min", "F maj": "D min"
 };
 
-function KeyPopover({ detected, manual, onPick, onClear, onClose }) {
+export function KeyPopover({ detected, manual, onPick, onClear, onClose }) {
   return (
     <div className="popover" style={{ width: 380, top: "100%", marginTop: 12, left: 0 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
@@ -409,7 +413,7 @@ function KeyPopover({ detected, manual, onPick, onClear, onClose }) {
 /* ---------------------------------------------------------------------
    Topbar
    --------------------------------------------------------------------- */
-function Topbar({ route, onNavigate, songTitle }) {
+export function Topbar({ route, onNavigate, songTitle }) {
   return (
     <div className="app-topbar">
       <div className="app-brand" style={{ cursor: "pointer" }} onClick={() => onNavigate({ name: "library" })}>HarmonyLab</div>
@@ -429,7 +433,7 @@ function Topbar({ route, onNavigate, songTitle }) {
 /* ---------------------------------------------------------------------
    ConfirmModal — generic
    --------------------------------------------------------------------- */
-function ConfirmModal({ title, body, confirmLabel, danger, onConfirm, onCancel }) {
+export function ConfirmModal({ title, body, confirmLabel, danger, onConfirm, onCancel }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "oklch(0.09 0.005 70 / .75)", zIndex: 800, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={onCancel}>
       <div style={{ width: 440, background: "var(--bg-1)", border: "1px solid var(--line-2)", borderRadius: 8, padding: 20, boxShadow: "var(--sh-3)" }} onClick={(e) => e.stopPropagation()}>
@@ -451,7 +455,7 @@ function ConfirmModal({ title, body, confirmLabel, danger, onConfirm, onCancel }
    --------------------------------------------------------------------- */
 
 /* helpers — exported below */
-function suggestKeyCenter(chords) {
+export function suggestKeyCenter(chords) {
   const syms = chords.map(c => c.symbol).join(" ");
   // pattern-match a handful of cadences for plausible AI responses
   if (/Gm7.+G♭7.+F7.+B♭/.test(syms)) {
@@ -495,7 +499,7 @@ function suggestKeyCenter(chords) {
 
 /* merge a new region [start..end] = key into existing region list, splitting
    any overlapping region and merging adjacent same-key regions. */
-function mergeKeyRegion(regions, startMeasure, endMeasure, key) {
+export function mergeKeyRegion(regions, startMeasure, endMeasure, key) {
   const result = [];
   for (const r of regions) {
     if (r.endMeasure < startMeasure || r.startMeasure > endMeasure) {
@@ -525,7 +529,7 @@ function mergeKeyRegion(regions, startMeasure, endMeasure, key) {
   return merged;
 }
 
-function AIKeyCenterDialog({ open, song, selectedChords, onAccept, onReject, onCancel }) {
+export function AIKeyCenterDialog({ open, song, selectedChords, onAccept, onReject, onCancel }) {
   const [stage, setStage] = useState("thinking");   // thinking | response
   const [suggestion, setSuggestion] = useState(null);
   const [rejectReason, setRejectReason] = useState("");
@@ -616,7 +620,7 @@ function AIKeyCenterDialog({ open, song, selectedChords, onAccept, onReject, onC
                 )}
               </div>
 
-              {window.hlUseApi?.().mode === "live" && (
+              {false && (
                 <div style={{ marginTop: 12, padding: "8px 12px", border: "1px solid var(--rose)", borderRadius: 4, background: "oklch(.55 .15 25 / .12)", fontSize: 12, color: "var(--ink-1)", fontFamily: "var(--t-mono)", letterSpacing: ".04em" }}>
                   <strong style={{ color: "var(--rose)" }}>MOCK</strong> · HM44 adds <code>POST /analysis/&lcub;id&rcub;/key-regions</code>. Accept will toast only, no DB write.
                 </div>

@@ -18,23 +18,27 @@
    Section boundaries also force a system break.
    ===================================================================== */
 
+import React from 'react';
+import { hlFlattenChords, hlKeyCss } from './api.jsx';
+import { ChordCell, AIKeyCenterDialog } from './components.jsx';
+
 const { useState: useStateZ, useMemo: useMemoZ, useRef: useRefZ, useEffect: useEffectZ } = React;
 
 /* ---------------------------------------------------------------------
    Layout helpers
    --------------------------------------------------------------------- */
-function maxChordLen(measures) {
+export function maxChordLen(measures) {
   let max = 0;
   for (const m of measures) for (const c of m.chords) max = Math.max(max, (c.symbol || "").length);
   return max;
 }
-function systemCapacity(measures) {
+export function systemCapacity(measures) {
   const mx = maxChordLen(measures);
   if (mx > 6) return 4;
   if (mx > 4) return 6;
   return 8;
 }
-function groupSystems(sections) {
+export function groupSystems(sections) {
   const systems = [];
   let cur = null;
   const flushCur = () => { if (cur && cur.measures.length) systems.push(cur); };
@@ -69,7 +73,7 @@ function keySegmentsForSystem(measures) {
 /* ---------------------------------------------------------------------
    ChordSymbol — primary edit + selection surface
    --------------------------------------------------------------------- */
-function ChordSymbol({ chord, isSelected, isEditing, onClick, onPromoteInferred }) {
+export function ChordSymbol({ chord, isSelected, isEditing, onClick, onPromoteInferred }) {
   return (
     <div
       className={"hl-chordsym" + (isSelected ? " is-selected" : "") + (isEditing ? " is-editing" : "") + (chord.isInferred ? " is-inferred" : "") + (chord.isManualEdit ? " is-edited" : "")}
@@ -95,7 +99,7 @@ function ChordSymbol({ chord, isSelected, isEditing, onClick, onPromoteInferred 
 /* ---------------------------------------------------------------------
    ScoreSystem — one row of the score (notation + chords + RN)
    --------------------------------------------------------------------- */
-function ScoreSystem({ system, song, idx, hasXml, selectedChordIds, editingChordId, onChordClick, onPromoteInferred, showRoman, showFunc }) {
+export function ScoreSystem({ system, song, idx, hasXml, selectedChordIds, editingChordId, onChordClick, onPromoteInferred, showRoman, showFunc }) {
   const { measures } = system;
   const cols = measures.length;
   const segs = keySegmentsForSystem(measures);
@@ -200,7 +204,7 @@ function ScoreSystem({ system, song, idx, hasXml, selectedChordIds, editingChord
 /* ---------------------------------------------------------------------
    Staff — stylised treble staff render for one system
    --------------------------------------------------------------------- */
-function Staff({ system, idx }) {
+export function Staff({ system, idx }) {
   const cols = system.measures.length;
   const W = 1200, H = 96, leftPad = idx === 0 ? 60 : 24, rightPad = 14;
   const colW = (W - leftPad - rightPad) / cols;
@@ -252,7 +256,7 @@ function Staff({ system, idx }) {
 }
 
 /* synthetic staff — used when raw_xml missing (32/42 songs) */
-function SyntheticStaff({ measures }) {
+export function SyntheticStaff({ measures }) {
   const cols = measures.length;
   return (
     <div className="hl-synth-staff" style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(0,1fr))` }} title="No MusicXML on file · synthetic staff">
@@ -269,7 +273,7 @@ function SyntheticStaff({ measures }) {
 /* ---------------------------------------------------------------------
    RightRail — comments / AI exchanges / override history
    --------------------------------------------------------------------- */
-function RightRail({ open, song, flatChords, onClose, onJumpToChord, onOpenChat }) {
+export function RightRail({ open, song, flatChords, onClose, onJumpToChord, onOpenChat }) {
   const [tab, setTab] = useStateZ("comments");
   if (!open) return null;
   const commented = flatChords.filter(c => c.comment);
@@ -341,7 +345,7 @@ function RightRail({ open, song, flatChords, onClose, onJumpToChord, onOpenChat 
 /* ---------------------------------------------------------------------
    BottomAnalysis — patterns + phrases + full key timeline
    --------------------------------------------------------------------- */
-function BottomAnalysis({ song }) {
+export function BottomAnalysis({ song }) {
   const total = song.keyRegions.reduce((a, r) => a + r.weight, 0);
   return (
     <section className="hl-bottom-analysis">
@@ -385,7 +389,7 @@ function BottomAnalysis({ song }) {
 /* ---------------------------------------------------------------------
    ScoreWorkbench — the merged view
    --------------------------------------------------------------------- */
-function ScoreWorkbench({ song, selectedChordIds, selectedChords, editingChordId, onChordClick, onClearSelection, onOpenAIKeyDialog, onPromoteInferred, rightRailOpen, onCloseRail, onJumpToChord, onOpenChat }) {
+export function ScoreWorkbench({ song, selectedChordIds, selectedChords, editingChordId, onChordClick, onClearSelection, onOpenAIKeyDialog, onPromoteInferred, rightRailOpen, onCloseRail, onJumpToChord, onOpenChat }) {
   const [showRoman, setShowRoman] = useStateZ(true);
   const [showFunc, setShowFunc] = useStateZ(true);
 

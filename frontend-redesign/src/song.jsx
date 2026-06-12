@@ -2,12 +2,17 @@
    HarmonyLab interactive prototype — Song detail view
    ===================================================================== */
 
+import React from 'react';
+import { useApi, hlFlattenChords, hlKeyCss, hlLoadState, hlMergeKeyRegion, hlSaveState } from './api.jsx';
+import { Topbar, ChordEditPopover, KeyPopover, ConfirmModal, AIKeyCenterDialog } from './components.jsx';
+import { ScoreWorkbench } from './score.jsx';
+
 const { useState: useStateS, useEffect: useEffectS, useRef: useRefS, useMemo: useMemoS, useCallback: useCallbackS } = React;
 
 /* ---------------------------------------------------------------------
    Notation pane — stylised SVG render that knows about chord overrides
    --------------------------------------------------------------------- */
-function NotationPane({ song, chords, focusChordId, onExpand }) {
+export function NotationPane({ song, chords, focusChordId, onExpand }) {
   // Render up to first 8 measures worth — same look as the spec doc
   const visibleChords = chords.slice(0, 8);
   return (
@@ -126,7 +131,7 @@ function NotationPane({ song, chords, focusChordId, onExpand }) {
 /* ---------------------------------------------------------------------
    KeyCenterTimeline
    --------------------------------------------------------------------- */
-function KeyCenterTimeline({ song }) {
+export function KeyCenterTimeline({ song }) {
   const total = song.keyRegions.reduce((a, r) => a + r.weight, 0);
   return (
     <div style={{ marginTop: 24 }}>
@@ -148,7 +153,7 @@ function KeyCenterTimeline({ song }) {
 /* ---------------------------------------------------------------------
    Export menu
    --------------------------------------------------------------------- */
-function ExportMenu({ open, onClose, onExport }) {
+export function ExportMenu({ open, onClose, onExport }) {
   if (!open) return null;
   return (
     <>
@@ -175,8 +180,8 @@ function ExportMenu({ open, onClose, onExport }) {
 /* ---------------------------------------------------------------------
    Theory chat drawer
    --------------------------------------------------------------------- */
-function TheoryChat({ open, song, selectedChordIds, onClose, onLogOverride }) {
-  const api = hlUseApi();
+export function TheoryChat({ open, song, selectedChordIds, onClose, onLogOverride }) {
+  const api = useApi();
   const [messages, setMessages] = useStateS([]);
   const [draft, setDraft] = useStateS("");
   const [thinking, setThinking] = useStateS(false);
@@ -251,8 +256,8 @@ function TheoryChat({ open, song, selectedChordIds, onClose, onLogOverride }) {
 /* ---------------------------------------------------------------------
    Song detail
    --------------------------------------------------------------------- */
-function SongDetail({ song: initialSong, route, onNavigate, toast, prefs }) {
-  const api = hlUseApi();
+export function SongDetail({ song: initialSong, route, onNavigate, toast, prefs }) {
+  const api = useApi();
   // always live in HM44.1
   // Local mutable copy of song (so edits are persistent during session)
   const [song, setSong] = useStateS(() => {
@@ -562,7 +567,7 @@ function SongDetail({ song: initialSong, route, onNavigate, toast, prefs }) {
 
   return (
     <div className="app" style={{ minHeight: "100vh" }}>
-      <HLTopbar route={route} onNavigate={onNavigate} songTitle={song.title} />
+      <Topbar route={route} onNavigate={onNavigate} songTitle={song.title} />
 
       {/* title strip */}
       <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", padding: "24px 32px 12px", gap: 32 }}>
@@ -582,7 +587,7 @@ function SongDetail({ song: initialSong, route, onNavigate, toast, prefs }) {
                 <span className="swatch" style={{ background: `var(--${hlKeyCss(effectiveKey) || "k-C"})` }}></span>
                 {effectiveKey} {song.manualKeyOverride && <span style={{ marginLeft: 4, color: "var(--amber)" }}>· manual</span>}
               </span>
-              {keyOpen && <HLKeyPopover detected={song.detectedKey} manual={song.manualKeyOverride} onPick={onPickKey} onClear={onClearManualKey} onClose={() => setKeyOpen(false)} />}
+              {keyOpen && <KeyPopover detected={song.detectedKey} manual={song.manualKeyOverride} onPick={onPickKey} onClear={onClearManualKey} onClose={() => setKeyOpen(false)} />}
             </div>
             <span className="pill"><span style={{ color: "var(--ink-3)" }}>conf</span> {song.confidence}</span>
             <span className="pill">{song.form} · {song.measureCount} bars</span>
@@ -607,7 +612,7 @@ function SongDetail({ song: initialSong, route, onNavigate, toast, prefs }) {
       </div>
 
       {/* score workbench — replaces the old tabs */}
-      <HLScoreWorkbench
+      <ScoreWorkbench
         song={song}
         selectedChordIds={selectedChordIds}
         selectedChords={selectedChords}
@@ -627,7 +632,7 @@ function SongDetail({ song: initialSong, route, onNavigate, toast, prefs }) {
       <>
           <div style={{ position: "fixed", inset: 0, zIndex: 30 }} onClick={() => setEditingChordId(null)}></div>
           <div style={{ position: "fixed", zIndex: 40, top: "30vh", left: "50%", transform: "translateX(-50%)" }}>
-            <HLChordEditPopover
+            <ChordEditPopover
             chord={editingChord}
             anchorRect={{ top: 0, left: 0 }}
             onCommit={(v) => onCommitEdit(editingChord, v)}
@@ -639,7 +644,7 @@ function SongDetail({ song: initialSong, route, onNavigate, toast, prefs }) {
 
       {/* confirm re-analyze */}
       {confirmReanalyze &&
-      <HLConfirmModal
+      <ConfirmModal
         title="Re-analyze this song?"
         body={`Recomputes Roman numerals, function labels and key regions against ${effectiveKey}. User overrides are preserved.`}
         confirmLabel="Re-analyze"
@@ -658,7 +663,7 @@ function SongDetail({ song: initialSong, route, onNavigate, toast, prefs }) {
       
 
       {/* AI key-center identification dialog */}
-      <HLAIKeyCenterDialog
+      <AIKeyCenterDialog
         open={aiKeyDialogOpen}
         song={song}
         selectedChords={selectedChords}
