@@ -133,25 +133,26 @@ export function keyCenterForMeasure(keyRegions, measureNumber) {
 }
 
 export function transformChord(c, measureNumber, keyRegions, overrideMap) {
-  const ov = overrideMap.get(c.chord_index) || overrideMap.get(c.id);
-  const rawRoman = ov?.roman_override || c.roman_numeral || "";
+  // API returns index/symbol/roman/function/key_context/beat; accept both old and new names
+  const ov = overrideMap.get(c.index ?? c.chord_index) || overrideMap.get(c.id);
+  const rawRoman = ov?.roman_override || c.roman || c.roman_numeral || "";
   const split = splitRoman(rawRoman);
   return {
     id: c.id,
-    symbol: c.chord_symbol_override || c.chord_symbol || "?",
+    symbol: c.chord_symbol_override || c.symbol || c.chord_symbol || "?",
     roman: split.roman,
     superscript: split.superscript,
     romanCase: split.romanCase,
-    function: ov?.function_override || c.function_label || "—",
-    keyCenter: normKeyCenter(c.key_center) || keyCenterForMeasure(keyRegions, measureNumber),
+    function: ov?.function_override || c.function || c.function_label || "—",
+    keyCenter: normKeyCenter(c.key_context || c.key_center) || keyCenterForMeasure(keyRegions, measureNumber),
     voicing: c.voicing_notation || "",
     comment: c.comments || "",
     isInferred: !!(c.is_inferred),
     isManualEdit: !!c.is_manual_edit,
     hasOverride: !!ov,
     confidence: c.confidence || 0,
-    beat: c.beat_position || 1.0,
-    chordIndex: c.chord_index ?? 0,
+    beat: c.beat || c.beat_position || 1.0,
+    chordIndex: c.index ?? c.chord_index ?? 0,
     measureNumber,
   };
 }

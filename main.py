@@ -22,7 +22,7 @@ from app.middleware.session_auth import SessionAuthMiddleware
 
 logger = logging.getLogger(__name__)
 
-VERSION = "2.51.1"  # BUG-041: fix (l||[]) is not iterable — unwrap overrides/exchanges envelopes; fix key-centers 500
+VERSION = "2.51.2"  # BUG-042: fix chord symbols all showing '?' — transformChord field names (symbol/roman/function/key_context/beat/index)
 
 app = FastAPI(
     title="Harmony Lab API",
@@ -119,7 +119,7 @@ async def health_check():
         "service": "harmonylab",
         "component": "backend",
         "version": VERSION,
-        "canary": "PINEAPPLE-BUG041"
+        "canary": "LEMON-BUG042"
     }
 
 
