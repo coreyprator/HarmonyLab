@@ -173,7 +173,9 @@ export function beAnalysisToSong(songRow, analysis, keyCenters, exchanges, overr
   const rawMeasures = analysis?.measures || [];
   const rawChords = analysis?.chords || [];
   const overrideMap = new Map();
-  for (const o of overrides || []) overrideMap.set(o.chord_index ?? o.chord_id, o);
+  // BUG-041: guard against non-array shapes (e.g. {overrides:[...]} envelope)
+  const safeOverrides = Array.isArray(overrides) ? overrides : (overrides?.overrides || []);
+  for (const o of safeOverrides) overrideMap.set(o.chord_index ?? o.chord_id, o);
 
   if (rawSections.length && rawSections[0]?.measures) {
     for (const sec of rawSections) {
@@ -238,7 +240,8 @@ export function beAnalysisToSong(songRow, analysis, keyCenters, exchanges, overr
     keyRegions,
     patterns: analysis?.patterns || [],
     phrases: analysis?.phrases || [],
-    aiExchanges: (exchanges || []).map(ex => ({
+    // BUG-041: guard against non-array shapes (e.g. {song_id, exchanges:[...]} envelope)
+    aiExchanges: (Array.isArray(exchanges) ? exchanges : (exchanges?.exchanges || [])).map(ex => ({
       date: (ex.exchange_at || "").slice(0, 10),
       question: ex.user_comment || "(no question)",
       outcome: ex.outcome || "pending",
@@ -268,8 +271,10 @@ export function useSong(songId) {
       api.fetcher(`/api/v1/songs/${songId}`),
       api.fetcher(`/api/v1/analysis/songs/${songId}`).catch(() => ({})),
       api.fetcher(`/api/v1/analysis/songs/${songId}/key-centers`).catch(() => null),
-      api.fetcher(`/api/v1/analysis/songs/${songId}/exchanges`).catch(() => []),
-      api.fetcher(`/api/v1/analysis/songs/${songId}/overrides`).catch(() => []),
+      // BUG-041: unwrap response envelopes — exchanges returns {song_id, exchanges:[]} not bare array
+      api.fetcher(`/api/v1/analysis/songs/${songId}/exchanges`).then(r => Array.isArray(r) ? r : (r?.exchanges || [])).catch(() => []),
+      // BUG-041: unwrap response envelopes — overrides returns {overrides:[]} not bare array
+      api.fetcher(`/api/v1/analysis/songs/${songId}/overrides`).then(r => Array.isArray(r) ? r : (r?.overrides || [])).catch(() => []),
     ]);
     return beAnalysisToSong(songRow, analysis, keyCenters, exchanges, overrides);
   }, [songId]);

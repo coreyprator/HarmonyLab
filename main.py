@@ -22,7 +22,7 @@ from app.middleware.session_auth import SessionAuthMiddleware
 
 logger = logging.getLogger(__name__)
 
-VERSION = "2.51.0"  # HM44.2: Real Vite production build, Lesson 14 name audit
+VERSION = "2.51.1"  # BUG-041: fix (l||[]) is not iterable — unwrap overrides/exchanges envelopes; fix key-centers 500
 
 app = FastAPI(
     title="Harmony Lab API",
@@ -119,7 +119,7 @@ async def health_check():
         "service": "harmonylab",
         "component": "backend",
         "version": VERSION,
-        "canary": "PINEAPPLE-HM44.2"
+        "canary": "PINEAPPLE-BUG041"
     }
 
 

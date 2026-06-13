@@ -110,8 +110,9 @@ def _merge_key_regions(algorithm_regions: list, user_defined_regions: list) -> l
         remaining = [(a_start, a_end)]
 
         for ud in user_defined_regions:
-            u_start = ud['start_index']
-            u_end = ud['end_index']
+            # BUG-041: guard None — end_chord_index can be NULL in the DB
+            u_start = ud['start_index'] if ud['start_index'] is not None else 0
+            u_end = ud['end_index'] if ud['end_index'] is not None else 999999
             new_remaining = []
             for (rs, re) in remaining:
                 if re < u_start or rs > u_end:
