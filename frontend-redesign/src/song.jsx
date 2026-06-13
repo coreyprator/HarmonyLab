@@ -342,7 +342,7 @@ export function SongDetail({ song: initialSong, route, onNavigate, toast, prefs 
     const startM = selectedChords[0].measureNumber;
     const endM = selectedChords[selectedChords.length - 1].measureNumber;
 
-    if (isLive) {
+    if (api.isLive) {
       // always true in HM44.1 — POST to key-regions endpoint
       const startIdx = flatChords.findIndex(c => c.measureNumber >= startM);
       const endIdx = (() => {
@@ -402,7 +402,7 @@ export function SongDetail({ song: initialSong, route, onNavigate, toast, prefs 
 
   // commit chord edit
   const onCommitEdit = async (chord, values) => {
-    if (isLive) {
+    if (api.isLive) {
       // HM44 B6: Write to chord symbol + analysis override via chord_id FK endpoints
       try {
         // 1. Update the chord symbol/voicing/comments via PUT /chords/{id}
@@ -473,7 +473,7 @@ export function SongDetail({ song: initialSong, route, onNavigate, toast, prefs 
 
   // promote inferred → composer
   const onPromoteInferred = async (chord) => {
-    if (isLive) {
+    if (api.isLive) {
       // HM44 B6: Clear is_inferred flag via chord_id PUT
       try {
         await api.fetcher(`/api/v1/chords/${chord.id}`, {
