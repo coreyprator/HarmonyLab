@@ -33,13 +33,24 @@ EXCLUDED_FILES = {
     "app/core/migrations.py",  # MP101: contains ALTER TABLE DDL strings
 }
 
-# Path prefixes to exclude (any tracked file under these dirs is skipped)
+# Path prefixes to exclude (any tracked file under these dirs is skipped).
+# MP128 BUG-243: synced to canonical MetaPM ingest_code.py EXCLUDED_PATH_PREFIXES
+# so code_files cannot contain disallowed paths that cause audit fidelity failures.
 EXCLUDED_PATH_PREFIXES = (
-    "app/migrations/",   # Migration SQL files trigger column_drop_orphans gate
+    "app/migrations/",   # Migration SQL — triggers column_drop_orphans gate
     "incoming_zip/",     # Not source code
     "uat/",              # Not source code
     "docs/",             # Not source code
-    "scripts/migrations/",  # Migration helper scripts
+    "scripts/",          # Not deployed
+    "tests/",            # Test suite — not in container
+    "e2e/",              # End-to-end test suite
+    "test-results/",     # Playwright / pytest output
+    "handoffs/",         # Sprint handoff docs
+    "backups/",          # DB / data backups
+    "Input/",            # Data input dirs
+    "Output/",           # Data output dirs
+    ".pytest_cache/",    # Test cache
+    "archive/",          # Archived / obsolete code
 )
 
 MAX_FILE_SIZE = 1_000_000  # 1 MB
