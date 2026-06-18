@@ -96,6 +96,13 @@ async def serve_login():
     return FileResponse("frontend-redesign/login.html")
 
 
+# BUG-044: Serve redesign.css explicitly — login.html references it at root;
+# dist/ is gitignored so StaticFiles mount cannot serve it reliably.
+@app.get("/redesign.css")
+async def serve_redesign_css():
+    return FileResponse("frontend-redesign/redesign.css", media_type="text/css")
+
+
 # HM44.2: Serve real Vite production build at / (replaces in-browser Babel build)
 @app.get("/")
 async def serve_app_root():
