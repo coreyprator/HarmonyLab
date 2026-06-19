@@ -47,8 +47,43 @@ steps:
     id: 'deploy'
     waitFor: ['push']
 
-  # MP115: Warm-on-deploy ingest. Runs after every deploy so code_files is pre-warmed
-  # with the deployed GIT_SHA. set -e fails the build loudly if ingest fails.
+  # MP132 BV-13: Post-deploy hardening gate — verify required state survived deploy.
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        SERVICE="harmonylab"
+        REQUIRED="GIT_SHA,DB_SERVER,DB_NAME,DB_USER,DB_PASSWORD,ANTHROPIC_API_KEY,APP_PASSPHRASE,APP_SECRET_KEY"
+        echo "[HARDENGATE] Post-deploy state check: service=$$SERVICE sha=$COMMIT_SHA"
+        ENV_JSON=$(gcloud run services describe "$$SERVICE" \
+          --region=us-central1 \
+          --format="json(spec.template.spec.containers[0].env)")
+        PRESENT=$(echo "$$ENV_JSON" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+envs=(d.get('spec') or {}).get('template',{}).get('spec',{}).get('containers',[{}])[0].get('env',[])
+print('\n'.join(e.get('name','') for e in envs))
+        ")
+        MISSING=""
+        IFS=',' read -ra VARS <<< "$$REQUIRED"
+        for VAR in "$${VARS[@]}"; do
+          if echo "$$PRESENT" | grep -qx "$$VAR"; then
+            echo "[HARDENGATE][OK]   $$VAR present"
+          else
+            echo "[HARDENGATE][FAIL] MISSING: $$VAR"
+            MISSING="$$MISSING $$VAR"
+          fi
+        done
+        if [ -n "$$MISSING" ]; then
+          echo "[HARDENGATE][FAIL] Gate failed — missing:$$MISSING"
+          exit 1
+        fi
+        echo "[HARDENGATE][PASS] All required state confirmed for $$SERVICE"
+    id: 'hardengate'
+    waitFor: ['deploy']
+
+  # Warm-on-deploy ingest. set -e fails the build loudly if ingest fails.
   - name: 'python:3.11-slim'
     entrypoint: 'bash'
     args:
@@ -57,12 +92,12 @@ steps:
         set -e
         pip install -q pymssql
         python ingest_code.py --app hl --repo-root . --sha $COMMIT_SHA --trigger-src cloudbuild
-        echo "MP115: ingest completed for hl sha=$COMMIT_SHA"
+        echo "MP132: ingest completed for hl sha=$COMMIT_SHA"
     env:
       - 'DB_HOST=35.224.242.223'
     secretEnv: ['DB_PASSWORD']
     id: 'ingest'
-    waitFor: ['deploy']
+    waitFor: ['hardengate']
 
 availableSecrets:
   secretManager:
