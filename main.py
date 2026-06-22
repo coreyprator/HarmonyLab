@@ -22,7 +22,7 @@ from app.middleware.session_auth import SessionAuthMiddleware
 
 logger = logging.getLogger(__name__)
 
-VERSION = "2.53.0"  # HM46: write-500 fix, BUG-047/048/050 fixes, Phase 4 re-sweep
+VERSION = "2.54.0"  # HM47: BUG-049/051 write integrity, BUG-050 auto-derive harmony, Phase 4 runner fixes
 
 app = FastAPI(
     title="Harmony Lab API",

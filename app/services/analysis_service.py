@@ -47,6 +47,18 @@ class HarmonicAnalyzer:
             parts = key_override.split()
             tonic = parts[0]
             mode = parts[1] if len(parts) > 1 else 'major'
+            # HM47 BUG-049: Normalize mode abbreviations — UI stores "C maj"/"C min"
+            # music21 requires "major"/"minor" not "maj"/"min"
+            _MODE_ALIASES = {
+                'maj': 'major', 'min': 'minor', 'm': 'minor',
+                'major': 'major', 'minor': 'minor',
+                'dor': 'dorian', 'dorian': 'dorian',
+                'phr': 'phrygian', 'phrygian': 'phrygian',
+                'lyd': 'lydian', 'lydian': 'lydian',
+                'mix': 'mixolydian', 'mixolydian': 'mixolydian',
+                'loc': 'locrian', 'locrian': 'locrian',
+            }
+            mode = _MODE_ALIASES.get(mode.lower(), mode)
             self.current_key = key.Key(tonic, mode)
             confidence = 1.0
         elif midi_notes:

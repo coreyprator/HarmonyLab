@@ -135,10 +135,18 @@ async def get_chord(chord_id: int, db: DatabaseConnection = Depends(get_db)):
 async def update_chord(chord_id: int, chord_update: ChordCreate,
                        db: DatabaseConnection = Depends(get_db)):
     """Update a chord — including HM44 A3 voicing_notation and A2 is_inferred."""
-    count = db.execute_scalar("SELECT COUNT(*) FROM Chords WHERE id = ?", (chord_id,))
-    if count == 0:
+    existing = db.execute_query(f"SELECT {_CHORD_COLS} FROM Chords WHERE id = ?", (chord_id,))
+    if not existing:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail=f"Chord with id {chord_id} not found")
+
+    # HM47 BUG-049: guard against FK_Chords_Measures — keep existing measure_id
+    # if the incoming one doesn't resolve to a real Measures row
+    measure_id_to_use = chord_update.measure_id
+    if measure_id_to_use != existing[0]['measure_id']:
+        m_exists = db.execute_scalar("SELECT COUNT(*) FROM Measures WHERE id = ?", (measure_id_to_use,))
+        if not m_exists:
+            measure_id_to_use = existing[0]['measure_id']
 
     db.execute_non_query(
         """UPDATE Chords
@@ -147,7 +155,7 @@ async def update_chord(chord_id: int, chord_update: ChordCreate,
                is_inferred = ?, voicing_notation = ?
            WHERE id = ?""",
         (
-            chord_update.measure_id, float(chord_update.beat_position),
+            measure_id_to_use, float(chord_update.beat_position),
             chord_update.chord_symbol, chord_update.roman_numeral,
             chord_update.key_center, chord_update.function_label,
             chord_update.comments, chord_update.chord_order,

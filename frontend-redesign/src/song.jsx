@@ -428,7 +428,8 @@ export function SongDetail({ song: initialSong, route, onNavigate, toast, prefs 
           }),
         });
         // 2. Write analysis override via new chord_id FK path (A1)
-        if (values.roman || values.func) {
+        // HM47 BUG-049: include comment changes so notes field persists on reload
+        if (values.roman || values.func || values.comment) {
           await api.fetcher(`/api/v1/analysis/songs/${song.id}/chord/id/${chord.id}`, {
             method: "PUT",
             body: JSON.stringify({

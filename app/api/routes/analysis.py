@@ -417,6 +417,150 @@ async def transpose_song(
     return result
 
 
+def _derive_and_store_harmony(song_id: int, db: DatabaseConnection) -> int:
+    """HM47 BUG-050: Derive chord symbols from notes for note-only songs.
+
+    Groups notes by measure, uses music21 to identify pitch-class based chords,
+    stores them as is_inferred=1 Chords records. Returns number of chords stored.
+    """
+    try:
+        from music21 import pitch as m21pitch, chord as m21chord, harmony as m21harmony
+    except ImportError:
+        logger.warning("music21 not available for harmony derivation")
+        return 0
+
+    # Try raw_xml first (most accurate for arpeggiated scores)
+    xml_data = None
+    try:
+        row = db.execute_query("SELECT raw_xml FROM Songs WHERE id = ?", (song_id,))
+        if row and row[0].get('raw_xml'):
+            xml_data = row[0]['raw_xml']
+    except Exception:
+        pass
+
+    chords_by_measure = {}  # measure_num → chord_symbol
+
+    if xml_data:
+        # Parse XML and chordify
+        try:
+            import io
+            from music21 import converter as m21converter
+            data = xml_data if isinstance(xml_data, bytes) else xml_data.encode('utf-8')
+            score = m21converter.parse(io.BytesIO(data), format='musicxml')
+            chordified = score.chordify()
+            # One chord per measure: take the most common chord in the measure
+            measure_chords: dict = {}
+            for element in chordified.flatten().getElementsByClass(m21chord.Chord):
+                # Get measure number from element's offset
+                meas = element.measureNumber if hasattr(element, 'measureNumber') and element.measureNumber else 1
+                if meas not in measure_chords:
+                    measure_chords[meas] = []
+                try:
+                    cs = m21harmony.chordSymbolFromChord(element)
+                    sym = cs.figure if cs else None
+                except Exception:
+                    sym = None
+                if sym:
+                    measure_chords[meas].append(sym)
+            # Pick most common chord per measure
+            from collections import Counter
+            for meas, syms in measure_chords.items():
+                if syms:
+                    chords_by_measure[meas] = Counter(syms).most_common(1)[0][0]
+        except Exception as e:
+            logger.warning("XML chordify failed for song %s: %s", song_id, e)
+
+    if not chords_by_measure:
+        # Fallback: pitch-class window per measure from song_notes
+        try:
+            note_rows = db.execute_query(
+                "SELECT midi_pitch, measure_num FROM song_notes "
+                "WHERE song_id = ? AND is_rest = 0 ORDER BY measure_num, beat",
+                (song_id,))
+            if not note_rows:
+                note_rows = db.execute_query(
+                    "SELECT midi_note AS midi_pitch, measure_number AS measure_num FROM MelodyNotes "
+                    "WHERE song_id = ? ORDER BY measure_number, beat_position",
+                    (song_id,))
+            # Group pitch classes by measure
+            pcs_by_measure: dict = {}
+            for r in (note_rows or []):
+                m = r.get('measure_num', 1)
+                pc = r.get('midi_pitch', 60) % 12
+                pcs_by_measure.setdefault(m, set()).add(pc)
+            for meas, pcs in pcs_by_measure.items():
+                if len(pcs) < 2:
+                    continue
+                pitches = [m21pitch.Pitch(pc) for pc in sorted(pcs)]
+                c = m21chord.Chord(pitches)
+                try:
+                    cs = m21harmony.chordSymbolFromChord(c)
+                    sym = cs.figure if cs else None
+                    if not sym:
+                        sym = c.pitchedCommonName or None
+                except Exception:
+                    sym = None
+                if sym:
+                    chords_by_measure[meas] = sym
+        except Exception as e:
+            logger.warning("Note-window chord derivation failed for song %s: %s", song_id, e)
+
+    if not chords_by_measure:
+        return 0
+
+    # Get or create Section "Main" for the song
+    section_id = db.execute_scalar(
+        "SELECT id FROM Sections WHERE song_id = ? ORDER BY section_order",
+        (song_id,))
+    if not section_id:
+        section_id = db.execute_insert(
+            "INSERT INTO Sections (song_id, name, section_order, repeat_count) "
+            "OUTPUT INSERTED.id VALUES (?, 'Main', 1, 1)",
+            (song_id,))
+    if not section_id:
+        return 0
+
+    # Get existing measures map
+    existing_measures = db.execute_query(
+        "SELECT id, measure_number FROM Measures WHERE section_id = ?",
+        (section_id,))
+    measure_id_map = {r['measure_number']: r['id'] for r in (existing_measures or [])}
+
+    stored = 0
+    for meas_num in sorted(chords_by_measure.keys()):
+        sym = chords_by_measure[meas_num]
+        if not sym:
+            continue
+        # Get or create measure
+        m_id = measure_id_map.get(meas_num)
+        if not m_id:
+            m_id = db.execute_insert(
+                "INSERT INTO Measures (section_id, measure_number) OUTPUT INSERTED.id VALUES (?, ?)",
+                (section_id, meas_num))
+            if m_id:
+                measure_id_map[meas_num] = m_id
+        if not m_id:
+            continue
+        # Skip if chord already exists for this measure
+        existing_chord = db.execute_scalar(
+            "SELECT COUNT(*) FROM Chords WHERE measure_id = ?", (m_id,))
+        if existing_chord:
+            stored += 1  # count pre-existing too
+            continue
+        # Insert derived chord
+        try:
+            db.execute_non_query(
+                "INSERT INTO Chords (measure_id, beat_position, chord_symbol, chord_order, is_inferred) "
+                "VALUES (?, 1.0, ?, ?, 1)",
+                (m_id, sym, meas_num - 1))
+            stored += 1
+        except Exception as ce:
+            logger.debug("Chord insert failed measure %s: %s", meas_num, ce)
+
+    logger.info("BUG-050: Derived %d chords for note-only song %s", stored, song_id)
+    return stored
+
+
 @router.get("/songs/{song_id}")
 async def get_analysis(
     song_id: int,
@@ -452,7 +596,7 @@ async def get_analysis(
     # Include measure_number and beat_position for granularity context
     chords = db.execute_query("""
         SELECT c.id, c.chord_symbol, c.measure_id, m.measure_number, c.beat_position, c.chord_order,
-               s.name as section_name
+               s.name as section_name, c.comments
         FROM Chords c
         JOIN Measures m ON c.measure_id = m.id
         JOIN Sections s ON m.section_id = s.id
@@ -461,16 +605,52 @@ async def get_analysis(
     """, (song_id,))
 
     if not chords:
-        # Return empty analysis instead of 404 so the page still loads
-        empty_result = {
-            "detected_key": songs[0].get('original_key') or "C",
-            "confidence": 0.0,
-            "chords": [],
-            "patterns": [],
-            "total_measures": 0,
-            "message": "No chord symbols found for this song. Try re-importing the score file, or check for duplicate entries.",
-        }
-        return empty_result
+        # HM47 BUG-051: detect note data even when no chords — needed for correct empty-state UI
+        has_note_data = False
+        try:
+            nc = db.execute_scalar(
+                "SELECT COUNT(*) FROM song_notes WHERE song_id = ? AND is_rest = 0",
+                (song_id,))
+            has_note_data = (nc or 0) > 0
+        except Exception:
+            pass
+        if not has_note_data:
+            try:
+                nc2 = db.execute_scalar(
+                    "SELECT COUNT(*) FROM MelodyNotes WHERE song_id = ?", (song_id,))
+                has_note_data = (nc2 or 0) > 0
+            except Exception:
+                pass
+
+        if has_note_data:
+            # HM47 BUG-050: Auto-derive harmony from notes for note-only songs
+            logger.info("BUG-050: Note-only song %s — deriving harmony from notes", song_id)
+            derived_count = _derive_and_store_harmony(song_id, db)
+            if derived_count > 0:
+                # Re-query chords now that we have derived ones
+                chords = db.execute_query("""
+                    SELECT c.id, c.chord_symbol, c.measure_id, m.measure_number,
+                           c.beat_position, c.chord_order, s.name as section_name, c.comments
+                    FROM Chords c
+                    JOIN Measures m ON c.measure_id = m.id
+                    JOIN Sections s ON m.section_id = s.id
+                    WHERE s.song_id = ?
+                    ORDER BY s.section_order, m.measure_number, c.chord_order
+                """, (song_id,))
+            # Fall through to normal analysis if derivation yielded chords
+
+        if not chords:
+            # Return empty analysis instead of 404 so the page still loads
+            empty_result = {
+                "detected_key": songs[0].get('original_key') or "C",
+                "confidence": 0.0,
+                "chords": [],
+                "patterns": [],
+                "total_measures": 0,
+                "has_note_data": has_note_data,
+                "message": "No chord symbols found for this song. Try re-importing the score file, or check for duplicate entries.",
+            }
+            return empty_result
 
     chord_symbols = [c['chord_symbol'] for c in chords]
     # Build measure context for each chord (cast Decimal to float for JSON)
@@ -565,6 +745,8 @@ async def get_analysis(
             if i < len(chords):
                 ch['id'] = chords[i].get('id')
                 ch['measure_id'] = chords[i].get('measure_id')
+                if chords[i].get('comments'):
+                    ch['comments'] = chords[i]['comments']  # HM47: persist comment read-back
 
             # HL-006D: Detect rootless voicing for MIDI algorithm chords
             ch['is_rootless'] = False
@@ -998,7 +1180,7 @@ def _enrich_chord_ids(result: dict, song_id: int, db: DatabaseConnection) -> dic
         return result
     try:
         rows = db.execute_query("""
-            SELECT c.id, c.measure_id
+            SELECT c.id, c.measure_id, c.comments
             FROM Chords c
             JOIN Measures m ON c.measure_id = m.id
             JOIN Sections s ON m.section_id = s.id
@@ -1009,6 +1191,8 @@ def _enrich_chord_ids(result: dict, song_id: int, db: DatabaseConnection) -> dic
             if i < len(rows):
                 ch['id'] = rows[i].get('id')
                 ch['measure_id'] = rows[i].get('measure_id')
+                if rows[i].get('comments'):
+                    ch['comments'] = rows[i]['comments']  # HM47: persist comment read-back
     except Exception:
         pass
     return result
@@ -1168,6 +1352,7 @@ def _apply_overrides(result: dict, song_id: int, db: DatabaseConnection) -> dict
                 chord['pivot_to_key'] = o.get('pivot_to_key')
             if o.get('notes'):
                 chord['notes'] = o['notes']
+                chord['comments'] = o['notes']  # HM47 BUG-049: expose as 'comments' for transformChord
 
     return result
 
@@ -1811,17 +1996,54 @@ async def override_chord_by_id(
             ),
         )
     else:
-        db.execute_non_query(
-            """INSERT INTO ChordAnalysisOverrides
-                   (song_id, chord_id, chord_index, roman_override, function_override,
-                    key_context_override, is_pivot_chord, pivot_to_key, notes)
-               VALUES (?, ?, -1, ?, ?, ?, ?, ?, ?)""",
-            (
-                song_id, chord_id,
-                override.roman, override.function, override.key_context,
-                override.is_pivot, override.pivot_to_key, override.notes,
-            ),
+        # HM47 BUG-049: look up the chord's 0-based position so chord_index is unique
+        # per chord (not a shared -1 sentinel that violates UQ_ChordOverride)
+        chord_pos = db.execute_scalar(
+            """SELECT pos FROM (
+                 SELECT c.id,
+                        ROW_NUMBER() OVER (
+                            ORDER BY s.section_order, m.measure_number, c.chord_order
+                        ) - 1 AS pos
+                 FROM Chords c
+                 JOIN Measures m ON c.measure_id = m.id
+                 JOIN Sections s ON m.section_id = s.id
+                 WHERE s.song_id = ?
+               ) ranked
+               WHERE id = ?""",
+            (song_id, chord_id),
         )
+        use_chord_index = chord_pos if chord_pos is not None else -1
+        # If chord_index slot already taken by a positional record, try update it
+        existing_at_pos = db.execute_scalar(
+            "SELECT COUNT(*) FROM ChordAnalysisOverrides WHERE song_id = ? AND chord_index = ?",
+            (song_id, use_chord_index),
+        ) if use_chord_index >= 0 else 0
+        if existing_at_pos:
+            db.execute_non_query(
+                """UPDATE ChordAnalysisOverrides
+                   SET chord_id = ?, roman_override = ?, function_override = ?,
+                       key_context_override = ?, is_pivot_chord = ?, pivot_to_key = ?,
+                       notes = ?, updated_at = GETDATE()
+                   WHERE song_id = ? AND chord_index = ?""",
+                (
+                    chord_id,
+                    override.roman, override.function, override.key_context,
+                    override.is_pivot, override.pivot_to_key, override.notes,
+                    song_id, use_chord_index,
+                ),
+            )
+        else:
+            db.execute_non_query(
+                """INSERT INTO ChordAnalysisOverrides
+                       (song_id, chord_id, chord_index, roman_override, function_override,
+                        key_context_override, is_pivot_chord, pivot_to_key, notes)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    song_id, chord_id, use_chord_index,
+                    override.roman, override.function, override.key_context,
+                    override.is_pivot, override.pivot_to_key, override.notes,
+                ),
+            )
     return {"status": "updated", "chord_id": chord_id}
 
 
@@ -1872,23 +2094,44 @@ async def create_key_region(
     if not song_exists:
         raise HTTPException(status_code=404, detail="Song not found")
 
-    try:
-        new_id = db.execute_insert(
-            """INSERT INTO KeyRegions
-                   (song_id, start_chord_index, end_chord_index, key_center,
-                    transition_type, pivot_chord_index, notes, is_user_defined)
-               OUTPUT INSERTED.id
-               VALUES (?, ?, ?, ?, ?, ?, ?, 1)""",
+    # HM47 BUG-049: Upsert to handle re-runs — UQ_KeyRegion (song_id, start_chord_index)
+    existing_id = db.execute_scalar(
+        "SELECT id FROM KeyRegions WHERE song_id = ? AND start_chord_index = ?",
+        (song_id, body.start_chord_index),
+    )
+    if existing_id:
+        # Update existing region (idempotent re-run)
+        db.execute_non_query(
+            """UPDATE KeyRegions
+               SET end_chord_index = ?, key_center = ?,
+                   transition_type = ?, pivot_chord_index = ?, notes = ?,
+                   is_user_defined = 1
+               WHERE id = ?""",
             (
-                song_id, body.start_chord_index, body.end_chord_index,
-                body.key_center, body.transition_type, body.pivot_chord_index, body.notes,
+                body.end_chord_index, body.key_center,
+                body.transition_type, body.pivot_chord_index, body.notes,
+                existing_id,
             ),
         )
-    except Exception as kr_exc:
-        logger.error("KeyRegion insert failed song_id=%s: %s", song_id, kr_exc)
-        raise HTTPException(status_code=500, detail=f"Failed to create key region: {kr_exc}")
-    if not new_id:
-        raise HTTPException(status_code=500, detail="Failed to create key region")
+        new_id = existing_id
+    else:
+        try:
+            new_id = db.execute_insert(
+                """INSERT INTO KeyRegions
+                       (song_id, start_chord_index, end_chord_index, key_center,
+                        transition_type, pivot_chord_index, notes, is_user_defined)
+                   OUTPUT INSERTED.id
+                   VALUES (?, ?, ?, ?, ?, ?, ?, 1)""",
+                (
+                    song_id, body.start_chord_index, body.end_chord_index,
+                    body.key_center, body.transition_type, body.pivot_chord_index, body.notes,
+                ),
+            )
+        except Exception as kr_exc:
+            logger.error("KeyRegion insert failed song_id=%s: %s", song_id, kr_exc)
+            raise HTTPException(status_code=500, detail=f"Failed to create key region: {kr_exc}")
+        if not new_id:
+            raise HTTPException(status_code=500, detail="Failed to create key region")
 
     rows = db.execute_query(
         "SELECT id, song_id, start_chord_index, end_chord_index, key_center, "

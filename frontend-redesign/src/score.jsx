@@ -346,20 +346,28 @@ export function RightRail({ open, song, flatChords, onClose, onJumpToChord, onOp
    BottomAnalysis — patterns + phrases + full key timeline
    --------------------------------------------------------------------- */
 export function BottomAnalysis({ song }) {
+  // HM47 BUG-051: suppress key-center timeline when no chord analysis (confidence=0 / no chords)
+  const hasChordData = song.confidence > 0 && (song.sections || []).some(s => (s.measures || []).some(m => (m.chords || []).length > 0));
   const total = song.keyRegions.reduce((a, r) => a + r.weight, 0);
   return (
     <section className="hl-bottom-analysis">
       <div className="hl-ba-card">
         <div className="tiny upper" style={{ color: "var(--amber)" }}>Key-center timeline</div>
-        <div style={{ display: "flex", height: 26, border: "1px solid var(--line)", borderRadius: 4, overflow: "hidden", marginTop: 8 }}>
-          {song.keyRegions.map((r, i) => {
-            const kvar = "--k-" + (hlKeyCss(r.key).replace("k-","") || "C");
-            return (
-              <div key={i} style={{ flex: r.weight, display: "flex", alignItems: "center", justifyContent: "center", background: `color-mix(in oklch, var(${kvar}) 22%, var(--bg-1))`, color: `var(${kvar})`, fontFamily: "var(--t-mono)", fontSize: 10, padding: "0 6px", overflow: "hidden", whiteSpace: "nowrap" }}>{r.key}</div>
-            );
-          })}
-        </div>
-        <div className="tiny" style={{ marginTop: 6, color: "var(--ink-3)" }}>{song.keyRegions.length - 1} modulation{song.keyRegions.length > 2 ? "s" : ""} · {song.keyRegions.filter(r => r.isUserDefined).length} user-defined</div>
+        {!hasChordData ? (
+          <div className="tiny" style={{ color: "var(--ink-3)", marginTop: 8 }}>No chord analysis — key center unavailable.</div>
+        ) : (
+          <>
+            <div style={{ display: "flex", height: 26, border: "1px solid var(--line)", borderRadius: 4, overflow: "hidden", marginTop: 8 }}>
+              {song.keyRegions.map((r, i) => {
+                const kvar = "--k-" + (hlKeyCss(r.key).replace("k-","") || "C");
+                return (
+                  <div key={i} style={{ flex: r.weight, display: "flex", alignItems: "center", justifyContent: "center", background: `color-mix(in oklch, var(${kvar}) 22%, var(--bg-1))`, color: `var(${kvar})`, fontFamily: "var(--t-mono)", fontSize: 10, padding: "0 6px", overflow: "hidden", whiteSpace: "nowrap" }}>{r.key}</div>
+                );
+              })}
+            </div>
+            <div className="tiny" style={{ marginTop: 6, color: "var(--ink-3)" }}>{song.keyRegions.length - 1} modulation{song.keyRegions.length > 2 ? "s" : ""} · {song.keyRegions.filter(r => r.isUserDefined).length} user-defined</div>
+          </>
+        )}
       </div>
       <div className="hl-ba-card">
         <div className="tiny upper" style={{ color: "var(--amber)" }}>Detected patterns · {song.patterns.length}</div>
@@ -449,13 +457,27 @@ export function ScoreWorkbench({ song, selectedChordIds, selectedChords, editing
           {systems.length === 0 ? (
             <div style={{ padding: "48px 24px", textAlign: "center", color: "var(--ink-3)" }}>
               <div style={{ fontSize: 32, marginBottom: 12 }}>♩</div>
-              <div style={{ fontFamily: "var(--t-display)", fontStyle: "italic", fontSize: 18, marginBottom: 8, color: "var(--ink-2)" }}>
-                Note data only — no chord symbols found
-              </div>
-              <div className="tiny" style={{ color: "var(--ink-3)" }}>
-                This file contains {song.hasNoteData ? "melody/note data" : "no musical data"} but no chord analysis.
-                Re-import with a lead sheet (chords + notes) or a MIDI file to enable harmony analysis.
-              </div>
+              {song.hasNoteData ? (
+                <>
+                  <div style={{ fontFamily: "var(--t-display)", fontStyle: "italic", fontSize: 18, marginBottom: 8, color: "var(--ink-2)" }}>
+                    Notes present — harmony derivation in progress
+                  </div>
+                  <div className="tiny" style={{ color: "var(--ink-3)" }}>
+                    This file contains melody/note data. Chord symbols are being derived from the note content.
+                    Use Re-analyze to trigger harmonic analysis from notes.
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontFamily: "var(--t-display)", fontStyle: "italic", fontSize: 18, marginBottom: 8, color: "var(--ink-2)" }}>
+                    No chord symbols found
+                  </div>
+                  <div className="tiny" style={{ color: "var(--ink-3)" }}>
+                    No musical data found for this song.
+                    Re-import with a lead sheet (chords + notes) or a MIDI file to enable harmony analysis.
+                  </div>
+                </>
+              )}
             </div>
           ) : systems.map((sys, i) => (
             <ScoreSystem

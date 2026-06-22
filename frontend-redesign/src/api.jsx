@@ -161,7 +161,7 @@ export function transformChord(c, measureNumber, keyRegions, overrideMap) {
     function: ov?.function_override || c.function || c.function_label || "—",
     keyCenter: normKeyCenter(c.key_context || c.key_center) || keyCenterForMeasure(keyRegions, measureNumber),
     voicing: c.voicing_notation || "",
-    comment: c.comments || "",
+    comment: c.comments || c.notes || "",  // HM47 BUG-049: notes field from overrides
     isInferred: !!(c.is_inferred),
     isManualEdit: !!c.is_manual_edit,
     hasOverride: !!ov,
