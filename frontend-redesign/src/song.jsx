@@ -276,6 +276,13 @@ export function SongDetail({ song: initialSong, route, onNavigate, toast, prefs 
   const [reanalyzing, setReanalyzing] = useStateS(false);
   const [showColors, setShowColors] = useStateS(true);
   const [chordMode, setChordMode] = useStateS(prefs.chordMode || "jazz"); // jazz|plain
+
+  // HM46 BUG-048: Keep chordMode in sync with prefs (so navigating back after settings save works)
+  useEffectS(() => {
+    if (prefs.chordMode && prefs.chordMode !== chordMode) {
+      setChordMode(prefs.chordMode);
+    }
+  }, [prefs.chordMode]);
   const [grouping, setGrouping] = useStateS("8bar");
   const [confirmReanalyze, setConfirmReanalyze] = useStateS(false);
   const [aiKeyDialogOpen, setAiKeyDialogOpen] = useStateS(false);
@@ -409,14 +416,14 @@ export function SongDetail({ song: initialSong, route, onNavigate, toast, prefs 
         await api.fetcher(`/api/v1/chords/${chord.id}`, {
           method: "PUT",
           body: JSON.stringify({
-            measure_id: chord.measureId || chord.measure_id || 1,
-            beat_position: chord.beatPosition || chord.beat_position || 1.0,
+            measure_id: chord.measureId ?? chord.measure_id,
+            beat_position: chord.beatPosition ?? chord.beat_position ?? 1.0,
             chord_symbol: values.symbol,
             roman_numeral: values.roman,
             key_center: chord.keyCenter || chord.key_center || null,
             function_label: values.func,
             comments: values.comment || null,
-            chord_order: chord.chordOrder || chord.chord_order || 1,
+            chord_order: chord.chordOrder ?? chord.chord_order ?? 0,
             voicing_notation: values.voicing || null,
           }),
         });
@@ -625,6 +632,7 @@ export function SongDetail({ song: initialSong, route, onNavigate, toast, prefs 
         onCloseRail={() => setRightRailOpen(false)}
         onJumpToChord={(c) => { setEditingChordId(c.id); }}
         onOpenChat={() => setChatOpen(true)}
+        chordMode={chordMode}
       />
 
       {/* edit popover */}

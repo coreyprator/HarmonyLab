@@ -22,7 +22,7 @@ from app.middleware.session_auth import SessionAuthMiddleware
 
 logger = logging.getLogger(__name__)
 
-VERSION = "2.52.1"  # BUG-044: wire APP_PASSPHRASE + APP_SECRET_KEY secrets; copy redesign.css to dist
+VERSION = "2.53.0"  # HM46: write-500 fix, BUG-047/048/050 fixes, Phase 4 re-sweep
 
 app = FastAPI(
     title="Harmony Lab API",

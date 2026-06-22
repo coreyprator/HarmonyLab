@@ -446,7 +446,18 @@ export function ScoreWorkbench({ song, selectedChordIds, selectedChords, editing
       {/* the score */}
       <div className={"hl-score" + (rightRailOpen ? " has-rail" : "")}>
         <div className="hl-score-body">
-          {systems.map((sys, i) => (
+          {systems.length === 0 ? (
+            <div style={{ padding: "48px 24px", textAlign: "center", color: "var(--ink-3)" }}>
+              <div style={{ fontSize: 32, marginBottom: 12 }}>♩</div>
+              <div style={{ fontFamily: "var(--t-display)", fontStyle: "italic", fontSize: 18, marginBottom: 8, color: "var(--ink-2)" }}>
+                Note data only — no chord symbols found
+              </div>
+              <div className="tiny" style={{ color: "var(--ink-3)" }}>
+                This file contains {song.hasNoteData ? "melody/note data" : "no musical data"} but no chord analysis.
+                Re-import with a lead sheet (chords + notes) or a MIDI file to enable harmony analysis.
+              </div>
+            </div>
+          ) : systems.map((sys, i) => (
             <ScoreSystem
               key={i}
               system={sys}

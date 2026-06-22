@@ -439,6 +439,8 @@ async def get_analysis(
             result = _enrich_secondary_dominants(result)
             # HL-044: Apply transition chord annotations (tritone subs, dim passing)
             result = _enrich_transition_chords(result)
+            # HM46 BUG-047: Enrich cached chord IDs from DB (cache may predate HM44.1 id enrichment)
+            result = _enrich_chord_ids(result, song_id, db)
             return _apply_overrides(result, song_id, db)
 
     # Verify song exists
@@ -983,6 +985,33 @@ async def revert_rlhf(
         "message": "Reverted to algorithm analysis.",
         "analysis": result,
     }
+
+
+def _enrich_chord_ids(result: dict, song_id: int, db: DatabaseConnection) -> dict:
+    """HM46 BUG-047: Backfill id/measure_id onto cached chords (HM44.1 enrichment may be absent).
+    Maps by position (chord index) from the Chords table ordered the same way as the analysis."""
+    chords_in_result = result.get('chords', [])
+    if not chords_in_result:
+        return result
+    # Check if already enriched (skip if first chord has a non-None id)
+    if chords_in_result[0].get('id') is not None:
+        return result
+    try:
+        rows = db.execute_query("""
+            SELECT c.id, c.measure_id
+            FROM Chords c
+            JOIN Measures m ON c.measure_id = m.id
+            JOIN Sections s ON m.section_id = s.id
+            WHERE s.song_id = ?
+            ORDER BY s.section_order, m.measure_number, c.chord_order
+        """, (song_id,))
+        for i, ch in enumerate(chords_in_result):
+            if i < len(rows):
+                ch['id'] = rows[i].get('id')
+                ch['measure_id'] = rows[i].get('measure_id')
+    except Exception:
+        pass
+    return result
 
 
 def _enrich_note_counts(result: dict, song_id: int, db: DatabaseConnection) -> dict:

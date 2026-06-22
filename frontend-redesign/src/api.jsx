@@ -137,9 +137,24 @@ export function transformChord(c, measureNumber, keyRegions, overrideMap) {
   const ov = overrideMap.get(c.index ?? c.chord_index) || overrideMap.get(c.id);
   const rawRoman = ov?.roman_override || c.roman || c.roman_numeral || "";
   const split = splitRoman(rawRoman);
+  // HM46 BUG-048: Normalize MuseScore notation to standard
+  // MuseScore uses '-' for minor (G-7 → Gm7), '^' or 't' for major7 (C^7 → Cmaj7)
+  const normalizeSymbol = (sym) => {
+    if (!sym) return sym;
+    // Replace MuseScore major-7 '^' → 'maj' (e.g. C^7 → Cmaj7)
+    sym = sym.replace(/\^(\d)/g, 'maj$1');
+    // Replace MuseScore 't' triangle → 'maj' when followed by a digit (Ct7 → Cmaj7)
+    sym = sym.replace(/([A-Ga-g][b#]?)t(\d)/g, '$1maj$2');
+    // Replace MuseScore '-' minor → 'm' (e.g. G-7 → Gm7, D- → Dm)
+    // Only when '-' directly follows root (A-G, optionally followed by # or b)
+    sym = sym.replace(/^([A-G][#b]?)-/, '$1m');
+    return sym;
+  };
+  const rawSym = ov ? (c.chord_symbol_override || c.symbol || c.chord_symbol || "?") : (c.symbol || c.chord_symbol || "?");
+  const normalizedSym = normalizeSymbol(rawSym);
   return {
     id: c.id,
-    symbol: c.chord_symbol_override || c.symbol || c.chord_symbol || "?",
+    symbol: normalizedSym,
     roman: split.roman,
     superscript: split.superscript,
     romanCase: split.romanCase,
@@ -154,6 +169,10 @@ export function transformChord(c, measureNumber, keyRegions, overrideMap) {
     beat: c.beat || c.beat_position || 1.0,
     chordIndex: c.index ?? c.chord_index ?? 0,
     measureNumber,
+    // HM46: fields needed by onCommitEdit to reconstruct PUT /chords/{id} payload
+    measureId: c.measure_id ?? null,
+    beatPosition: c.beat || c.beat_position || 1.0,
+    chordOrder: c.chord_order ?? c.index ?? 0,
   };
 }
 
