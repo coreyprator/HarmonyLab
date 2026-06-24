@@ -22,7 +22,7 @@ from app.middleware.session_auth import SessionAuthMiddleware
 
 logger = logging.getLogger(__name__)
 
-VERSION = "2.54.0"  # HM47: BUG-049/051 write integrity, BUG-050 auto-derive harmony, Phase 4 runner fixes
+VERSION = "2.55.0"  # HM48: BUG-049 CATCH-4/ENTER_SAVES, BUG-050 is_inferred, BUG-051 Notes tab
 
 app = FastAPI(
     title="Harmony Lab API",
@@ -126,7 +126,7 @@ async def health_check():
         "service": "harmonylab",
         "component": "backend",
         "version": VERSION,
-        "canary": "LEMON-BUG044"
+        "canary": "PINEAPPLE-HM48"
     }
 
 

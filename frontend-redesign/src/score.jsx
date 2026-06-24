@@ -19,7 +19,7 @@
    ===================================================================== */
 
 import React from 'react';
-import { hlFlattenChords, hlKeyCss } from './api.jsx';
+import { hlFlattenChords, hlKeyCss, useApi } from './api.jsx';
 import { ChordCell, AIKeyCenterDialog } from './components.jsx';
 
 const { useState: useStateZ, useMemo: useMemoZ, useRef: useRefZ, useEffect: useEffectZ } = React;
@@ -275,6 +275,15 @@ export function SyntheticStaff({ measures }) {
    --------------------------------------------------------------------- */
 export function RightRail({ open, song, flatChords, onClose, onJumpToChord, onOpenChat }) {
   const [tab, setTab] = useStateZ("comments");
+  // HM48 BUG-051: Notes tab
+  const api = useApi();
+  const [notes, setNotes] = useStateZ(null);
+  useEffectZ(() => {
+    if (tab !== "notes" || notes !== null || !open) return;
+    api.fetcher(`/api/v1/songs/${song.id}/notes`)
+      .then(data => setNotes(Array.isArray(data) ? data : (data.notes || [])))
+      .catch(() => setNotes([]));
+  }, [tab, song.id, open]);
   if (!open) return null;
   const commented = flatChords.filter(c => c.comment);
   const edited = flatChords.filter(c => c.isManualEdit);
@@ -288,6 +297,7 @@ export function RightRail({ open, song, flatChords, onClose, onJumpToChord, onOp
         <button className={tab === "comments" ? "is-on" : ""} onClick={() => setTab("comments")}>Comments <span className="tiny">{commented.length}</span></button>
         <button className={tab === "exchanges" ? "is-on" : ""} onClick={() => setTab("exchanges")}>AI exchanges <span className="tiny">{(song.aiExchanges || []).length}</span></button>
         <button className={tab === "overrides" ? "is-on" : ""} onClick={() => setTab("overrides")}>Overrides <span className="tiny">{edited.length}</span></button>
+        <button className={tab === "notes" ? "is-on" : ""} onClick={() => setTab("notes")}>Notes {song.hasNotes && <span className="tiny">●</span>}</button>
       </div>
       <div className="hl-rail-body">
         {tab === "comments" && (commented.length === 0
@@ -336,6 +346,22 @@ export function RightRail({ open, song, flatChords, onClose, onJumpToChord, onOp
                   {c.voicing && <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--ink-blue)", fontFamily: "var(--t-mono)" }}>voicing: {c.voicing}</p>}
                 </div>
               ))
+        )}
+        {tab === "notes" && (
+          notes === null
+            ? <div className="tiny" style={{ color: "var(--ink-3)", padding: 14 }}>Loading notes…</div>
+            : notes.length === 0
+              ? <div className="tiny" style={{ color: "var(--ink-3)", padding: 14 }}>No note data for this song.</div>
+              : <div className="hl-notes-list" style={{ padding: 8 }}>
+                  {notes.slice(0, 200).map((n, i) => (
+                    <div key={i} className="hl-note-row" style={{ display: "flex", gap: 8, padding: "3px 6px", fontSize: 12, fontFamily: "var(--t-mono)", color: "var(--ink-1)", borderBottom: "1px solid var(--line)" }}>
+                      <span style={{ color: "var(--ink-3)", minWidth: 32 }}>m.{n.measure_number}</span>
+                      <span style={{ color: "var(--amber)", minWidth: 28 }}>{n.note_name || "M" + n.midi_note}</span>
+                      <span style={{ color: "var(--ink-2)" }}>beat {n.beat_position}</span>
+                    </div>
+                  ))}
+                  {notes.length > 200 && <div className="tiny" style={{ color: "var(--ink-3)", padding: 8 }}>{notes.length - 200} more rows…</div>}
+                </div>
         )}
       </div>
     </aside>

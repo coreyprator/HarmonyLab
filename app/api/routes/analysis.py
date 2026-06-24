@@ -596,13 +596,46 @@ async def get_analysis(
     # Include measure_number and beat_position for granularity context
     chords = db.execute_query("""
         SELECT c.id, c.chord_symbol, c.measure_id, m.measure_number, c.beat_position, c.chord_order,
-               s.name as section_name, c.comments
+               s.name as section_name, c.comments,
+               COALESCE(c.is_inferred, 0) AS is_inferred
         FROM Chords c
         JOIN Measures m ON c.measure_id = m.id
         JOIN Sections s ON m.section_id = s.id
         WHERE s.song_id = ?
         ORDER BY s.section_order, m.measure_number, c.chord_order
     """, (song_id,))
+
+    # HM48 BUG-050 BACKFILL: existing auto-derived chords may have is_inferred=NULL
+    # (stored before the HM48 INSERT fix). Backfill them to is_inferred=1 on first access.
+    if chords and not any(c.get('is_inferred') for c in chords):
+        try:
+            note_count = db.execute_scalar(
+                "SELECT COUNT(*) FROM song_notes WHERE song_id = ? AND is_rest = 0",
+                (song_id,))
+            if (note_count or 0) > 0:
+                db.execute_non_query(
+                    "UPDATE Chords SET is_inferred = 1 "
+                    "WHERE (is_inferred IS NULL OR is_inferred = 0) "
+                    "AND measure_id IN ("
+                    "  SELECT m.id FROM Measures m "
+                    "  JOIN Sections s ON m.section_id = s.id "
+                    "  WHERE s.song_id = ?"
+                    ")",
+                    (song_id,))
+                chords = db.execute_query("""
+                    SELECT c.id, c.chord_symbol, c.measure_id, m.measure_number,
+                           c.beat_position, c.chord_order, s.name as section_name, c.comments,
+                           COALESCE(c.is_inferred, 0) AS is_inferred
+                    FROM Chords c
+                    JOIN Measures m ON c.measure_id = m.id
+                    JOIN Sections s ON m.section_id = s.id
+                    WHERE s.song_id = ?
+                    ORDER BY s.section_order, m.measure_number, c.chord_order
+                """, (song_id,))
+                logger.info("HM48: Backfilled is_inferred=1 for %d chords in note-only song %s",
+                            len(chords), song_id)
+        except Exception as e:
+            logger.debug("HM48 is_inferred backfill failed: %s", e)
 
     if not chords:
         # HM47 BUG-051: detect note data even when no chords — needed for correct empty-state UI
@@ -630,7 +663,8 @@ async def get_analysis(
                 # Re-query chords now that we have derived ones
                 chords = db.execute_query("""
                     SELECT c.id, c.chord_symbol, c.measure_id, m.measure_number,
-                           c.beat_position, c.chord_order, s.name as section_name, c.comments
+                           c.beat_position, c.chord_order, s.name as section_name, c.comments,
+                           COALESCE(c.is_inferred, 0) AS is_inferred
                     FROM Chords c
                     JOIN Measures m ON c.measure_id = m.id
                     JOIN Sections s ON m.section_id = s.id
@@ -747,6 +781,8 @@ async def get_analysis(
                 ch['measure_id'] = chords[i].get('measure_id')
                 if chords[i].get('comments'):
                     ch['comments'] = chords[i]['comments']  # HM47: persist comment read-back
+                # HM48 BUG-050: expose is_inferred so FE can render inferred styling
+                ch['is_inferred'] = bool(chords[i].get('is_inferred', 0))
 
             # HL-006D: Detect rootless voicing for MIDI algorithm chords
             ch['is_rootless'] = False
@@ -881,6 +917,45 @@ async def get_analysis(
         """, (song_id, analysis_json, detected_key, confidence))
 
     return _apply_overrides(result, song_id, db)
+
+
+@router.post("/songs/{song_id}/manual-key")
+async def set_manual_key(
+    song_id: int,
+    request: AnalysisRequest,
+    db: DatabaseConnection = Depends(get_db)
+):
+    """HM48 BUG-049 CATCH-4: Set or clear manual key override (lightweight — no full re-analysis)."""
+    # Verify song exists
+    song_row = db.execute_query("SELECT id, original_key FROM Songs WHERE id = ?", (song_id,))
+    if not song_row:
+        raise HTTPException(status_code=404, detail="Song not found")
+
+    exists = db.execute_scalar(
+        "SELECT COUNT(*) FROM SongAnalysis WHERE song_id = ?", (song_id,)
+    )
+    if exists > 0:
+        db.execute_non_query("""
+            UPDATE SongAnalysis
+            SET manual_key_override = ?, updated_at = GETDATE()
+            WHERE song_id = ?
+        """, (request.key_override, song_id))
+    else:
+        db.execute_non_query("""
+            INSERT INTO SongAnalysis (song_id, manual_key_override)
+            VALUES (?, ?)
+        """, (song_id, request.key_override))
+
+    detected_key = db.execute_scalar(
+        "SELECT COALESCE(detected_key, original_key) FROM SongAnalysis sa "
+        "LEFT JOIN Songs s ON s.id = sa.song_id WHERE sa.song_id = ?",
+        (song_id,)
+    ) or song_row[0].get('original_key') or 'C'
+    return {
+        "song_id": song_id,
+        "manual_key_override": request.key_override,
+        "detected_key": detected_key,
+    }
 
 
 @router.post("/songs/{song_id}")
@@ -1171,16 +1246,15 @@ async def revert_rlhf(
 
 def _enrich_chord_ids(result: dict, song_id: int, db: DatabaseConnection) -> dict:
     """HM46 BUG-047: Backfill id/measure_id onto cached chords (HM44.1 enrichment may be absent).
+    HM48 BUG-050: Always refresh is_inferred from DB (cache may predate is_inferred column).
     Maps by position (chord index) from the Chords table ordered the same way as the analysis."""
     chords_in_result = result.get('chords', [])
     if not chords_in_result:
         return result
-    # Check if already enriched (skip if first chord has a non-None id)
-    if chords_in_result[0].get('id') is not None:
-        return result
+    # Always query DB so is_inferred is always fresh (HM48 fix — do NOT early-return on id)
     try:
         rows = db.execute_query("""
-            SELECT c.id, c.measure_id, c.comments
+            SELECT c.id, c.measure_id, c.comments, COALESCE(c.is_inferred, 0) AS is_inferred
             FROM Chords c
             JOIN Measures m ON c.measure_id = m.id
             JOIN Sections s ON m.section_id = s.id
@@ -1189,10 +1263,14 @@ def _enrich_chord_ids(result: dict, song_id: int, db: DatabaseConnection) -> dic
         """, (song_id,))
         for i, ch in enumerate(chords_in_result):
             if i < len(rows):
-                ch['id'] = rows[i].get('id')
-                ch['measure_id'] = rows[i].get('measure_id')
-                if rows[i].get('comments'):
-                    ch['comments'] = rows[i]['comments']  # HM47: persist comment read-back
+                # HM48: always refresh is_inferred (cached value may be stale)
+                ch['is_inferred'] = bool(rows[i].get('is_inferred', 0))
+                # HM46: only set id/measure_id when missing (avoid overwriting live-path values)
+                if ch.get('id') is None:
+                    ch['id'] = rows[i].get('id')
+                    ch['measure_id'] = rows[i].get('measure_id')
+                    if rows[i].get('comments'):
+                        ch['comments'] = rows[i]['comments']  # HM47: persist comment read-back
     except Exception:
         pass
     return result

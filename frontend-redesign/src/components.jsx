@@ -151,10 +151,12 @@ export function ChordPicker({ value, onChange, onCommit, invalid }) {
     return () => document.removeEventListener("mousedown", onDoc);
   }, [open]);
 
-  const pick = (cand) => {
+  const pick = (cand, autoCommit = false) => {
     onChange(cand.symbol);
     setOpen(false);
     setFilter("");
+    // HM48 BUG-049 ENTER_SAVES: pass new symbol directly to avoid stale-state
+    if (autoCommit && onCommit) onCommit(cand.symbol);
   };
 
   const onKey = (e) => {
@@ -166,7 +168,8 @@ export function ChordPicker({ value, onChange, onCommit, invalid }) {
       else if (e.key === "ArrowUp") { e.preventDefault(); setHi(h => Math.max(h - 1, 0)); }
       else if (e.key === "Enter") {
         e.preventDefault();
-        if (candidates[hi]) pick(candidates[hi]);
+        e.stopPropagation(); // HM48: prevent bubbling to ChordEditPopover with stale symbol
+        if (candidates[hi]) pick(candidates[hi], true); // autoCommit=true: pass new sym
         else if (onCommit) onCommit();
       }
       else if (e.key === "Escape") { setOpen(false); e.preventDefault(); }
@@ -294,7 +297,12 @@ export function ChordEditPopover({ chord, anchorRect, onCommit, onCancel }) {
         <ChordPicker
           value={symbol}
           onChange={setSymbol}
-          onCommit={() => !invalid && onCommit({ symbol, roman, func, voicing, comment })}
+          onCommit={(newSym) => {
+            // HM48 ENTER_SAVES: use passed symbol (fresh) if provided, else fall back to state
+            const effectiveSym = (typeof newSym === 'string') ? newSym : symbol;
+            if (!/^[A-G]/.test(effectiveSym.trim())) return;
+            onCommit({ symbol: effectiveSym, roman, func, voicing, comment });
+          }}
           invalid={invalid}
         />
       </div>
@@ -369,6 +377,7 @@ export function KeyPopover({ detected, manual, onPick, onClear, onClose }) {
         <button
           key={k}
           className="btn"
+          data-key={k}
           style={{
             height: 32, fontSize: 12, padding: 0,
             borderColor: manual === k ? "var(--amber)" : "var(--line)",
@@ -384,6 +393,7 @@ export function KeyPopover({ detected, manual, onPick, onClear, onClose }) {
             <button
               key={rel}
               className="btn"
+              data-key={rel}
               style={{
                 height: 32, fontSize: 12, padding: 0,
                 borderColor: manual === rel ? "var(--amber)" : "var(--line)",

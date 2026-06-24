@@ -520,19 +520,29 @@ export function SongDetail({ song: initialSong, route, onNavigate, toast, prefs 
     setKeyOpen(false);
     setReanalyzing(true);
     try {
-      await api.fetcher(`/api/v1/analysis/songs/${song.id}`, {
+      // HM48 BUG-049 CATCH-4: dedicated /manual-key endpoint (no full re-analysis)
+      await api.fetcher(`/api/v1/analysis/songs/${song.id}/manual-key`, {
         method: "POST",
         body: JSON.stringify({ key_override: k }),
       });
       setSong((s) => ({ ...s, manualKeyOverride: k }));
-      toast(`Manual key set \u00b7 ${k}`, { meta: `POST /analysis/songs/${song.id} \u00b7 200` });
+      toast(`Manual key set \u00b7 ${k}`, { meta: `POST /analysis/songs/${song.id}/manual-key \u00b7 200` });
     } catch (e) {
       toast(`Set key failed: ${e.message}`, { level: "error" });
     } finally {
       setReanalyzing(false);
     }
   };
-  const onClearManualKey = () => {
+  const onClearManualKey = async () => {
+    try {
+      // HM48 BUG-049: persist clear to backend
+      await api.fetcher(`/api/v1/analysis/songs/${song.id}/manual-key`, {
+        method: "POST",
+        body: JSON.stringify({ key_override: null }),
+      });
+    } catch (_e) {
+      // non-fatal: update local state regardless
+    }
     setSong((s) => ({ ...s, manualKeyOverride: null }));
     setKeyOpen(false);
     toast(`Manual key cleared · using detected ${song.detectedKey}`);
@@ -600,7 +610,7 @@ export function SongDetail({ song: initialSong, route, onNavigate, toast, prefs 
             <span className="pill"><span style={{ color: "var(--ink-3)" }}>conf</span> {song.confidence}</span>
             <span className="pill">{song.form} · {song.measureCount} bars</span>
             {song.overrideCount > 0 && <span className="pill" style={{ borderColor: "var(--ink-blue)", color: "var(--ink-blue)" }}>{song.overrideCount} override{song.overrideCount > 1 ? "s" : ""}</span>}
-            <button className="btn btn--ghost btn--sm" onClick={() => setKeyOpen((o) => !o)}>✎ key</button>
+            <button className="btn btn--ghost btn--sm" data-testid="key-edit-btn" onClick={() => setKeyOpen((o) => !o)}>✎ key</button>
             <button className="btn btn--sm" onClick={() => setConfirmReanalyze(true)} disabled={reanalyzing}>{reanalyzing ? "Analyzing…" : "↻ Re-analyze"}</button>
           </div>
         </div>

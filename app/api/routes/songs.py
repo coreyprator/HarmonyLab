@@ -4,7 +4,7 @@ Songs API Routes
 CRUD operations for songs.
 """
 from typing import List
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from fastapi.responses import Response
 from app.models import Song, SongCreate, SongUpdate
 from app.db.connection import DatabaseConnection, get_db
@@ -152,7 +152,7 @@ async def update_song(
 
 @router.delete("/bulk/delete")
 async def bulk_delete_songs(
-    song_ids: List[int],
+    song_ids: List[int] = Query(..., description="Song IDs to delete"),
     db: DatabaseConnection = Depends(get_db)
 ):
     """Delete multiple songs at once. Returns count of deleted songs."""
