@@ -126,7 +126,7 @@ steps:
         python ingest_code.py --app hl --repo-root . --sha fc7f671c11acc8e762804bc32ae0170fcf023e61 --trigger-src cloudbuild
         echo "MP132: ingest completed for harmonylab sha=fc7f671c11acc8e762804bc32ae0170fcf023e61"
     env:
-      - 'DB_HOST=35.224.242.223'
+      - 'DB_HOST=$_DB_HOST'
     secretEnv: ['DB_PASSWORD']
     waitFor: ['hardengate']
 

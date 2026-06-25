@@ -190,7 +190,7 @@ print('\n'.join(e.get('name','') for e in envs))
         python ingest_code.py --app hl --repo-root . --sha $COMMIT_SHA --trigger-src cloudbuild
         echo "MP132: ingest completed for hl sha=$COMMIT_SHA"
     env:
-      - 'DB_HOST=35.224.242.223'
+      - 'DB_HOST=$_DB_HOST'
     secretEnv: ['DB_PASSWORD']
     id: 'ingest'
     waitFor: ['hardengate']
