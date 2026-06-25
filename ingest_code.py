@@ -309,7 +309,7 @@ def main():
     parser.add_argument("--force", action="store_true", help="MP102: Bypass idempotency guard and re-ingest even if success row exists")
     args = parser.parse_args()
 
-    db_host = os.environ.get("DB_HOST", "35.224.242.223")
+    db_host = os.environ.get("DB_HOST")  # Must be set via env; no hardcoded fallback
     db_password = os.environ.get("DB_PASSWORD", "")
 
     if not db_password:

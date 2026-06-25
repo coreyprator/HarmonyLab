@@ -97,7 +97,7 @@ jobs:
           python ingest_code.py --app hl --repo-root . --sha $(git rev-parse --short HEAD) || exit 1
         env:
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          DB_HOST: 35.224.242.223
+          DB_HOST: ${{ secrets.DB_HOST }}
 
       - name: Deployment Summary
         run: |
