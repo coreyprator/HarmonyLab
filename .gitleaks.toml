@@ -1,0 +1,20 @@
+# .gitleaks.toml â€” SEC1 configuration
+# Extends default gitleaks ruleset. Blocks the known DB host IP as a custom rule.
+title = "portfolio gitleaks config"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "db-host-ip"
+description = "Hardcoded Cloud SQL public IP â€” source from env var or Secret Manager instead"
+regex = '''35\.224\.242\.223'''
+tags = ["security", "database"]
+
+[allowlist]
+description = "Allow IP in existing docs and history (purge handled separately)"
+paths = [
+  '''\.md$''',
+  '''\.txt$''',
+  '''\.json$'''
+]
