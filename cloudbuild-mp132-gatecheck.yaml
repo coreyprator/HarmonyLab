@@ -1,0 +1,147 @@
+steps:
+  # MP132 BV-13: Gate-check redeploy (same image, no docker rebuild)
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'harmonylab'
+      - '--image'
+      - 'gcr.io/super-flashcards-475210/harmonylab:20e82a24607cdb409245c5fd66740be98442d004'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+    id: 'deploy'
+
+  # MP132 BV-13: Post-deploy hardening gate
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        SERVICE="harmonylab"
+        REQUIRED="GIT_SHA,DB_SERVER,DB_NAME,DB_USER,DB_PASSWORD,ANTHROPIC_API_KEY,APP_PASSPHRASE,APP_SECRET_KEY"
+        echo "[HARDENGATE] Post-deploy state check: service=$$SERVICE sha=fc7f671c11acc8e762804bc32ae0170fcf023e61"
+        ENV_JSON=$(gcloud run services describe "$$SERVICE" \
+          --region=us-central1 \
+          --format="json(spec.template.spec.containers[0].env)")
+        PRESENT=$(echo "$$ENV_JSON" | python3 -c "
+        import json,sys
+        d=json.load(sys.stdin)
+        envs=(d.get('spec') or {}).get('template',{}).get('spec',{}).get('containers',[{}])[0].get('env',[])
+        print('\n'.join(e.get('name','') for e in envs))
+        ")
+        MISSING=""
+        IFS=',' read -ra VARS <<< "$$REQUIRED"
+        for VAR in "$${VARS[@]}"; do
+          if echo "$$PRESENT" | grep -qx "$$VAR"; then
+            echo "[HARDENGATE][OK]   $$VAR present"
+          else
+            echo "[HARDENGATE][FAIL] MISSING: $$VAR"
+            MISSING="$$MISSING $$VAR"
+          fi
+        done
+        if [ -n "$$MISSING" ]; then
+          echo "[HARDENGATE][FAIL] Gate failed — missing:$$MISSING"
+          exit 1
+        fi
+        echo "[HARDENGATE][PASS] All required state confirmed for $$SERVICE"
+    id: 'hardengate'
+    waitFor: ['deploy']
+
+  # Code ingest to update code_files with new cloudbuild.yaml
+  - name: 'python:3.11-slim'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        set -e
+        pip install -q pymssql
+        python ingest_code.py --app hl --repo-root . --sha fc7f671c11acc8e762804bc32ae0170fcf023e61 --trigger-src cloudbuild
+        echo "MP132: ingest completed for harmonylab sha=fc7f671c11acc8e762804bc32ae0170fcf023e61"
+    env:
+      - 'DB_HOST=steps:
+  # MP132 BV-13: Gate-check redeploy (same image, no docker rebuild)
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'harmonylab'
+      - '--image'
+      - 'gcr.io/super-flashcards-475210/harmonylab:20e82a24607cdb409245c5fd66740be98442d004'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+    id: 'deploy'
+
+  # MP132 BV-13: Post-deploy hardening gate
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        SERVICE="harmonylab"
+        REQUIRED="GIT_SHA,DB_SERVER,DB_NAME,DB_USER,DB_PASSWORD,ANTHROPIC_API_KEY,APP_PASSPHRASE,APP_SECRET_KEY"
+        echo "[HARDENGATE] Post-deploy state check: service=$$SERVICE sha=fc7f671c11acc8e762804bc32ae0170fcf023e61"
+        ENV_JSON=$(gcloud run services describe "$$SERVICE" \
+          --region=us-central1 \
+          --format="json(spec.template.spec.containers[0].env)")
+        PRESENT=$(echo "$$ENV_JSON" | python3 -c "
+        import json,sys
+        d=json.load(sys.stdin)
+        envs=(d.get('spec') or {}).get('template',{}).get('spec',{}).get('containers',[{}])[0].get('env',[])
+        print('\n'.join(e.get('name','') for e in envs))
+        ")
+        MISSING=""
+        IFS=',' read -ra VARS <<< "$$REQUIRED"
+        for VAR in "$${VARS[@]}"; do
+          if echo "$$PRESENT" | grep -qx "$$VAR"; then
+            echo "[HARDENGATE][OK]   $$VAR present"
+          else
+            echo "[HARDENGATE][FAIL] MISSING: $$VAR"
+            MISSING="$$MISSING $$VAR"
+          fi
+        done
+        if [ -n "$$MISSING" ]; then
+          echo "[HARDENGATE][FAIL] Gate failed — missing:$$MISSING"
+          exit 1
+        fi
+        echo "[HARDENGATE][PASS] All required state confirmed for $$SERVICE"
+    id: 'hardengate'
+    waitFor: ['deploy']
+
+  # Code ingest to update code_files with new cloudbuild.yaml
+  - name: 'python:3.11-slim'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        set -e
+        pip install -q pymssql
+        python ingest_code.py --app hl --repo-root . --sha fc7f671c11acc8e762804bc32ae0170fcf023e61 --trigger-src cloudbuild
+        echo "MP132: ingest completed for harmonylab sha=fc7f671c11acc8e762804bc32ae0170fcf023e61"
+    env:
+      - 'DB_HOST=35.224.242.223'
+    secretEnv: ['DB_PASSWORD']
+    waitFor: ['hardengate']
+
+availableSecrets:
+  secretManager:
+  - versionName: projects/$PROJECT_ID/secrets/db-password/versions/latest
+    env: 'DB_PASSWORD'
+
+timeout: '600s'DB_HOST'
+    secretEnv: ['DB_PASSWORD']
+    waitFor: ['hardengate']
+
+availableSecrets:
+  secretManager:
+  - versionName: projects/$PROJECT_ID/secrets/db-password/versions/latest
+    env: 'DB_PASSWORD'
+
+timeout: '600s'
